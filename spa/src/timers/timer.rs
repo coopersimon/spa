@@ -107,25 +107,6 @@ impl Timer {
             _ => panic!("unaligned timer addr")
         }
     }
-
-    /*pub fn read_word(&self, addr: u32) -> u32 {
-        match addr & 0x3 {
-            0 => {
-                let control = u16::make(0, self.control.bits());
-                u32::make(control, self.counter)
-            },
-            _ => panic!("unaligned timer addr")
-        }
-    }
-    pub fn write_word(&mut self, addr: u32, data: u32) {
-        match addr & 0x3 {
-            0 => {
-                self.reload = u32::lo(data);
-                self.set_control(u16::lo(u32::hi(data)));
-            },
-            _ => panic!("unaligned timer addr")
-        }
-    }*/
 }
 
 // Internal

@@ -4,7 +4,11 @@ mod wram;
 use arm::{
     Mem32, Clockable
 };
-use crate::timers::Timers;
+use crate::{
+    common::meminterface::MemInterface16,
+    timers::Timers,
+    joypad::Joypad
+};
 
 /// Game Boy Advance memory bus
 pub struct MemoryBus {
@@ -12,6 +16,7 @@ pub struct MemoryBus {
     fast_wram:  wram::WRAM,
 
     timers:     Timers,
+    joypad:     Joypad,
 }
 
 impl MemoryBus {
@@ -21,6 +26,7 @@ impl MemoryBus {
             fast_wram:  wram::WRAM::new(32 * 1024),
 
             timers:     Timers::new(),
+            joypad:     Joypad::new(),
         }
     }
 }
@@ -31,9 +37,9 @@ impl Mem32 for MemoryBus {
     fn load_byte(&mut self, addr: Self::Addr) -> (u8, usize) {
         match addr {
             0x0000_0000..=0x0000_3FFF => (0, 0),    // BIOS
-            0x0200_0000..=0x0203_FFFF => (self.wram.read_byte(addr), 3),        // WRAM
-            0x0300_0000..=0x0300_7FFF => (self.fast_wram.read_byte(addr), 1),   // FAST WRAM
-            0x0400_0000..=0x0400_03FE => (self.io_read_byte(addr), 1),          // I/O
+            0x0200_0000..=0x02FF_FFFF => (self.wram.read_byte(addr & 0x3_FFFF), 3),     // WRAM
+            0x0300_0000..=0x03FF_FFFF => (self.fast_wram.read_byte(addr & 0x7FFF), 1),  // FAST WRAM
+            0x0400_0000..=0x0400_03FE => (self.io_read_byte(addr), 1),                  // I/O
 
             0x0500_0000..=0x0500_03FF => (0, 0),    // Palette RAM
             0x0600_0000..=0x0601_7FFF => (0, 0),    // VRAM
@@ -47,12 +53,12 @@ impl Mem32 for MemoryBus {
     fn store_byte(&mut self, addr: Self::Addr, data: u8) -> usize {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
-            0x0200_0000..=0x0203_FFFF => {  // WRAM
-                self.wram.write_byte(addr, data);
+            0x0200_0000..=0x02FF_FFFF => {  // WRAM
+                self.wram.write_byte(addr & 0x3_FFFF, data);
                 3
             },
-            0x0300_0000..=0x0300_7FFF => {  // FAST WRAM
-                self.fast_wram.write_byte(addr, data);
+            0x0300_0000..=0x03FF_FFFF => {  // FAST WRAM
+                self.fast_wram.write_byte(addr & 0x7FFF, data);
                 1
             },
             0x0400_0000..=0x0400_03FE => {  // I/O
@@ -73,8 +79,8 @@ impl Mem32 for MemoryBus {
     fn load_halfword(&mut self, addr: Self::Addr) -> (u16, usize) {
         match addr {
             0x0000_0000..=0x0000_3FFF => (0, 0),    // BIOS
-            0x0200_0000..=0x0203_FFFF => (self.wram.read_halfword(addr), 3),        // WRAM
-            0x0300_0000..=0x0300_7FFF => (self.fast_wram.read_halfword(addr), 1),   // FAST WRAM
+            0x0200_0000..=0x02FF_FFFF => (self.wram.read_halfword(addr & 0x3_FFFF), 3),     // WRAM
+            0x0300_0000..=0x03FF_FFFF => (self.fast_wram.read_halfword(addr & 0x7FFF), 1),  // FAST WRAM
             0x0400_0000..=0x0400_03FE => (self.io_read_halfword(addr), 1),          // I/O
 
             0x0500_0000..=0x0500_03FF => (0, 0),    // Palette RAM
@@ -89,12 +95,12 @@ impl Mem32 for MemoryBus {
     fn store_halfword(&mut self, addr: Self::Addr, data: u16) -> usize {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
-            0x0200_0000..=0x0203_FFFF => {  // WRAM
-                self.wram.write_halfword(addr, data);
+            0x0200_0000..=0x02FF_FFFF => {  // WRAM
+                self.wram.write_halfword(addr & 0x3_FFFF, data);
                 3
             },
-            0x0300_0000..=0x0300_7FFF => {  // FAST WRAM
-                self.fast_wram.write_halfword(addr, data);
+            0x0300_0000..=0x03FF_FFFF => {  // FAST WRAM
+                self.fast_wram.write_halfword(addr & 0x7FFF, data);
                 1
             },
             0x0400_0000..=0x0400_03FE => {  // I/O
@@ -115,8 +121,8 @@ impl Mem32 for MemoryBus {
     fn load_word(&mut self, addr: Self::Addr) -> (u32, usize) {
         match addr {
             0x0000_0000..=0x0000_3FFF => (0, 0),    // BIOS
-            0x0200_0000..=0x0203_FFFF => (self.wram.read_word(addr), 6),        // WRAM
-            0x0300_0000..=0x0300_7FFF => (self.fast_wram.read_word(addr), 1),   // FAST WRAM
+            0x0200_0000..=0x02FF_FFFF => (self.wram.read_word(addr & 0x3_FFFF), 6),     // WRAM
+            0x0300_0000..=0x03FF_FFFF => (self.fast_wram.read_word(addr & 0x7FFF), 1),  // FAST WRAM
             0x0400_0000..=0x0400_03FE => (self.io_read_word(addr), 1),          // I/O
 
             0x0500_0000..=0x0500_03FF => (0, 0),    // Palette RAM
@@ -131,12 +137,12 @@ impl Mem32 for MemoryBus {
     fn store_word(&mut self, addr: Self::Addr, data: u32) -> usize {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
-            0x0200_0000..=0x0203_FFFF => {  // WRAM
-                self.wram.write_word(addr, data);
+            0x0200_0000..=0x02FF_FFFF => {  // WRAM
+                self.wram.write_word(addr & 0x3_FFFF, data);
                 6
             },
-            0x0300_0000..=0x0300_7FFF => {  // FAST WRAM
-                self.fast_wram.write_word(addr, data);
+            0x0300_0000..=0x03FF_FFFF => {  // FAST WRAM
+                self.fast_wram.write_word(addr & 0x7FFF, data);
                 1
             },
             0x0400_0000..=0x0400_03FE => {  // I/O
@@ -164,44 +170,54 @@ impl Clockable for MemoryBus {
     }
 }
 
-// Internal
-impl MemoryBus {
-    fn io_read_byte(&mut self, addr: u32) -> u8 {
-        match addr {
-            0x0400_0100..=0x0400_010F => self.timers.read_byte(addr - 0x0400_0100),
-            _ => unreachable!()
-        }
-    }
-    fn io_write_byte(&mut self, addr: u32, data: u8) {
-        match addr {
-            0x0400_0100..=0x0400_010F => self.timers.write_byte(addr - 0x0400_0100, data),
-            _ => unreachable!()
-        }
-    }
+/// IO on the bus.
+/// There are a ton of devices that sit on IO so use this macro to construct the functions.
+macro_rules! MemoryBusIO {
+    {$(($start_addr:expr, $end_addr:expr, $device:ident)),*} => {
+        impl MemoryBus {
+            fn io_read_byte(&mut self, addr: u32) -> u8 {
+                match addr {
+                    $($start_addr..=$end_addr => self.$device.read_byte(addr - $start_addr),)*
+                    _ => unreachable!()
+                }
+            }
+            fn io_write_byte(&mut self, addr: u32, data: u8) {
+                match addr {
+                    $($start_addr..=$end_addr => self.$device.write_byte(addr - $start_addr, data),)*
+                    _ => unreachable!()
+                }
+            }
 
-    fn io_read_halfword(&mut self, addr: u32) -> u16 {
-        match addr {
-            0x0400_0100..=0x0400_010F => self.timers.read_halfword(addr - 0x0400_0100),
-            _ => unreachable!()
-        }
-    }
-    fn io_write_halfword(&mut self, addr: u32, data: u16) {
-        match addr {
-            0x0400_0100..=0x0400_010F => self.timers.write_halfword(addr - 0x0400_0100, data),
-            _ => unreachable!()
-        }
-    }
+            fn io_read_halfword(&mut self, addr: u32) -> u16 {
+                match addr {
+                    $($start_addr..=$end_addr => self.$device.read_halfword(addr - $start_addr),)*
+                    _ => unreachable!()
+                }
+            }
+            fn io_write_halfword(&mut self, addr: u32, data: u16) {
+                match addr {
+                    $($start_addr..=$end_addr => self.$device.write_halfword(addr - $start_addr, data),)*
+                    _ => unreachable!()
+                }
+            }
 
-    fn io_read_word(&mut self, addr: u32) -> u32 {
-        match addr {
-            0x0400_0100..=0x0400_010F => self.timers.read_word(addr - 0x0400_0100),
-            _ => unreachable!()
+            fn io_read_word(&mut self, addr: u32) -> u32 {
+                match addr {
+                    $($start_addr..=$end_addr => self.$device.read_word(addr - $start_addr),)*
+                    _ => unreachable!()
+                }
+            }
+            fn io_write_word(&mut self, addr: u32, data: u32) {
+                match addr {
+                    $($start_addr..=$end_addr => self.$device.write_word(addr - $start_addr, data),)*
+                    _ => unreachable!()
+                }
+            }
         }
-    }
-    fn io_write_word(&mut self, addr: u32, data: u32) {
-        match addr {
-            0x0400_0100..=0x0400_010F => self.timers.write_word(addr - 0x0400_0100, data),
-            _ => unreachable!()
-        }
-    }
+    };
+}
+
+MemoryBusIO!{
+    (0x0400_0100, 0x0400_010F, timers),
+    (0x0400_0130, 0x0400_0133, joypad)
 }

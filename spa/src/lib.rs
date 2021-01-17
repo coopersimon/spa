@@ -1,10 +1,24 @@
 mod common;
 mod memory;
+mod joypad;
 mod timers;
 
 use arm::ARM7TDMI;
 
 use memory::MemoryBus;
+
+pub enum Button {
+    A,
+    B,
+    Start,
+    Select,
+    Left,
+    Right,
+    Up,
+    Down,
+    L,
+    R
+}
 
 pub struct GBA {
     cpu: ARM7TDMI<MemoryBus>
