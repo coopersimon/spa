@@ -5,6 +5,7 @@ use crate::common::{
     bits::u16,
     meminterface::MemInterface16,
 };
+use crate::interrupt::Interrupts;
 
 bitflags!{
     #[derive(Default)]
@@ -19,6 +20,24 @@ bitflags!{
         const SELECT    = u16::bit(2);
         const B         = u16::bit(1);
         const A         = u16::bit(0);
+    }
+}
+
+impl From<crate::Button> for Buttons {
+    fn from(b: crate::Button) -> Buttons {
+        use crate::Button::*;
+        match b {
+            A       => Buttons::A,
+            B       => Buttons::B,
+            Select  => Buttons::SELECT,
+            Start   => Buttons::START,
+            L       => Buttons::L,
+            R       => Buttons::R,
+            Left    => Buttons::LEFT,
+            Right   => Buttons::RIGHT,
+            Up      => Buttons::UP,
+            Down    => Buttons::DOWN
+        }
     }
 }
 
@@ -39,19 +58,15 @@ impl Joypad {
         }
     }
 
-    pub fn set_button(&mut self, buttons: Buttons, enable: bool) {
-        self.buttons_pressed.set(buttons, enable);
+    pub fn set_button(&mut self, buttons: Buttons, pressed: bool) {
+        self.buttons_pressed.set(buttons, pressed);
     }
 
-    pub fn check_interrupt(&self) -> bool {
-        if !self.interrupt_enable {
-            return false;
-        }
-
-        if self.interrupt_cond {    // AND
-            self.buttons_pressed.contains(self.interrupt_control)
-        } else {                    // OR
-            self.buttons_pressed.intersects(self.interrupt_control)
+    pub fn get_interrupt(&self) -> Interrupts {
+        if self.interrupt_check() {
+            Interrupts::KEYPAD
+        } else {
+            Interrupts::default()
         }
     }
 }
@@ -85,5 +100,17 @@ impl Joypad {
         self.interrupt_control.bits() |
         if self.interrupt_enable    {u16::bit(14)} else {0} |
         if self.interrupt_cond      {u16::bit(15)} else {0}
+    }
+
+    fn interrupt_check(&self) -> bool {
+        if !self.interrupt_enable {
+            return false;
+        }
+
+        if self.interrupt_cond { // AND
+            self.buttons_pressed.contains(self.interrupt_control)
+        } else {                 // OR
+            self.buttons_pressed.intersects(self.interrupt_control)
+        }
     }
 }

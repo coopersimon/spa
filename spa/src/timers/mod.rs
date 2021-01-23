@@ -3,6 +3,7 @@
 mod timer;
 
 use crate::common::bytes::u32;
+use crate::interrupt::Interrupts;
 use timer::Timer;
 
 pub struct Timers {
@@ -13,35 +14,37 @@ impl Timers {
     pub fn new() -> Self {
         Self {
             timers: [
-                Timer::new(),
-                Timer::new(),
-                Timer::new(),
-                Timer::new()
+                Timer::new(Interrupts::TIMER_0),
+                Timer::new(Interrupts::TIMER_1),
+                Timer::new(Interrupts::TIMER_2),
+                Timer::new(Interrupts::TIMER_3)
             ]
         }
     }
 
-    pub fn clock(&mut self, cycles: usize) -> Option<arm::Exception> {
-        let mut exception = None;
-        for _ in 0..cycles {
-            let mut overflow = [false; 4];
-            overflow[0] = self.timers[0].clock();
-            for t in 1..4 {
-                if self.timers[t].cascade_enabled() {
-                    if overflow[t-1] {
-                        overflow[t] = self.timers[t].clock();
-                    }
+    /// Clock the timers. Should be done as often as possible.
+    /// Returns any interrupts to request.
+    pub fn clock(&mut self, cycles: usize) -> Interrupts {
+        let mut interrupts = Interrupts::default();
+        let mut overflows = self.timers[0].clock(cycles);
+        if overflows > 0 {
+            interrupts.insert(self.timers[0].get_interrupt());
+        }
+        for t in 1..4 {
+            overflows = if self.timers[t].cascade_enabled() {
+                if overflows > 0 {
+                    self.timers[t].clock(overflows)
                 } else {
-                    overflow[t] = self.timers[t].clock();
+                    0
                 }
-            }
-            for t in 0..4 {
-                if overflow[t] && self.timers[t].irq_enabled() {
-                    exception = Some(arm::Exception::Interrupt);
-                }
+            } else {
+                self.timers[t].clock(cycles)
+            };
+            if overflows > 0 {
+                interrupts.insert(self.timers[t].get_interrupt());
             }
         }
-        exception
+        interrupts
     }
 
     pub fn read_byte(&mut self, addr: u32) -> u8 {

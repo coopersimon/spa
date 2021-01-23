@@ -7,7 +7,8 @@ use arm::{
 use crate::{
     common::meminterface::MemInterface16,
     timers::Timers,
-    joypad::Joypad
+    joypad::{Joypad, Buttons},
+    interrupt::InterruptControl
 };
 
 /// Game Boy Advance memory bus
@@ -15,8 +16,9 @@ pub struct MemoryBus {
     wram:       wram::WRAM,
     fast_wram:  wram::WRAM,
 
-    timers:     Timers,
-    joypad:     Joypad,
+    timers:             Timers,
+    joypad:             Joypad,
+    interrupt_control:  InterruptControl,
 }
 
 impl MemoryBus {
@@ -25,9 +27,14 @@ impl MemoryBus {
             wram:       wram::WRAM::new(256 * 1024),
             fast_wram:  wram::WRAM::new(32 * 1024),
 
-            timers:     Timers::new(),
-            joypad:     Joypad::new(),
+            timers:             Timers::new(),
+            joypad:             Joypad::new(),
+            interrupt_control:  InterruptControl::new(),
         }
+    }
+
+    pub fn set_button(&mut self, buttons: Buttons, pressed: bool) {
+        self.joypad.set_button(buttons, pressed);
     }
 }
 
@@ -163,10 +170,18 @@ impl Mem32 for MemoryBus {
 
 impl Clockable for MemoryBus {
     fn clock(&mut self, cycles: usize) -> Option<arm::Exception> {
-        let ret = self.timers.clock(cycles);
-        // TODO: clock video
-        // TODO: clock audio
-        ret
+        self.interrupt_control.interrupt_request(
+            self.joypad.get_interrupt() |
+            self.timers.clock(cycles)
+            // TODO: DMA
+            // TODO: clock video
+            // TODO: clock audio
+        );
+        if self.interrupt_control.irq() {
+            Some(arm::Exception::Interrupt)
+        } else {
+            None
+        }
     }
 }
 
@@ -219,5 +234,6 @@ macro_rules! MemoryBusIO {
 
 MemoryBusIO!{
     (0x0400_0100, 0x0400_010F, timers),
-    (0x0400_0130, 0x0400_0133, joypad)
+    (0x0400_0130, 0x0400_0133, joypad),
+    (0x0400_0200, 0x0400_020F, interrupt_control)
 }

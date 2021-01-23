@@ -5,6 +5,7 @@ use crate::common::{
     bits::u8,
     bytes::{u16, u32}
 };
+use crate::interrupt::Interrupts;
 
 bitflags!{
     #[derive(Default)]
@@ -24,28 +25,30 @@ pub struct Timer {
     /// Value to reload counter with upon start or overflow.
     reload:     u16,
     /// Timer settings.
-    control:    Control
+    control:    Control,
+    /// Which interrupt this timer is responsible for.
+    interrupt:  Interrupts,
 }
 
 impl Timer {
-    pub fn new() -> Self {
+    pub fn new(interrupt: Interrupts) -> Self {
         Self {
             counter:    0,
             internal:   0,
             reload:     0,
             control:    Control::default(),
+            interrupt:  interrupt,
         }
     }
 
-    /// Returns true if the timer overflowed.
+    /// Returns the number of times that the timer overflowed.
     /// This _may_ trigger an interrupt if this happens - check irq_enabled
-    /// TODO: optimise for multiple cycles.
-    pub fn clock(&mut self) -> bool {
+    pub fn clock(&mut self, cycles: usize) -> usize {
         if !self.control.contains(Control::ENABLE) {
-            return false;
+            return 0;
         }
 
-        self.internal = self.internal.wrapping_add(1);
+        self.internal = self.internal.wrapping_add(cycles as u16);
         let divide_ratio = match (self.control & Control::FREQ).bits() {
             0b00 => 1,
             0b01 => 64,
@@ -53,21 +56,31 @@ impl Timer {
             0b11 => 1024,
             _ => unreachable!()
         };
-        if self.internal == divide_ratio {
-            self.counter = self.counter.wrapping_add(1);
-            self.internal = 0;
-        }
 
-        if self.counter == 0 {
-            self.counter = self.reload;
-            true
-        } else {
-            false
+        let mut overflows = 0;
+        while self.internal >= divide_ratio {
+            let (new_count, overflow) = self.counter.overflowing_add(1);
+            self.internal = self.internal.wrapping_sub(divide_ratio);
+
+            if overflow {
+                overflows += 1;
+                self.counter = self.reload;
+            } else {
+                self.counter = new_count;
+            }
         }
+        overflows
     }
 
-    pub fn irq_enabled(&self) -> bool {
-        self.control.contains(Control::IRQ_EN)
+    /// If the timer overflowed, we call this to get the interrupt the timer is responsible for.
+    /// 
+    /// This could be nothing if the timer disabled interrupts.
+    pub fn get_interrupt(&self) -> Interrupts {
+        if self.control.contains(Control::IRQ_EN) {
+            self.interrupt
+        } else {
+            Interrupts::default()
+        }
     }
 
     pub fn cascade_enabled(&self) -> bool {

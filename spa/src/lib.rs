@@ -2,8 +2,11 @@ mod common;
 mod memory;
 mod joypad;
 mod timers;
+mod interrupt;
 
-use arm::ARM7TDMI;
+use arm::{
+    ARM7TDMI, ARMCore
+};
 
 use memory::MemoryBus;
 
@@ -30,5 +33,9 @@ impl GBA {
         Self {
             cpu: ARM7TDMI::new(bus, std::collections::HashMap::new())
         }
+    }
+
+    pub fn set_button(&mut self, button: Button, pressed: bool) {
+        self.cpu.ref_mem().set_button(button.into(), pressed);
     }
 }
