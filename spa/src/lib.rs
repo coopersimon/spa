@@ -31,8 +31,8 @@ pub struct GBA {
 }
 
 impl GBA {
-    pub fn new() -> Self {
-        let bus = MemoryBus::new();
+    pub fn new(cart_path: &std::path::Path) -> Self {
+        let bus = MemoryBus::new(cart_path).unwrap();
         Self {
             cpu: ARM7TDMI::new(bus, std::collections::HashMap::new()),
 
@@ -42,7 +42,7 @@ impl GBA {
 
     // TODO: return some sort of framebuffer
     pub fn frame(&mut self) {
-        while self.cycle_count < constants::GBA::FRAME_CYCLES {
+        while self.cycle_count < constants::gba::FRAME_CYCLES {
             let step_cycles = self.cpu.step();
             let mem = self.cpu.ref_mem();
             mem.clock(step_cycles);
@@ -52,7 +52,7 @@ impl GBA {
             }
             self.cycle_count += step_cycles + dma_cycles;
         }
-        self.cycle_count -= constants::GBA::FRAME_CYCLES;
+        self.cycle_count -= constants::gba::FRAME_CYCLES;
     }
 
     pub fn set_button(&mut self, button: Button, pressed: bool) {

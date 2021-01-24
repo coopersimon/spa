@@ -1,7 +1,7 @@
 /// Constants for timing.
 
 /// GBA timing, video, and audio constants.
-pub mod GBA {
+pub mod gba {
     pub const CYCLES_PER_SECOND: usize = 16 * 1024 * 1024;
 
     /// Cycles needed to draw a single pixel on-screen.

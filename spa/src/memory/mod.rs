@@ -1,8 +1,10 @@
 /// Memory bus
 mod wram;
 mod dma;
+mod cart;
+mod bios;
 
-use arm::Mem32;
+use arm::{Mem32, MemCycleType};
 use crate::{
     common::meminterface::MemInterface16,
     timers::Timers,
@@ -10,11 +12,15 @@ use crate::{
     interrupt::InterruptControl,
 };
 use dma::{DMA, DMAAddress};
+use cart::{GamePak, GamePakController};
 
 /// Game Boy Advance memory bus
 pub struct MemoryBus {
     wram:       wram::WRAM,
     fast_wram:  wram::WRAM,
+
+    game_pak:           GamePak,
+    game_pak_control:   GamePakController,
 
     timers:             Timers,
     joypad:             Joypad,
@@ -24,50 +30,65 @@ pub struct MemoryBus {
 }
 
 impl MemoryBus {
-    pub fn new() -> Self {
-        Self {
+    pub fn new(cart_path: &std::path::Path) -> std::io::Result<Self> {
+        let game_pak = cart::GamePak::new(cart_path)?;
+        Ok(Self {
             wram:       wram::WRAM::new(256 * 1024),
             fast_wram:  wram::WRAM::new(32 * 1024),
+
+            game_pak:           game_pak,
+            game_pak_control:   GamePakController::new(),
 
             timers:             Timers::new(),
             joypad:             Joypad::new(),
 
             dma:                DMA::new(),
             interrupt_control:  InterruptControl::new(),
-        }
+        })
     }
 
     /// Do a DMA transfer if possible.
     /// Returns the number of cycles passed.
     /// 
     /// This function clocks the memory bus internally.
+    /// It will continue until the transfer is done.
     pub fn do_dma(&mut self) -> usize {
         let mut cycle_count = 0;
+        let mut last_active = 4;
         loop {
             if let Some(c) = self.dma.get_active() {
+                // Check if DMA channel has changed since last transfer.
+                let access = if last_active != c {
+                    last_active = c;
+                    self.clock(2);
+                    arm::MemCycleType::N
+                } else {
+                    arm::MemCycleType::S
+                };
+                // Transfer one piece of data.
                 let cycles = match self.dma.channels[c].next_addrs() {
                     DMAAddress::Addr {
                         source, dest
                     } => if self.dma.channels[c].transfer_32bit_word() {
-                        let (data, load_cycles) = self.load_word(source);
-                        let store_cycles = self.store_word(dest, data);
-                        std::cmp::max(load_cycles, store_cycles)
+                        let (data, load_cycles) = self.load_word(access, source);
+                        let store_cycles = self.store_word(access, dest, data);
+                        load_cycles + store_cycles
                     } else {
-                        let (data, load_cycles) = self.load_halfword(source);
-                        let store_cycles = self.store_halfword(dest, data);
-                        std::cmp::max(load_cycles, store_cycles)
+                        let (data, load_cycles) = self.load_halfword(access, source);
+                        let store_cycles = self.store_halfword(access, dest, data);
+                        load_cycles + store_cycles
                     },
                     DMAAddress::Done {
                         source, dest, irq
                     } => {
                         let cycles = if self.dma.channels[c].transfer_32bit_word() {
-                            let (data, load_cycles) = self.load_word(source);
-                            let store_cycles = self.store_word(dest, data);
-                            std::cmp::max(load_cycles, store_cycles)
+                            let (data, load_cycles) = self.load_word(access, source);
+                            let store_cycles = self.store_word(access, dest, data);
+                            load_cycles + store_cycles
                         } else {
-                            let (data, load_cycles) = self.load_halfword(source);
-                            let store_cycles = self.store_halfword(dest, data);
-                            std::cmp::max(load_cycles, store_cycles)
+                            let (data, load_cycles) = self.load_halfword(access, source);
+                            let store_cycles = self.store_halfword(access, dest, data);
+                            load_cycles + store_cycles
                         };
                         self.interrupt_control.interrupt_request(irq);
                         self.dma.set_inactive(c);
@@ -106,23 +127,27 @@ impl MemoryBus {
 impl Mem32 for MemoryBus {
     type Addr = u32;
 
-    fn load_byte(&mut self, addr: Self::Addr) -> (u8, usize) {
+    fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
         match addr {
             0x0000_0000..=0x0000_3FFF => (0, 0),    // BIOS
             0x0200_0000..=0x02FF_FFFF => (self.wram.read_byte(addr & 0x3_FFFF), 3),     // WRAM
             0x0300_0000..=0x03FF_FFFF => (self.fast_wram.read_byte(addr & 0x7FFF), 1),  // FAST WRAM
             0x0400_0000..=0x0400_03FE => (self.io_read_byte(addr), 1),                  // I/O
 
+            // VRAM
             0x0500_0000..=0x0500_03FF => (0, 0),    // Palette RAM
             0x0600_0000..=0x0601_7FFF => (0, 0),    // VRAM
             0x0700_0000..=0x0700_03FF => (0, 0),    // OAM
 
-            0x0800_0000..=0x0FFF_FFFF => (0, 0),    // Cart
+            // Cart
+            0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_byte(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle)),
+            0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_byte(addr - 0x0A00_0000), self.game_pak_control.wait_cycles_1(cycle)),
+            0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_byte(addr - 0x0C00_0000), self.game_pak_control.wait_cycles_2(cycle)),
 
             _ => (0, 1) // Unused
         }
     }
-    fn store_byte(&mut self, addr: Self::Addr, data: u8) -> usize {
+    fn store_byte(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u8) -> usize {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
@@ -142,13 +167,16 @@ impl Mem32 for MemoryBus {
             0x0600_0000..=0x0601_7FFF => 1,    // VRAM
             0x0700_0000..=0x0700_03FF => 1,    // OAM
 
-            0x0800_0000..=0x0FFF_FFFF => 1,    // Cart
+            // Cart
+            0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
+            0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle),
+            0x0C00_0000..=0x0DFF_FFFF => self.game_pak_control.wait_cycles_2(cycle),
 
             _ => 1 // Unused
         }
     }
 
-    fn load_halfword(&mut self, addr: Self::Addr) -> (u16, usize) {
+    fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
             0x0000_0000..=0x0000_3FFF => (0, 0),    // BIOS
             0x0200_0000..=0x02FF_FFFF => (self.wram.read_halfword(addr & 0x3_FFFF), 3),     // WRAM
@@ -159,12 +187,15 @@ impl Mem32 for MemoryBus {
             0x0600_0000..=0x0601_7FFF => (0, 0),    // VRAM
             0x0700_0000..=0x0700_03FF => (0, 0),    // OAM
 
-            0x0800_0000..=0x0FFF_FFFF => (0, 0),    // Cart
+            // Cart
+            0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_halfword(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle)),
+            0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_halfword(addr - 0x0A00_0000), self.game_pak_control.wait_cycles_1(cycle)),
+            0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_halfword(addr - 0x0C00_0000), self.game_pak_control.wait_cycles_2(cycle)),
 
             _ => (0, 1) // Unused
         }
     }
-    fn store_halfword(&mut self, addr: Self::Addr, data: u16) -> usize {
+    fn store_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u16) -> usize {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
@@ -184,13 +215,16 @@ impl Mem32 for MemoryBus {
             0x0600_0000..=0x0601_7FFF => 1,    // VRAM
             0x0700_0000..=0x0700_03FF => 1,    // OAM
 
-            0x0800_0000..=0x0FFF_FFFF => 1,    // Cart
+            // Cart
+            0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
+            0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle),
+            0x0C00_0000..=0x0DFF_FFFF => self.game_pak_control.wait_cycles_2(cycle),
 
             _ => 1 // Unused
         }
     }
 
-    fn load_word(&mut self, addr: Self::Addr) -> (u32, usize) {
+    fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
             0x0000_0000..=0x0000_3FFF => (0, 0),    // BIOS
             0x0200_0000..=0x02FF_FFFF => (self.wram.read_word(addr & 0x3_FFFF), 6),     // WRAM
@@ -201,12 +235,15 @@ impl Mem32 for MemoryBus {
             0x0600_0000..=0x0601_7FFF => (0, 0),    // VRAM
             0x0700_0000..=0x0700_03FF => (0, 0),    // OAM
 
-            0x0800_0000..=0x0FFF_FFFF => (0, 0),    // Cart
+            // Cart
+            0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle) * 2),
+            0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_word(addr - 0x0A00_0000), self.game_pak_control.wait_cycles_1(cycle) * 2),
+            0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_word(addr - 0x0C00_0000), self.game_pak_control.wait_cycles_2(cycle) * 2),
 
             _ => (0, 1) // Unused
         }
     }
-    fn store_word(&mut self, addr: Self::Addr, data: u32) -> usize {
+    fn store_word(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u32) -> usize {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
@@ -226,7 +263,10 @@ impl Mem32 for MemoryBus {
             0x0600_0000..=0x0601_7FFF => 1,    // VRAM
             0x0700_0000..=0x0700_03FF => 1,    // OAM
 
-            0x0800_0000..=0x0FFF_FFFF => 1,    // Cart
+            // Cart
+            0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle) * 2,
+            0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle) * 2,
+            0x0C00_0000..=0x0DFF_FFFF => self.game_pak_control.wait_cycles_2(cycle) * 2,
 
             _ => 1 // Unused
         }
@@ -284,5 +324,6 @@ MemoryBusIO!{
     (0x0400_00B0, 0x0400_00DF, dma),
     (0x0400_0100, 0x0400_010F, timers),
     (0x0400_0130, 0x0400_0133, joypad),
+    (0x0400_0204, 0x0400_0207, game_pak_control),
     (0x0400_0200, 0x0400_020F, interrupt_control)
 }
