@@ -1,15 +1,15 @@
 /// Memory bus
 mod wram;
+mod dma;
 
-use arm::{
-    Mem32, Clockable
-};
+use arm::Mem32;
 use crate::{
     common::meminterface::MemInterface16,
     timers::Timers,
     joypad::{Joypad, Buttons},
-    interrupt::InterruptControl
+    interrupt::InterruptControl,
 };
+use dma::{DMA, DMAAddress};
 
 /// Game Boy Advance memory bus
 pub struct MemoryBus {
@@ -18,6 +18,8 @@ pub struct MemoryBus {
 
     timers:             Timers,
     joypad:             Joypad,
+
+    dma:                DMA,
     interrupt_control:  InterruptControl,
 }
 
@@ -29,8 +31,71 @@ impl MemoryBus {
 
             timers:             Timers::new(),
             joypad:             Joypad::new(),
+
+            dma:                DMA::new(),
             interrupt_control:  InterruptControl::new(),
         }
+    }
+
+    /// Do a DMA transfer if possible.
+    /// Returns the number of cycles passed.
+    /// 
+    /// This function clocks the memory bus internally.
+    pub fn do_dma(&mut self) -> usize {
+        let mut cycle_count = 0;
+        loop {
+            if let Some(c) = self.dma.get_active() {
+                let cycles = match self.dma.channels[c].next_addrs() {
+                    DMAAddress::Addr {
+                        source, dest
+                    } => if self.dma.channels[c].transfer_32bit_word() {
+                        let (data, load_cycles) = self.load_word(source);
+                        let store_cycles = self.store_word(dest, data);
+                        std::cmp::max(load_cycles, store_cycles)
+                    } else {
+                        let (data, load_cycles) = self.load_halfword(source);
+                        let store_cycles = self.store_halfword(dest, data);
+                        std::cmp::max(load_cycles, store_cycles)
+                    },
+                    DMAAddress::Done {
+                        source, dest, irq
+                    } => {
+                        let cycles = if self.dma.channels[c].transfer_32bit_word() {
+                            let (data, load_cycles) = self.load_word(source);
+                            let store_cycles = self.store_word(dest, data);
+                            std::cmp::max(load_cycles, store_cycles)
+                        } else {
+                            let (data, load_cycles) = self.load_halfword(source);
+                            let store_cycles = self.store_halfword(dest, data);
+                            std::cmp::max(load_cycles, store_cycles)
+                        };
+                        self.interrupt_control.interrupt_request(irq);
+                        self.dma.set_inactive(c);
+                        cycles
+                    }
+                };
+                self.clock(cycles);
+                cycle_count += cycles;
+            } else {
+                break cycle_count;
+            }
+        }
+    }
+
+    /// Indicate to the memory bus that cycles have passed.
+    /// The cycles passed into here should come from the CPU.
+    pub fn clock(&mut self, cycles: usize) {
+        self.interrupt_control.interrupt_request(
+            self.joypad.get_interrupt() |
+            self.timers.clock(cycles)
+            // TODO: DMA
+            // TODO: clock video
+            // TODO: clock audio
+        );
+    }
+
+    pub fn check_exceptions(&self) -> Option<arm::Exception> {
+        self.interrupt_control.irq()
     }
 
     pub fn set_button(&mut self, buttons: Buttons, pressed: bool) {
@@ -168,23 +233,6 @@ impl Mem32 for MemoryBus {
     }
 }
 
-impl Clockable for MemoryBus {
-    fn clock(&mut self, cycles: usize) -> Option<arm::Exception> {
-        self.interrupt_control.interrupt_request(
-            self.joypad.get_interrupt() |
-            self.timers.clock(cycles)
-            // TODO: DMA
-            // TODO: clock video
-            // TODO: clock audio
-        );
-        if self.interrupt_control.irq() {
-            Some(arm::Exception::Interrupt)
-        } else {
-            None
-        }
-    }
-}
-
 /// IO on the bus.
 /// There are a ton of devices that sit on IO so use this macro to construct the functions.
 macro_rules! MemoryBusIO {
@@ -233,6 +281,7 @@ macro_rules! MemoryBusIO {
 }
 
 MemoryBusIO!{
+    (0x0400_00B0, 0x0400_00DF, dma),
     (0x0400_0100, 0x0400_010F, timers),
     (0x0400_0130, 0x0400_0133, joypad),
     (0x0400_0200, 0x0400_020F, interrupt_control)
