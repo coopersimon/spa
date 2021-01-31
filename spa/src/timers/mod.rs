@@ -47,7 +47,7 @@ impl Timers {
         interrupts
     }
 
-    pub fn read_byte(&mut self, addr: u32) -> u8 {
+    pub fn read_byte(&self, addr: u32) -> u8 {
         let timer = addr / 4;
         let timer_addr = addr % 4;
         self.timers[timer as usize].read_byte(timer_addr)
@@ -58,7 +58,7 @@ impl Timers {
         self.timers[timer as usize].write_byte(timer_addr, data);
     }
 
-    pub fn read_halfword(&mut self, addr: u32) -> u16 {
+    pub fn read_halfword(&self, addr: u32) -> u16 {
         let timer = addr / 4;
         let timer_addr = addr % 4;
         self.timers[timer as usize].read_halfword(timer_addr)
@@ -69,7 +69,7 @@ impl Timers {
         self.timers[timer as usize].write_halfword(timer_addr, data);
     }
 
-    pub fn read_word(&mut self, addr: u32) -> u32 {
+    pub fn read_word(&self, addr: u32) -> u32 {
         let timer = addr / 4;
         let timer_addr = addr % 4;
         let lo = self.timers[timer as usize].read_halfword(timer_addr);

@@ -34,7 +34,7 @@ impl GamePak {
 }
 
 impl MemInterface16 for GamePak {
-    fn read_halfword(&mut self, addr: u32) -> u16 {
+    fn read_halfword(&self, addr: u32) -> u16 {
         let start = addr as usize;
         let end = (addr + 2) as usize;
         *try_from_bytes(&self.rom[start..end]).expect(&format!("cannot read halfword at 0x{:X}", addr))

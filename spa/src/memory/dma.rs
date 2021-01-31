@@ -94,7 +94,7 @@ impl DMA {
 }
 
 impl MemInterface16 for DMA {
-    fn read_halfword(&mut self, addr: u32) -> u16 {
+    fn read_halfword(&self, addr: u32) -> u16 {
         match addr {
             0x00..=0x0B => self.channels[0].read_halfword(addr),
             0x0C..=0x17 => self.channels[1].read_halfword(addr - 0x0C),
@@ -270,7 +270,7 @@ impl DMAChannel {
 }
 
 impl MemInterface16 for DMAChannel {
-    fn read_halfword(&mut self, addr: u32) -> u16 {
+    fn read_halfword(&self, addr: u32) -> u16 {
         match addr {
             0x0 => 0,
             0x2 => 0,

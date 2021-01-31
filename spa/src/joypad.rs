@@ -72,7 +72,7 @@ impl Joypad {
 }
 
 impl MemInterface16 for Joypad {
-    fn read_halfword(&mut self, addr: u32) -> u16 {
+    fn read_halfword(&self, addr: u32) -> u16 {
         match addr % 4 {
             0 => self.buttons_pressed.bits(),
             2 => self.get_interrupt_control(),

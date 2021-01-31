@@ -4,6 +4,7 @@ mod joypad;
 mod timers;
 mod interrupt;
 mod constants;
+mod video;
 
 use arm::{
     ARM7TDMI, ARMCore
@@ -31,8 +32,8 @@ pub struct GBA {
 }
 
 impl GBA {
-    pub fn new(cart_path: &std::path::Path) -> Self {
-        let bus = MemoryBus::new(cart_path).unwrap();
+    pub fn new(cart_path: &std::path::Path, bios_path: Option<&std::path::Path>) -> Self {
+        let bus = MemoryBus::new(cart_path, bios_path).unwrap();
         Self {
             cpu: ARM7TDMI::new(bus, std::collections::HashMap::new()),
 

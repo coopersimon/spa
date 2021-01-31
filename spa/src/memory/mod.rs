@@ -10,17 +10,23 @@ use crate::{
     timers::Timers,
     joypad::{Joypad, Buttons},
     interrupt::InterruptControl,
+    video::{GBAVideo, Signal}
 };
 use dma::{DMA, DMAAddress};
 use cart::{GamePak, GamePakController};
+pub use wram::WRAM;
 
 /// Game Boy Advance memory bus
 pub struct MemoryBus {
-    wram:       wram::WRAM,
-    fast_wram:  wram::WRAM,
+    bios:       bios::BIOS,
+
+    wram:       WRAM,
+    fast_wram:  WRAM,
 
     game_pak:           GamePak,
     game_pak_control:   GamePakController,
+
+    video:              GBAVideo,
 
     timers:             Timers,
     joypad:             Joypad,
@@ -30,14 +36,19 @@ pub struct MemoryBus {
 }
 
 impl MemoryBus {
-    pub fn new(cart_path: &std::path::Path) -> std::io::Result<Self> {
+    pub fn new(cart_path: &std::path::Path, bios_path: Option<&std::path::Path>) -> std::io::Result<Self> {
+        let bios = bios::BIOS::new(bios_path)?;
         let game_pak = cart::GamePak::new(cart_path)?;
         Ok(Self {
-            wram:       wram::WRAM::new(256 * 1024),
-            fast_wram:  wram::WRAM::new(32 * 1024),
+            bios:       bios,
+
+            wram:       WRAM::new(256 * 1024),
+            fast_wram:  WRAM::new(32 * 1024),
 
             game_pak:           game_pak,
             game_pak_control:   GamePakController::new(),
+
+            video:              GBAVideo::new(),
 
             timers:             Timers::new(),
             joypad:             Joypad::new(),
@@ -106,11 +117,16 @@ impl MemoryBus {
     /// Indicate to the memory bus that cycles have passed.
     /// The cycles passed into here should come from the CPU.
     pub fn clock(&mut self, cycles: usize) {
+        let (video_signal, video_irq) = self.video.clock(cycles);
+        match video_signal {
+            Signal::VBlank => self.dma.on_vblank(),
+            Signal::HBlank => self.dma.on_hblank(),
+            Signal::None => {},
+        }
         self.interrupt_control.interrupt_request(
             self.joypad.get_interrupt() |
-            self.timers.clock(cycles)
-            // TODO: DMA
-            // TODO: clock video
+            self.timers.clock(cycles)   |
+            video_irq
             // TODO: clock audio
         );
     }
@@ -129,15 +145,13 @@ impl Mem32 for MemoryBus {
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
         match addr {
-            0x0000_0000..=0x0000_3FFF => (0, 0),    // BIOS
+            0x0000_0000..=0x0000_3FFF => (self.bios.read_byte(addr), 1),                // BIOS
             0x0200_0000..=0x02FF_FFFF => (self.wram.read_byte(addr & 0x3_FFFF), 3),     // WRAM
             0x0300_0000..=0x03FF_FFFF => (self.fast_wram.read_byte(addr & 0x7FFF), 1),  // FAST WRAM
             0x0400_0000..=0x0400_03FE => (self.io_read_byte(addr), 1),                  // I/O
 
             // VRAM
-            0x0500_0000..=0x0500_03FF => (0, 0),    // Palette RAM
-            0x0600_0000..=0x0601_7FFF => (0, 0),    // VRAM
-            0x0700_0000..=0x0700_03FF => (0, 0),    // OAM
+            0x0500_0000..=0x07FF_FFFF => (self.video.read_byte(addr), 1),
 
             // Cart
             0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_byte(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle)),
@@ -163,9 +177,11 @@ impl Mem32 for MemoryBus {
                 1
             },
 
-            0x0500_0000..=0x0500_03FF => 1,    // Palette RAM
-            0x0600_0000..=0x0601_7FFF => 1,    // VRAM
-            0x0700_0000..=0x0700_03FF => 1,    // OAM
+            // VRAM
+            0x0500_0000..=0x07FF_FFFF => {
+                self.video.write_byte(addr, data);
+                1
+            },
 
             // Cart
             0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
@@ -178,14 +194,13 @@ impl Mem32 for MemoryBus {
 
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            0x0000_0000..=0x0000_3FFF => (0, 0),    // BIOS
+            0x0000_0000..=0x0000_3FFF => (self.bios.read_halfword(addr), 1),                // BIOS
             0x0200_0000..=0x02FF_FFFF => (self.wram.read_halfword(addr & 0x3_FFFF), 3),     // WRAM
             0x0300_0000..=0x03FF_FFFF => (self.fast_wram.read_halfword(addr & 0x7FFF), 1),  // FAST WRAM
-            0x0400_0000..=0x0400_03FE => (self.io_read_halfword(addr), 1),          // I/O
+            0x0400_0000..=0x0400_03FE => (self.io_read_halfword(addr), 1),                  // I/O
 
-            0x0500_0000..=0x0500_03FF => (0, 0),    // Palette RAM
-            0x0600_0000..=0x0601_7FFF => (0, 0),    // VRAM
-            0x0700_0000..=0x0700_03FF => (0, 0),    // OAM
+            // VRAM
+            0x0500_0000..=0x07FF_FFFF => (self.video.read_halfword(addr), 1),
 
             // Cart
             0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_halfword(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle)),
@@ -211,9 +226,11 @@ impl Mem32 for MemoryBus {
                 1
             },
 
-            0x0500_0000..=0x0500_03FF => 1,    // Palette RAM
-            0x0600_0000..=0x0601_7FFF => 1,    // VRAM
-            0x0700_0000..=0x0700_03FF => 1,    // OAM
+            // VRAM
+            0x0500_0000..=0x07FF_FFFF => {
+                self.video.write_halfword(addr, data);
+                1
+            },
 
             // Cart
             0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
@@ -226,14 +243,14 @@ impl Mem32 for MemoryBus {
 
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            0x0000_0000..=0x0000_3FFF => (0, 0),    // BIOS
+            0x0000_0000..=0x0000_3FFF => (self.bios.read_word(addr), 1),                // BIOS
             0x0200_0000..=0x02FF_FFFF => (self.wram.read_word(addr & 0x3_FFFF), 6),     // WRAM
             0x0300_0000..=0x03FF_FFFF => (self.fast_wram.read_word(addr & 0x7FFF), 1),  // FAST WRAM
-            0x0400_0000..=0x0400_03FE => (self.io_read_word(addr), 1),          // I/O
+            0x0400_0000..=0x0400_03FE => (self.io_read_word(addr), 1),                  // I/O
 
-            0x0500_0000..=0x0500_03FF => (0, 0),    // Palette RAM
-            0x0600_0000..=0x0601_7FFF => (0, 0),    // VRAM
-            0x0700_0000..=0x0700_03FF => (0, 0),    // OAM
+            // VRAM
+            0x0500_0000..=0x06FF_FFFF => (self.video.read_word(addr), 2),   // VRAM & Palette
+            0x0700_0000..=0x0700_03FF => (self.video.read_word(addr), 1),   // OAM
 
             // Cart
             0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle) * 2),
@@ -259,9 +276,16 @@ impl Mem32 for MemoryBus {
                 1
             },
 
-            0x0500_0000..=0x0500_03FF => 1,    // Palette RAM
-            0x0600_0000..=0x0601_7FFF => 1,    // VRAM
-            0x0700_0000..=0x0700_03FF => 1,    // OAM
+            // VRAM & Palette
+            0x0500_0000..=0x06FF_FFFF => {
+                self.video.write_word(addr, data);
+                2
+            },
+            // OAM
+            0x0700_0000..=0x0700_03FF => {
+                self.video.write_word(addr, data);
+                1
+            },
 
             // Cart
             0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle) * 2,
@@ -278,7 +302,7 @@ impl Mem32 for MemoryBus {
 macro_rules! MemoryBusIO {
     {$(($start_addr:expr, $end_addr:expr, $device:ident)),*} => {
         impl MemoryBus {
-            fn io_read_byte(&mut self, addr: u32) -> u8 {
+            fn io_read_byte(&self, addr: u32) -> u8 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_byte(addr - $start_addr),)*
                     _ => unreachable!()
@@ -291,7 +315,7 @@ macro_rules! MemoryBusIO {
                 }
             }
 
-            fn io_read_halfword(&mut self, addr: u32) -> u16 {
+            fn io_read_halfword(&self, addr: u32) -> u16 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_halfword(addr - $start_addr),)*
                     _ => unreachable!()
@@ -304,7 +328,7 @@ macro_rules! MemoryBusIO {
                 }
             }
 
-            fn io_read_word(&mut self, addr: u32) -> u32 {
+            fn io_read_word(&self, addr: u32) -> u32 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_word(addr - $start_addr),)*
                     _ => unreachable!()
@@ -321,6 +345,7 @@ macro_rules! MemoryBusIO {
 }
 
 MemoryBusIO!{
+    (0x0400_0000, 0x0400_0057, video),
     (0x0400_00B0, 0x0400_00DF, dma),
     (0x0400_0100, 0x0400_010F, timers),
     (0x0400_0130, 0x0400_0133, joypad),

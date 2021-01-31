@@ -81,7 +81,7 @@ impl GamePakController {
 }
 
 impl MemInterface16 for GamePakController {
-    fn read_halfword(&mut self, addr: u32) -> u16 {
+    fn read_halfword(&self, addr: u32) -> u16 {
         match addr {
             0 => self.control.bits(),
             2 => 0,

@@ -17,4 +17,19 @@ pub mod gba {
 
     /// Cycles needed for a whole frame.
     pub const FRAME_CYCLES: usize = DOT_TIME * (H_RES + H_BLANK_RES) * (V_RES + V_BLANK_RES);
+
+    // Video state timing:
+
+    /// Horizontal drawing time.
+    pub const H_DRAW_CYCLES: usize = H_RES * DOT_TIME;
+    /// Time before H-Blank, after drawing finishes.
+    pub const POST_H_DRAW_CYCLES: usize = 46;
+    /// Total time before H-Blank.
+    pub const PRE_H_BLANK_CYCLES: usize = H_DRAW_CYCLES + POST_H_DRAW_CYCLES;
+    /// Time during H-Blank.
+    pub const H_BLANK_CYCLES: usize = (H_BLANK_RES * DOT_TIME) - POST_H_DRAW_CYCLES;
+    /// Max V-Count before V-blank
+    pub const V_MAX: u16 = 159;
+    /// Max V-Count before starting new frame
+    pub const V_MAX2: u16 = 227;
 }
