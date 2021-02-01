@@ -6,7 +6,8 @@ mod bios;
 
 use arm::{Mem32, MemCycleType};
 use crate::{
-    common::meminterface::MemInterface16,
+    common::bits::u8,
+    common::meminterface::{MemInterface8, MemInterface16},
     timers::Timers,
     joypad::{Joypad, Buttons},
     interrupt::InterruptControl,
@@ -19,6 +20,7 @@ pub use wram::WRAM;
 /// Game Boy Advance memory bus
 pub struct MemoryBus {
     bios:       bios::BIOS,
+    internal:   Internal,
 
     wram:       WRAM,
     fast_wram:  WRAM,
@@ -41,6 +43,7 @@ impl MemoryBus {
         let game_pak = cart::GamePak::new(cart_path)?;
         Ok(Self {
             bios:       bios,
+            internal:   Internal::new(),
 
             wram:       WRAM::new(256 * 1024),
             fast_wram:  WRAM::new(32 * 1024),
@@ -305,39 +308,39 @@ macro_rules! MemoryBusIO {
             fn io_read_byte(&self, addr: u32) -> u8 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_byte(addr - $start_addr),)*
-                    _ => unreachable!()
+                    _ => panic!(format!("trying to load from unmapped io address ${:08X}", addr)),
                 }
             }
             fn io_write_byte(&mut self, addr: u32, data: u8) {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.write_byte(addr - $start_addr, data),)*
-                    _ => unreachable!()
+                    _ => panic!(format!("trying to write to unmapped io address ${:08X}", addr)),
                 }
             }
 
             fn io_read_halfword(&self, addr: u32) -> u16 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_halfword(addr - $start_addr),)*
-                    _ => unreachable!()
+                    _ => panic!(format!("trying to load from unmapped io address ${:08X}", addr)),
                 }
             }
             fn io_write_halfword(&mut self, addr: u32, data: u16) {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.write_halfword(addr - $start_addr, data),)*
-                    _ => unreachable!()
+                    _ => panic!(format!("trying to write to unmapped io address ${:08X}", addr)),
                 }
             }
 
             fn io_read_word(&self, addr: u32) -> u32 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_word(addr - $start_addr),)*
-                    _ => unreachable!()
+                    _ => panic!(format!("trying to load from unmapped io address ${:08X}", addr)),
                 }
             }
             fn io_write_word(&mut self, addr: u32, data: u32) {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.write_word(addr - $start_addr, data),)*
-                    _ => unreachable!()
+                    _ => panic!(format!("trying to write to unmapped io address ${:08X}", addr)),
                 }
             }
         }
@@ -350,5 +353,46 @@ MemoryBusIO!{
     (0x0400_0100, 0x0400_010F, timers),
     (0x0400_0130, 0x0400_0133, joypad),
     (0x0400_0204, 0x0400_0207, game_pak_control),
-    (0x0400_0200, 0x0400_020F, interrupt_control)
+    (0x0400_0200, 0x0400_020F, interrupt_control),
+    (0x0400_0300, 0x0400_0301, internal)
+}
+
+/// Internal registers which are used by the BIOS.
+struct Internal {
+    post_boot_flag: u8,
+    
+    halt:   bool,
+    stop:   bool,
+}
+
+impl Internal {
+    pub fn new() -> Self {
+        Self {
+            post_boot_flag: 0,
+            halt:   false,
+            stop:   false,
+        }
+    }
+}
+
+impl MemInterface8 for Internal {
+    fn read_byte(&self, addr: u32) -> u8 {
+        match addr {
+            0 => self.post_boot_flag,
+            1 => 0,
+            _ => unreachable!()
+        }
+    }
+
+    fn write_byte(&mut self, addr: u32, data: u8) {
+        match addr {
+            0 => self.post_boot_flag = data & 1,
+            1 => if u8::test_bit(data, 7) {
+                self.stop = !self.stop;
+            } else {
+                self.halt = !self.halt;
+            },
+            _ => unreachable!()
+        }
+    }
 }

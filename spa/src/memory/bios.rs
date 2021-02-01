@@ -41,12 +41,12 @@ impl BIOS {
     pub fn read_halfword(&self, addr: u32) -> u16 {
         let start = addr as usize;
         let end = (addr + 2) as usize;
-        *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read halfword at 0x{:X}", addr))
+        *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read halfword at 0x{:08X}", addr))
     }
 
     pub fn read_word(&self, addr: u32) -> u32 {
         let start = addr as usize;
         let end = (addr + 4) as usize;
-        *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read word at 0x{:X}", addr))
+        *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read word at 0x{:08X}", addr))
     }
 }

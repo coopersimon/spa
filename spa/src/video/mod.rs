@@ -5,12 +5,23 @@ mod memory;
 use crate::common::meminterface::MemInterface16;
 use crate::constants::gba::*;
 use crate::interrupt::Interrupts;
+use memory::VideoMemory;
 
 /// Signal from the video unit.
 pub enum Signal {
     None,
     HBlank,
     VBlank
+}
+
+/// Renderer trait. The renderer should implement this.
+pub trait Renderer {
+    /// Render a single line.
+    fn render_line(&mut self, mem: &mut VideoMemory, line: u16);
+    /// Start rendering the frame.
+    fn start_frame(&mut self);
+    /// Complete rendering the frame.
+    fn finish_frame(&mut self);
 }
 
 /// Video rendering.
@@ -25,18 +36,18 @@ pub struct GBAVideo {
     cycle_count:    usize,
     v_count:        u16,
 
-    mem:            memory::VideoMemory,
+    mem:            VideoMemory,
 }
 
 impl GBAVideo {
     pub fn new() -> Self {
         Self {
-            state:          VideoState::Drawing,
+            state:          VideoState::Init,
 
             cycle_count:    0,
             v_count:        0,
 
-            mem:            memory::VideoMemory::new(),
+            mem:            VideoMemory::new(),
         }
     }
 
@@ -73,7 +84,7 @@ impl MemInterface16 for GBAVideo {
             0x00..=0x57 => self.mem.registers.read_halfword(addr),
             0x0500_0000..=0x0500_03FF => self.mem.palette.read_halfword(addr - 0x0500_0000),
             0x0600_0000..=0x0601_7FFF => self.mem.vram.read_halfword(addr - 0x0600_0000),
-            0x0700_0000..=0x0700_03FF => 0, // OAM
+            0x0700_0000..=0x0700_03FF => self.mem.oam.read_halfword(addr - 0x0700_0000),
             _ => panic!(format!("reading invalid video address {:X}", addr))
         }
     }
@@ -83,7 +94,7 @@ impl MemInterface16 for GBAVideo {
             0x00..=0x57 => self.mem.registers.write_halfword(addr, data),
             0x0500_0000..=0x0500_03FF => self.mem.palette.write_halfword(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => self.mem.vram.write_halfword(addr - 0x0600_0000, data),
-            0x0700_0000..=0x0700_03FF => {}, // OAM
+            0x0700_0000..=0x0700_03FF => self.mem.oam.write_halfword(addr - 0x0700_0000, data),
             _ => panic!(format!("writing invalid video address {:X}", addr))
         }
     }

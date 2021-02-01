@@ -12,4 +12,7 @@ bytemuck = "1.5"
 
 [dependencies.arm]
 git = "https://github.com/coopersimon/e-arm"
-#path = "../"
+#path = "../../arm"
+
+[features]
+debug = []

@@ -20,9 +20,9 @@ impl VideoMemory {
         Self {
             registers:  VideoRegisters::new(),
 
-            oam: oam::OAM{},
-            palette: palette::PaletteRAM{},
-            vram: WRAM::new(96 * 1024),
+            oam:        oam::OAM::new(),
+            palette:    palette::PaletteRAM::new(),
+            vram:       WRAM::new(96 * 1024),
         }
     }
 }

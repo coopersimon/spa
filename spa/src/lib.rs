@@ -60,3 +60,45 @@ impl GBA {
         self.cpu.ref_mem().set_button(button.into(), pressed);
     }
 }
+
+// Debug
+//#[cfg(feature = "debug")]
+impl GBA {
+    /// Capture the state of the internal registers.
+    pub fn get_state(&mut self) -> arm::CPUState {
+        use arm::Debugger;
+        self.cpu.inspect_state()
+    }
+
+    /// Read a word from memory.
+    pub fn get_word_at(&mut self, addr: u32) -> u32 {
+        use arm::{Mem32, MemCycleType};
+        let (data, _) = self.cpu.ref_mem().load_word(MemCycleType::N, addr);
+        data
+    }
+
+    /// Read a halfword from memory.
+    pub fn get_halfword_at(&mut self, addr: u32) -> u16 {
+        use arm::{Mem32, MemCycleType};
+        let (data, _) = self.cpu.ref_mem().load_halfword(MemCycleType::N, addr);
+        data
+    }
+
+    /// Read a byte from memory.
+    pub fn get_byte_at(&mut self, addr: u32) -> u8 {
+        use arm::{Mem32, MemCycleType};
+        let (data, _) = self.cpu.ref_mem().load_byte(MemCycleType::N, addr);
+        data
+    }
+
+    /// Step the device by one CPU cycle.
+    pub fn step(&mut self) {
+        let step_cycles = self.cpu.step();
+        let mem = self.cpu.ref_mem();
+        mem.clock(step_cycles);
+        mem.do_dma();
+        if let Some(exception) = mem.check_exceptions() {
+            self.cpu.trigger_exception(exception);
+        }
+    }
+}
