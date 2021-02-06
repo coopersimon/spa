@@ -40,7 +40,7 @@ impl MemInterface16 for GamePak {
         *try_from_bytes(&self.rom[start..end]).expect(&format!("cannot read halfword at 0x{:X}", addr))
     }
 
-    fn write_halfword(&mut self, addr: u32, data: u16) {
+    fn write_halfword(&mut self, _addr: u32, _data: u16) {
         // TODO: RAM
     }
 }

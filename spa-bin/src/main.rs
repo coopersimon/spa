@@ -30,6 +30,15 @@ fn main() {
         //#[cfg(feature = "debug")]
         debug::debug_mode(&mut gba);
     } else {
-        println!("TODO: exec gba");
+        let mut last_frame_time = chrono::Utc::now();
+        let frame_time = chrono::Duration::nanoseconds(1_000_000_000 / 60);
+
+        loop {
+            let now = chrono::Utc::now();
+            if now.signed_duration_since(last_frame_time) >= frame_time {
+                last_frame_time = now;
+                gba.frame();
+            }
+        }
     }
 }

@@ -1,11 +1,13 @@
 /// GBA video
 
 mod memory;
+mod render;
 
 use crate::common::meminterface::MemInterface16;
 use crate::constants::gba::*;
 use crate::interrupt::Interrupts;
 use memory::VideoMemory;
+pub use render::*;
 
 /// Signal from the video unit.
 pub enum Signal {
@@ -14,33 +16,25 @@ pub enum Signal {
     VBlank
 }
 
-/// Renderer trait. The renderer should implement this.
-pub trait Renderer {
-    /// Render a single line.
-    fn render_line(&mut self, mem: &mut VideoMemory, line: u16);
-    /// Start rendering the frame.
-    fn start_frame(&mut self);
-    /// Complete rendering the frame.
-    fn finish_frame(&mut self);
-}
-
 /// Video rendering.
 /// 
 /// Consists of three parts:
 /// - A unit that manages timing of drawing and blanking periods
 /// - The memory (VRAM, OAM, Palette memory, and registers)
 /// - The renderer (which converts memory to image)
-pub struct GBAVideo {
+pub struct GBAVideo<R: Renderer> {
     state:          VideoState,
 
     cycle_count:    usize,
     v_count:        u16,
 
     mem:            VideoMemory,
+
+    renderer:       R,
 }
 
-impl GBAVideo {
-    pub fn new() -> Self {
+impl<R: Renderer> GBAVideo<R> {
+    pub fn new(renderer: R) -> Self {
         Self {
             state:          VideoState::Init,
 
@@ -48,6 +42,8 @@ impl GBAVideo {
             v_count:        0,
 
             mem:            VideoMemory::new(),
+
+            renderer:       renderer,
         }
     }
 
@@ -78,7 +74,7 @@ impl GBAVideo {
 
 // Note that IO (register) addresses are from zero -
 // this is due to the mem bus interface.
-impl MemInterface16 for GBAVideo {
+impl<R: Renderer> MemInterface16 for GBAVideo<R> {
     fn read_halfword(&self, addr: u32) -> u16 {
         match addr {
             0x00..=0x57 => self.mem.registers.read_halfword(addr),
@@ -101,7 +97,7 @@ impl MemInterface16 for GBAVideo {
 }
 
 // Internal
-impl GBAVideo {
+impl<R: Renderer> GBAVideo<R> {
     fn transition_state(&mut self, transition: Transition, threshold: usize) -> (Signal, Interrupts) {
         use VideoState::*;
         use Transition::*;
@@ -114,6 +110,8 @@ impl GBAVideo {
                 self.mem.registers.set_h_blank(false);
                 self.mem.registers.set_v_blank(false);
                 self.mem.registers.set_v_count(0);
+                self.renderer.start_frame();
+                self.renderer.render_line(&mut self.mem, 0);
                 (Signal::None, self.mem.registers.v_count_irq())
             },
             BeginDrawing => {
@@ -121,6 +119,7 @@ impl GBAVideo {
                 self.v_count += 1;
                 self.mem.registers.set_h_blank(false);
                 self.mem.registers.set_v_count(self.v_count);
+                self.renderer.render_line(&mut self.mem, self.v_count);
                 (Signal::None, self.mem.registers.v_count_irq())
             },
             EndDrawing => {
@@ -137,6 +136,7 @@ impl GBAVideo {
             EnterVBlank => {
                 self.state = VBlank;
                 self.mem.registers.set_v_blank(true);
+                self.renderer.finish_frame();
                 (Signal::VBlank, self.mem.registers.v_blank_irq())
             }
             EnterVHBlank => {

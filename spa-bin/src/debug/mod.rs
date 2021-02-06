@@ -162,24 +162,20 @@ fn help() {
 }
 
 // Step the CPU, and add the PC to the stack trace if it calls.
-fn step_and_trace(gba: &mut GBA, stack_trace: &mut Vec<u32>, print: bool) {
+fn step_and_trace(gba: &mut GBA, _stack_trace: &mut Vec<u32>, print: bool) {
     let state = gba.get_state();
     let instr = state.pipeline;
-    if let Some(executing) = instr[2] {
-        // TODO: stack trace.
+    if let Some(_executing) = &instr[2] {
+        
     }
     
     if print {
-        println!("${:08X} [{}]", state.regs[15], pipeline_str(&instr));
+        println!("${:08X} [{}]", state.regs[15], instr.iter().map(|i| if let Some(instr) = i {
+            format!("{}", instr)
+        } else {
+            "_".to_string()
+        }).collect::<Vec<_>>().join(" => "));
     }
 
     gba.step();
-}
-
-fn pipeline_str(pipeline: &[Option<u32>; 3]) -> String {
-    pipeline.iter().map(|i| if let Some(instr) = i {
-        format!("${:08X}", instr)
-    } else {
-        "_".to_string()
-    }).collect::<Vec<_>>().join(" => ")
 }

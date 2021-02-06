@@ -11,7 +11,7 @@ use crate::{
     timers::Timers,
     joypad::{Joypad, Buttons},
     interrupt::InterruptControl,
-    video::{GBAVideo, Signal}
+    video::{GBAVideo, Signal, DebugRenderer}
 };
 use dma::{DMA, DMAAddress};
 use cart::{GamePak, GamePakController};
@@ -28,7 +28,7 @@ pub struct MemoryBus {
     game_pak:           GamePak,
     game_pak_control:   GamePakController,
 
-    video:              GBAVideo,
+    video:              GBAVideo<DebugRenderer>,
 
     timers:             Timers,
     joypad:             Joypad,
@@ -51,7 +51,7 @@ impl MemoryBus {
             game_pak:           game_pak,
             game_pak_control:   GamePakController::new(),
 
-            video:              GBAVideo::new(),
+            video:              GBAVideo::new(DebugRenderer{}),
 
             timers:             Timers::new(),
             joypad:             Joypad::new(),
@@ -308,39 +308,39 @@ macro_rules! MemoryBusIO {
             fn io_read_byte(&self, addr: u32) -> u8 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_byte(addr - $start_addr),)*
-                    _ => panic!(format!("trying to load from unmapped io address ${:08X}", addr)),
+                    _ => 0//panic!(format!("trying to load from unmapped io address ${:08X}", addr)),
                 }
             }
             fn io_write_byte(&mut self, addr: u32, data: u8) {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.write_byte(addr - $start_addr, data),)*
-                    _ => panic!(format!("trying to write to unmapped io address ${:08X}", addr)),
+                    _ => {}//panic!(format!("trying to write to unmapped io address ${:08X}", addr)),
                 }
             }
 
             fn io_read_halfword(&self, addr: u32) -> u16 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_halfword(addr - $start_addr),)*
-                    _ => panic!(format!("trying to load from unmapped io address ${:08X}", addr)),
+                    _ => 0//panic!(format!("trying to load from unmapped io address ${:08X}", addr)),
                 }
             }
             fn io_write_halfword(&mut self, addr: u32, data: u16) {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.write_halfword(addr - $start_addr, data),)*
-                    _ => panic!(format!("trying to write to unmapped io address ${:08X}", addr)),
+                    _ => {}//panic!(format!("trying to write to unmapped io address ${:08X}", addr)),
                 }
             }
 
             fn io_read_word(&self, addr: u32) -> u32 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_word(addr - $start_addr),)*
-                    _ => panic!(format!("trying to load from unmapped io address ${:08X}", addr)),
+                    _ => 0//panic!(format!("trying to load from unmapped io address ${:08X}", addr)),
                 }
             }
             fn io_write_word(&mut self, addr: u32, data: u32) {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.write_word(addr - $start_addr, data),)*
-                    _ => panic!(format!("trying to write to unmapped io address ${:08X}", addr)),
+                    _ => {}//panic!(format!("trying to write to unmapped io address ${:08X}", addr)),
                 }
             }
         }
@@ -353,7 +353,7 @@ MemoryBusIO!{
     (0x0400_0100, 0x0400_010F, timers),
     (0x0400_0130, 0x0400_0133, joypad),
     (0x0400_0204, 0x0400_0207, game_pak_control),
-    (0x0400_0200, 0x0400_020F, interrupt_control),
+    (0x0400_0200, 0x0400_020B, interrupt_control),
     (0x0400_0300, 0x0400_0301, internal)
 }
 

@@ -240,7 +240,8 @@ impl MemInterface16 for VideoRegisters {
             0x50 => self.colour_special.bits(),
             0x52 => self.alpha_coeffs,
             0x54 => self.brightness as u16,
-            _ => panic!("invalid video register address")
+            0x56 => 0,
+            _ => panic!("reading from invalid video register address {:X}", addr)
         }
     }
 
@@ -307,7 +308,8 @@ impl MemInterface16 for VideoRegisters {
             0x50 => self.colour_special = ColourSpecialControl::from_bits_truncate(data),
             0x52 => self.alpha_coeffs = data,
             0x54 => self.brightness = bytes::u16::lo(data),
-            _ => panic!("invalid video register address")
+            0x56 => {},
+            _ => panic!("writing to invalid video register address {:X}", addr)
         }
     }
 }

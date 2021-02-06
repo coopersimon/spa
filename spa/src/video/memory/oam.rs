@@ -20,8 +20,8 @@ impl OAM {
 
 impl MemInterface16 for OAM {
     fn read_halfword(&self, addr: u32) -> u16 {
-        let obj = (addr >> 2) as usize;
-        let index = addr & 0x3;
+        let obj = (addr >> 3) as usize;
+        let index = (addr >> 1) & 0x3;
         match index {
             0 => self.objects[obj].attrs_0.bits(),
             1 => self.objects[obj].attrs_1.bits(),
@@ -32,8 +32,8 @@ impl MemInterface16 for OAM {
     }
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
-        let obj = (addr >> 2) as usize;
-        let index = addr & 0x3;
+        let obj = (addr >> 3) as usize;
+        let index = (addr >> 1) & 0x3;
         match index {
             0 => self.objects[obj].attrs_0 = ObjAttr0::from_bits_truncate(data),
             1 => self.objects[obj].attrs_1 = ObjAttr1::from_bits_truncate(data),

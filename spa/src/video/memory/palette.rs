@@ -9,17 +9,17 @@ pub struct PaletteRAM {
 impl PaletteRAM {
     pub fn new() -> Self {
         Self {
-            palette_ram:    vec![0, 512],
+            palette_ram:    vec![0; 512],
         }
     }
 }
 
 impl MemInterface16 for PaletteRAM {
     fn read_halfword(&self, addr: u32) -> u16 {
-        self.palette_ram[addr as usize]
+        self.palette_ram[(addr >> 1) as usize]
     }
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
-        self.palette_ram[addr as usize] = data;
+        self.palette_ram[(addr >> 1) as usize] = data;
     }
 }

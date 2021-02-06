@@ -2,7 +2,7 @@
 
 /// GBA timing, video, and audio constants.
 pub mod gba {
-    pub const CYCLES_PER_SECOND: usize = 16 * 1024 * 1024;
+    //pub const CYCLES_PER_SECOND: usize = 16 * 1024 * 1024;
 
     /// Cycles needed to draw a single pixel on-screen.
     pub const DOT_TIME: usize = 4;
