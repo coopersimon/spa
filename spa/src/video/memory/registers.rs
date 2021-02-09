@@ -12,7 +12,7 @@ use crate::interrupt::Interrupts;
 
 bitflags! {
     #[derive(Default)]
-    pub struct LCDControl: u16 {
+    struct LCDControl: u16 {
         const DISPLAY_OBJ_WIN   = u16::bit(15);
         const DISPLAY_WIN1      = u16::bit(14);
         const DISPLAY_WIN0      = u16::bit(13);
@@ -22,7 +22,7 @@ bitflags! {
         const DISPLAY_BG1       = u16::bit(9);
         const DISPLAY_BG0       = u16::bit(8);
         const FORCED_BLANK      = u16::bit(7);
-        const OBJ_TILE_WRAP     = u16::bit(6);
+        const OBJ_TILE_MAP      = u16::bit(6);
         const HBLANK_INTERVAL   = u16::bit(5);
         const FRAME_DISPLAY     = u16::bit(4);
         const CGB_MODE          = u16::bit(3);
@@ -32,7 +32,7 @@ bitflags! {
 
 bitflags! {
     #[derive(Default)]
-    pub struct LCDStatus: u16 {
+    struct LCDStatus: u16 {
         const VCOUNT        = u16::bits(8, 15);
         const VCOUNT_IRQ    = u16::bit(5);
         const HBLANK_IRQ    = u16::bit(4);
@@ -51,20 +51,112 @@ impl LCDStatus {
 
 bitflags! {
     #[derive(Default)]
-    pub struct BGControl: u16 {
+    struct BGControl: u16 {
         const SCREEN_SIZE   = u16::bits(14, 15);
         const OVERFLOW      = u16::bit(13);
         const MAP_BASE      = u16::bits(8, 12);
-        const NUM_COLOURS   = u16::bit(7);
+        const USE_8_BPP     = u16::bit(7);
         const MOSAIC        = u16::bit(6);
         const TILE_BASE     = u16::bits(2, 3);
         const PRIORITY      = u16::bits(0, 1);
     }
 }
 
+impl BGControl {
+    fn priority(self) -> u8 {
+        (self & BGControl::PRIORITY).bits() as u8
+    }
+
+    fn tile_data_block(self) -> usize {
+        ((self & BGControl::TILE_BASE).bits() >> 2) as usize
+    }
+
+    fn is_mosaic(self) -> bool {
+        self.contains(BGControl::MOSAIC)
+    }
+
+    fn use_8_bpp(self) -> bool {
+        self.contains(BGControl::USE_8_BPP)
+    }
+
+    fn tile_map_block(self) -> usize {
+        ((self & BGControl::MAP_BASE).bits() >> 8) as usize
+    }
+
+    fn affine_wraparound(self) -> bool {
+        self.contains(BGControl::OVERFLOW)
+    }
+
+    fn layout(self) -> BackgroundMapLayout {
+        const SMALL: u16 = 0 << 14;
+        const WIDE: u16 = 1 << 14;
+        const TALL: u16 = 2 << 14;
+        const LARGE: u16 = 3 << 14;
+        match (self & BGControl::SCREEN_SIZE).bits() {
+            SMALL => BackgroundMapLayout::Small,
+            WIDE => BackgroundMapLayout::Wide,
+            TALL => BackgroundMapLayout::Tall,
+            LARGE => BackgroundMapLayout::Large,
+            _ => unreachable!()
+        }
+    }
+
+    fn affine_size(self) -> usize {
+        const SMALL: u16 = 0 << 14;
+        const MID: u16 = 1 << 14;
+        const LARGE: u16 = 2 << 14;
+        const XLARGE: u16 = 3 << 14;
+        match (self & BGControl::SCREEN_SIZE).bits() {
+            SMALL => 128,
+            MID => 256,
+            LARGE => 512,
+            XLARGE => 1024,
+            _ => unreachable!()
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum BackgroundMapLayout {
+    Small,  // 1x1 map
+    Wide,   // 2x1 map
+    Tall,   // 1x2 map
+    Large   // 2x2 map
+}
+
+/// Data for a background.
+#[derive(Clone)]
+pub struct BackgroundData {
+    pub priority:       u8,
+    pub scroll_x:       u16,
+    pub scroll_y:       u16,
+    pub tile_map_addr:  usize,
+    pub tile_data_addr: usize,
+
+    pub layout:     BackgroundMapLayout,
+    pub use_8bpp:   bool,
+    pub mosaic:     bool,
+}
+
+impl BackgroundData {
+    fn new(control: BGControl, scroll_x: u16, scroll_y: u16) -> Self {
+        Self {
+            priority:       control.priority(),
+            scroll_x:       scroll_x,
+            scroll_y:       scroll_y,
+            tile_map_addr:  control.tile_map_block() * 2 * 1024,
+            tile_data_addr: control.tile_data_block() * 16 * 1024,
+
+            layout:         control.layout(),
+            use_8bpp:       control.use_8_bpp(),
+            mosaic:         control.is_mosaic(),
+        }
+    }
+}
+
 bitflags! {
     #[derive(Default)]
-    pub struct WindowControl: u8 {
+    struct WindowControl: u8 {
         const COLOUR_SPECIAL    = u8::bit(5);
         const OBJ_ENABLE        = u8::bit(4);
         const BG3_ENABLE        = u8::bit(3);
@@ -76,7 +168,7 @@ bitflags! {
 
 bitflags! {
     #[derive(Default)]
-    pub struct ColourSpecialControl: u16 {
+    struct ColourSpecialControl: u16 {
         const BD_TARGET_2   = u16::bit(13);
         const OBJ_TARGET_2  = u16::bit(12);
         const BG3_TARGET_2  = u16::bit(11);
@@ -142,7 +234,7 @@ pub struct VideoRegisters {
     win_outside:    WindowControl,
     win_obj_inside: WindowControl,
 
-    mosaic: u16,
+    mosaic:         u16,
     colour_special: ColourSpecialControl,
     alpha_coeffs:   u16,
     brightness:     u8,
@@ -191,6 +283,78 @@ impl VideoRegisters {
         } else {
             Interrupts::default()
         }
+    }
+}
+
+// Render-side interface.
+impl VideoRegisters {
+    pub fn in_fblank(&self) -> bool {
+        self.lcd_control.contains(LCDControl::FORCED_BLANK)
+    }
+
+    pub fn mode(&self) -> u16 {
+        (self.lcd_control & LCDControl::MODE).bits()
+    }
+
+    /// Get the meta-data for a tile background.
+    /// If `None` is returned, the background is disabled.
+    pub fn tile_bg_data(&self, bg: usize) -> Option<BackgroundData> {
+        match bg {
+            0 if self.lcd_control.contains(LCDControl::DISPLAY_BG0) => {
+                Some(BackgroundData::new(self.bg0_control, self.bg0_x_offset, self.bg0_y_offset))
+            },
+            1 if self.lcd_control.contains(LCDControl::DISPLAY_BG1) => {
+                Some(BackgroundData::new(self.bg1_control, self.bg1_x_offset, self.bg1_y_offset))
+            },
+            2 if self.lcd_control.contains(LCDControl::DISPLAY_BG2) => {
+                Some(BackgroundData::new(self.bg2_control, self.bg2_x_offset, self.bg2_y_offset))
+            },
+            3 if self.lcd_control.contains(LCDControl::DISPLAY_BG3) => {
+                Some(BackgroundData::new(self.bg3_control, self.bg3_x_offset, self.bg3_y_offset))
+            },
+            _ => None,
+        }
+    }
+
+    pub fn is_obj_enabled(&self) -> bool {
+        self.lcd_control.contains(LCDControl::DISPLAY_OBJ)
+    }
+
+    /// Returns true if tiles should map in 1D.
+    /// Returns false if tiles should map in 2D.
+    pub fn obj_1d_tile_mapping(&self) -> bool {
+        self.lcd_control.contains(LCDControl::OBJ_TILE_MAP)
+    }
+
+    // Windows
+    pub fn windows_enabled(&self) -> bool {
+        self.lcd_control.intersects(LCDControl::DISPLAY_WIN0 | LCDControl::DISPLAY_WIN1 | LCDControl::DISPLAY_OBJ_WIN)
+    }
+
+    pub fn obj_window_0(&self) -> bool {
+        self.lcd_control.contains(LCDControl::DISPLAY_WIN0) && self.win0_inside.contains(WindowControl::OBJ_ENABLE)
+    }
+
+    /// Check if window 0 should be used for this line.
+    pub fn y_inside_window_0(&self, y: u8) -> bool {
+        y >= self.win0_y_top && y < self.win0_y_bottom
+    }
+
+    pub fn x_inside_window_0(&self, x: u8) -> bool {
+        x >= self.win0_x_left && x < self.win0_x_right
+    }
+
+    pub fn obj_window_1(&self) -> bool {
+        self.lcd_control.contains(LCDControl::DISPLAY_WIN1) && self.win1_inside.contains(WindowControl::OBJ_ENABLE)
+    }
+
+    /// Check if window 0 should be used for this line.
+    pub fn y_inside_window_1(&self, y: u8) -> bool {
+        y >= self.win1_y_top && y < self.win1_y_bottom
+    }
+
+    pub fn x_inside_window_1(&self, x: u8) -> bool {
+        x >= self.win1_x_left && x < self.win1_x_right
     }
 }
 
@@ -247,7 +411,10 @@ impl MemInterface16 for VideoRegisters {
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0x0 => self.lcd_control = LCDControl::from_bits_truncate(data),
+            0x0 => {
+                self.lcd_control = LCDControl::from_bits_truncate(data);
+                println!("New mode: {}", self.mode());
+            },
             0x2 => {}, // TODO: green swap
             0x4 => self.set_lcd_status(data),
             0x6 => {},

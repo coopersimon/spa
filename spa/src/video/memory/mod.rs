@@ -3,16 +3,19 @@
 mod registers;
 mod oam;
 mod palette;
+mod vram;
 
-use crate::memory::WRAM;
-use registers::VideoRegisters;
+pub use registers::{VideoRegisters, BackgroundData, BackgroundMapLayout};
+pub use palette::PaletteRAM;
+pub use oam::OAM;
+pub use vram::VRAM;
 
 pub struct VideoMemory {
-    pub registers: VideoRegisters,
+    pub registers:  VideoRegisters,
 
-    pub oam: oam::OAM,
-    pub palette: palette::PaletteRAM,
-    pub vram: WRAM,
+    pub oam:        OAM,
+    pub palette:    PaletteRAM,
+    pub vram:       VRAM,
 }
 
 impl VideoMemory {
@@ -20,9 +23,9 @@ impl VideoMemory {
         Self {
             registers:  VideoRegisters::new(),
 
-            oam:        oam::OAM::new(),
-            palette:    palette::PaletteRAM::new(),
-            vram:       WRAM::new(96 * 1024),
+            oam:        OAM::new(),
+            palette:    PaletteRAM::new(),
+            vram:       VRAM::new(),
         }
     }
 }

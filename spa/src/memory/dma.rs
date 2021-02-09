@@ -316,6 +316,7 @@ impl DMAChannel {
             self.current_count = self.word_count;
             self.current_src_addr = self.src_addr;
             self.current_dst_addr = self.dst_addr;
+            println!("Enable DMA! Count: {:X}  Src:{:X} Dst:{:X}", self.current_count, self.current_src_addr, self.current_dst_addr);
         }
         self.word_size = if self.control.contains(Control::WORD_TYPE) {4} else {2};
     }

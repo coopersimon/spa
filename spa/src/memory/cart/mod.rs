@@ -12,7 +12,10 @@ use std::{
     path::Path,
     fs::File
 };
-use crate::common::meminterface::MemInterface16;
+use crate::common::{
+    bytes::u16,
+    meminterface::MemInterface16
+};
 
 pub use controller::GamePakController;
 
@@ -27,6 +30,14 @@ impl GamePak {
         let mut cart_file = File::open(cart_path)?;
         let mut buffer = Vec::new();
         cart_file.read_to_end(&mut buffer)?;
+
+        // Fill buffer with garbage.
+        let start = buffer.len() / 2;
+        for i in start..0x0100_0000 {
+            let data = i as u16;
+            buffer.push(u16::lo(data));
+            buffer.push(u16::hi(data));
+        }
         Ok(Self {
             rom: buffer
         })

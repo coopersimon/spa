@@ -11,7 +11,8 @@ use crate::{
     timers::Timers,
     joypad::{Joypad, Buttons},
     interrupt::InterruptControl,
-    video::{GBAVideo, Signal, DebugRenderer}
+    video::{GBAVideo, Signal, ProceduralRenderer, RenderTarget},
+    audio::GBAAudio
 };
 use dma::{DMA, DMAAddress};
 use cart::{GamePak, GamePakController};
@@ -28,7 +29,10 @@ pub struct MemoryBus {
     game_pak:           GamePak,
     game_pak_control:   GamePakController,
 
-    video:              GBAVideo<DebugRenderer>,
+    video:              GBAVideo<ProceduralRenderer>,
+    render_target:      RenderTarget,
+
+    audio:              GBAAudio,
 
     timers:             Timers,
     joypad:             Joypad,
@@ -41,6 +45,7 @@ impl MemoryBus {
     pub fn new(cart_path: &std::path::Path, bios_path: Option<&std::path::Path>) -> std::io::Result<Self> {
         let bios = bios::BIOS::new(bios_path)?;
         let game_pak = cart::GamePak::new(cart_path)?;
+        let render_target = std::rc::Rc::new(std::cell::RefCell::new([0; 240 * 160 * 4]));
         Ok(Self {
             bios:       bios,
             internal:   Internal::new(),
@@ -51,7 +56,10 @@ impl MemoryBus {
             game_pak:           game_pak,
             game_pak_control:   GamePakController::new(),
 
-            video:              GBAVideo::new(DebugRenderer{}),
+            video:              GBAVideo::new(ProceduralRenderer::new(render_target.clone())),
+            render_target:      render_target,
+
+            audio:              GBAAudio::new(),
 
             timers:             Timers::new(),
             joypad:             Joypad::new(),
@@ -59,6 +67,10 @@ impl MemoryBus {
             dma:                DMA::new(),
             interrupt_control:  InterruptControl::new(),
         })
+    }
+
+    pub fn ref_frame<'a>(&'a self) -> std::cell::Ref<'a, [u8]> {
+        self.render_target.borrow()
     }
 
     /// Do a DMA transfer if possible.
@@ -134,7 +146,7 @@ impl MemoryBus {
         );
     }
 
-    pub fn check_exceptions(&self) -> Option<arm::Exception> {
+    pub fn check_irq(&self) -> bool {
         self.interrupt_control.irq()
     }
 
@@ -349,6 +361,7 @@ macro_rules! MemoryBusIO {
 
 MemoryBusIO!{
     (0x0400_0000, 0x0400_0057, video),
+    (0x0400_0060, 0x0400_008F, audio),
     (0x0400_00B0, 0x0400_00DF, dma),
     (0x0400_0100, 0x0400_010F, timers),
     (0x0400_0130, 0x0400_0133, joypad),
@@ -380,6 +393,8 @@ impl MemInterface8 for Internal {
         match addr {
             0 => self.post_boot_flag,
             1 => 0,
+            2 => 0,
+            3 => 0,
             _ => unreachable!()
         }
     }
@@ -392,6 +407,8 @@ impl MemInterface8 for Internal {
             } else {
                 self.halt = !self.halt;
             },
+            2 => {},
+            3 => {},
             _ => unreachable!()
         }
     }

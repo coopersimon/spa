@@ -47,12 +47,8 @@ impl InterruptControl {
     }
 
     /// Check if an IRQ should be sent to the CPU.
-    pub fn irq(&self) -> Option<arm::Exception> {
-        if self.interrupt_master && self.interrupt_enable.intersects(self.interrupt_req) {
-            Some(arm::Exception::Interrupt)
-        } else {
-            None
-        }
+    pub fn irq(&self) -> bool {
+        self.interrupt_master && self.interrupt_enable.intersects(self.interrupt_req)
     }
 }
 

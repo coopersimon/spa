@@ -5,6 +5,7 @@ mod timers;
 mod interrupt;
 mod constants;
 mod video;
+mod audio;
 
 use arm::{
     ARM7TDMI, ARMCore
@@ -41,19 +42,24 @@ impl GBA {
         }
     }
 
-    // TODO: return some sort of framebuffer
-    pub fn frame(&mut self) {
+    /// Drives the emulator and returns a frame.
+    /// 
+    /// This should be called at 60fps.
+    /// The frame is in the format R8G8B8A8.
+    pub fn frame(&mut self, frame: &mut [u8]) {
         while self.cycle_count < constants::gba::FRAME_CYCLES {
             let step_cycles = self.cpu.step();
             let mem = self.cpu.ref_mem();
             mem.clock(step_cycles);
             let dma_cycles = mem.do_dma();
-            if let Some(exception) = mem.check_exceptions() {
-                self.cpu.trigger_exception(exception);
+            if mem.check_irq() {
+                self.cpu.interrupt();
             }
             self.cycle_count += step_cycles + dma_cycles;
         }
         self.cycle_count -= constants::gba::FRAME_CYCLES;
+        let frame_ref = self.cpu.ref_mem().ref_frame();
+        frame.copy_from_slice(&(*frame_ref));
     }
 
     pub fn set_button(&mut self, button: Button, pressed: bool) {
@@ -97,8 +103,8 @@ impl GBA {
         let mem = self.cpu.ref_mem();
         mem.clock(step_cycles);
         mem.do_dma();
-        if let Some(exception) = mem.check_exceptions() {
-            self.cpu.trigger_exception(exception);
+        if mem.check_irq() {
+            self.cpu.interrupt();
         }
     }
 }

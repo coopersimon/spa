@@ -3,7 +3,7 @@
 [[package]]
 name = "arm"
 version = "0.2.0"
-source = "git+https://github.com/coopersimon/e-arm#791536e3b9b4920622e76b216913fbe057851176"
+source = "git+https://github.com/coopersimon/e-arm#b47d639dbf37ad9ba96f9fd87e83bd6c6c881179"
 dependencies = [
  "bitflags",
  "num-traits",

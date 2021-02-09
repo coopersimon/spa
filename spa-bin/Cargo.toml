@@ -9,6 +9,10 @@ edition = "2018"
 [dependencies]
 clap = "2.33"
 chrono = "0.4"
+bytemuck = "1.2.0"
+futures = "0.3.5"
+wgpu = "0.5.0"
+winit = "0.22"
 
 [dependencies.spa]
 #git = "https://github.com/"
