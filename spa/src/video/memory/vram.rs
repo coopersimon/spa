@@ -17,8 +17,8 @@ bitflags! {
 }
 
 impl TileMapAttrs {
-    pub fn tile_num(self) -> usize {
-        (self & TileMapAttrs::TILE_NUM).bits() as usize
+    pub fn tile_num(self) -> u32 {
+        (self & TileMapAttrs::TILE_NUM).bits() as u32
     }
 
     pub fn h_flip(self) -> bool {
@@ -47,18 +47,23 @@ impl VRAM {
     }
 
     /// Get a set of tile map attributes for a regular background.
-    pub fn tile_map_attrs(&self, addr: usize) -> TileMapAttrs {
-        let start = addr;
-        let end = addr + 2;
+    pub fn tile_map_attrs(&self, addr: u32) -> TileMapAttrs {
+        let start = addr as usize;
+        let end = start + 2;
         let data = *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read tile map attrs at 0x{:X}", addr));
         TileMapAttrs::from_bits_truncate(data)
     }
 
+    /// Get the tile number for an affine background.
+    pub fn affine_map_tile_num(&self, addr: u32) -> u32 {
+        self.data[addr as usize] as u32
+    }
+
     /// Get a texel for a particular tile, using 16-colour palette.
-    pub fn tile_texel_4bpp(&self, addr: usize, x: u8, y: u8) -> u8 {
-        let y_offset = (4 * y) as usize;
-        let x_offset = (x / 2) as usize;
-        let data = self.data[addr + y_offset + x_offset];
+    pub fn tile_texel_4bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
+        let y_offset = (4 * y) as u32;
+        let x_offset = (x / 2) as u32;
+        let data = self.data[(addr + y_offset + x_offset) as usize];
         if u8::test_bit(x, 0) {
             data & 0xF
         } else {
@@ -67,10 +72,10 @@ impl VRAM {
     }
 
     /// Get a texel for a particular tile, using 256-colour palette.
-    pub fn tile_texel_8bpp(&self, addr: usize, x: u8, y: u8) -> u8 {
-        let y_offset = (8 * y) as usize;
-        let x_offset = x as usize;
-        self.data[addr + y_offset + x_offset]
+    pub fn tile_texel_8bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
+        let y_offset = (8 * y) as u32;
+        let x_offset = x as u32;
+        self.data[(addr + y_offset + x_offset) as usize]
     }
 }
 

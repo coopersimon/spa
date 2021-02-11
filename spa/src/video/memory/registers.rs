@@ -1,6 +1,7 @@
 /// Video registers
 
 use bitflags::bitflags;
+use fixed::types::{I8F8, I24F8};
 use crate::common::{
     bits::{
         u8, u16
@@ -67,8 +68,8 @@ impl BGControl {
         (self & BGControl::PRIORITY).bits() as u8
     }
 
-    fn tile_data_block(self) -> usize {
-        ((self & BGControl::TILE_BASE).bits() >> 2) as usize
+    fn tile_data_block(self) -> u32 {
+        ((self & BGControl::TILE_BASE).bits() >> 2) as u32
     }
 
     fn is_mosaic(self) -> bool {
@@ -79,8 +80,8 @@ impl BGControl {
         self.contains(BGControl::USE_8_BPP)
     }
 
-    fn tile_map_block(self) -> usize {
-        ((self & BGControl::MAP_BASE).bits() >> 8) as usize
+    fn tile_map_block(self) -> u32 {
+        ((self & BGControl::MAP_BASE).bits() >> 8) as u32
     }
 
     fn affine_wraparound(self) -> bool {
@@ -101,7 +102,7 @@ impl BGControl {
         }
     }
 
-    fn affine_size(self) -> usize {
+    fn affine_size(self) -> u32 {
         const SMALL: u16 = 0 << 14;
         const MID: u16 = 1 << 14;
         const LARGE: u16 = 2 << 14;
@@ -116,6 +117,26 @@ impl BGControl {
     }
 }
 
+/************* BG DATA ***************/
+
+#[derive(Clone)]
+pub enum BackgroundData {
+    Tiled(TiledBackgroundData),
+    Affine(AffineBackgroundData),
+    Bitmap(BitmapBackgroundData)
+}
+
+impl BackgroundData {
+    pub fn priority(&self) -> u8 {
+        use BackgroundData::*;
+        match self {
+            Tiled(t) => t.priority,
+            Affine(a) => a.priority,
+            Bitmap(b) => b.priority
+        }
+    }
+}
+
 #[derive(Clone)]
 pub enum BackgroundMapLayout {
     Small,  // 1x1 map
@@ -124,35 +145,49 @@ pub enum BackgroundMapLayout {
     Large   // 2x2 map
 }
 
-/// Data for a background.
+/// Data for a tiled background.
 #[derive(Clone)]
-pub struct BackgroundData {
+pub struct TiledBackgroundData {
     pub priority:       u8,
-    pub scroll_x:       u16,
-    pub scroll_y:       u16,
-    pub tile_map_addr:  usize,
-    pub tile_data_addr: usize,
+    pub tile_map_addr:  u32,
+    pub tile_data_addr: u32,
+    pub use_8bpp:       bool,
+    pub mosaic:         bool,
 
+    pub scroll_x:   u16,
+    pub scroll_y:   u16,
     pub layout:     BackgroundMapLayout,
-    pub use_8bpp:   bool,
-    pub mosaic:     bool,
 }
 
-impl BackgroundData {
-    fn new(control: BGControl, scroll_x: u16, scroll_y: u16) -> Self {
-        Self {
-            priority:       control.priority(),
-            scroll_x:       scroll_x,
-            scroll_y:       scroll_y,
-            tile_map_addr:  control.tile_map_block() * 2 * 1024,
-            tile_data_addr: control.tile_data_block() * 16 * 1024,
+/// Data for a tiled background.
+#[derive(Clone)]
+pub struct AffineBackgroundData {
+    pub priority:       u8,
+    pub tile_map_addr:  u32,
+    pub tile_data_addr: u32,
+    pub use_8bpp:       bool,
+    pub mosaic:         bool,
 
-            layout:         control.layout(),
-            use_8bpp:       control.use_8_bpp(),
-            mosaic:         control.is_mosaic(),
-        }
-    }
+    pub bg_ref_point_x: I24F8,
+    pub bg_ref_point_y: I24F8,
+    pub matrix_a:       I24F8,
+    pub matrix_b:       I24F8,
+    pub matrix_c:       I24F8,
+    pub matrix_d:       I24F8,
+    pub wrap:           bool,
+    pub size:           u32,
 }
+
+/// Data for a bitmap background.
+#[derive(Clone)]
+pub struct BitmapBackgroundData {
+    pub priority:       u8,
+    pub data_addr:      u32,
+    pub use_15bpp:      bool,
+    pub mosaic:         bool,
+}
+
+/************* BG DATA ***************/
 
 bitflags! {
     #[derive(Default)]
@@ -296,23 +331,179 @@ impl VideoRegisters {
         (self.lcd_control & LCDControl::MODE).bits()
     }
 
-    /// Get the meta-data for a tile background.
-    /// If `None` is returned, the background is disabled.
-    pub fn tile_bg_data(&self, bg: usize) -> Option<BackgroundData> {
-        match bg {
-            0 if self.lcd_control.contains(LCDControl::DISPLAY_BG0) => {
-                Some(BackgroundData::new(self.bg0_control, self.bg0_x_offset, self.bg0_y_offset))
+    fn bitmap_frame(&self) -> bool {
+        self.lcd_control.contains(LCDControl::FRAME_DISPLAY)
+    }
+
+    /// Get background data for the current mode.
+    /// 
+    /// Will return data for each enabled background in the current mode,
+    /// in priority order (high-low)
+    pub fn bg_data_for_mode(&self) -> Vec<BackgroundData> {
+        let mut backgrounds = Vec::<BackgroundData>::new();
+        let mut insert = |bg: Option<BackgroundData>| {
+            if let Some(bg_data) = bg {
+                for i in 0..backgrounds.len() {
+                    if bg_data.priority() < backgrounds[i].priority() {
+                        backgrounds.insert(i, bg_data);
+                        return;
+                    }
+                }
+                backgrounds.push(bg_data);
+            }
+        };
+        match self.mode() {
+            0 => {
+                insert(self.get_tiled_bg0());
+                insert(self.get_tiled_bg1());
+                insert(self.get_tiled_bg2());
+                insert(self.get_tiled_bg3());
             },
-            1 if self.lcd_control.contains(LCDControl::DISPLAY_BG1) => {
-                Some(BackgroundData::new(self.bg1_control, self.bg1_x_offset, self.bg1_y_offset))
+            1 => {
+                insert(self.get_tiled_bg0());
+                insert(self.get_tiled_bg1());
+                insert(self.get_affine_bg2());
             },
-            2 if self.lcd_control.contains(LCDControl::DISPLAY_BG2) => {
-                Some(BackgroundData::new(self.bg2_control, self.bg2_x_offset, self.bg2_y_offset))
+            2 => {
+                insert(self.get_affine_bg2());
+                insert(self.get_affine_bg3());
             },
-            3 if self.lcd_control.contains(LCDControl::DISPLAY_BG3) => {
-                Some(BackgroundData::new(self.bg3_control, self.bg3_x_offset, self.bg3_y_offset))
+            3 => if let Some(bg_data) = self.get_bitmap_bg(0, true) {
+                backgrounds.push(bg_data);
             },
-            _ => None,
+            4 => if let Some(bg_data) = self.get_bitmap_bg(if self.bitmap_frame() {0x9600} else {0}, false) {
+                backgrounds.push(bg_data);
+            },
+            5 => if let Some(bg_data) = self.get_bitmap_bg(if self.bitmap_frame() {0xA000} else {0}, true) {
+                backgrounds.push(bg_data);
+            },
+            _ => unreachable!()
+        }
+        backgrounds
+    }
+
+    fn get_tiled_bg0(&self) -> Option<BackgroundData> {
+        if self.lcd_control.contains(LCDControl::DISPLAY_BG0) {
+            Some(BackgroundData::Tiled(TiledBackgroundData {
+                priority:       self.bg0_control.priority(),
+                tile_map_addr:  self.bg0_control.tile_map_block() * 2 * 1024,
+                tile_data_addr: self.bg0_control.tile_data_block() * 16 * 1024,
+                use_8bpp:       self.bg0_control.use_8_bpp(),
+                mosaic:         self.bg0_control.is_mosaic(),
+                scroll_x:       self.bg0_x_offset,
+                scroll_y:       self.bg0_y_offset,
+                layout:         self.bg0_control.layout(),
+            }))
+        } else {
+            None
+        }
+    }
+
+    fn get_tiled_bg1(&self) -> Option<BackgroundData> {
+        if self.lcd_control.contains(LCDControl::DISPLAY_BG1) {
+            Some(BackgroundData::Tiled(TiledBackgroundData {
+                priority:       self.bg1_control.priority(),
+                tile_map_addr:  self.bg1_control.tile_map_block() * 2 * 1024,
+                tile_data_addr: self.bg1_control.tile_data_block() * 16 * 1024,
+                use_8bpp:       self.bg1_control.use_8_bpp(),
+                mosaic:         self.bg1_control.is_mosaic(),
+                scroll_x:       self.bg1_x_offset,
+                scroll_y:       self.bg1_y_offset,
+                layout:         self.bg1_control.layout(),
+            }))
+        } else {
+            None
+        }
+    }
+
+    fn get_tiled_bg2(&self) -> Option<BackgroundData> {
+        if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
+            Some(BackgroundData::Tiled(TiledBackgroundData {
+                priority:       self.bg2_control.priority(),
+                tile_map_addr:  self.bg2_control.tile_map_block() * 2 * 1024,
+                tile_data_addr: self.bg2_control.tile_data_block() * 16 * 1024,
+                use_8bpp:       self.bg2_control.use_8_bpp(),
+                mosaic:         self.bg2_control.is_mosaic(),
+                scroll_x:       self.bg2_x_offset,
+                scroll_y:       self.bg2_y_offset,
+                layout:         self.bg2_control.layout(),
+            }))
+        } else {
+            None
+        }
+    }
+
+    fn get_tiled_bg3(&self) -> Option<BackgroundData> {
+        if self.lcd_control.contains(LCDControl::DISPLAY_BG3) {
+            Some(BackgroundData::Tiled(TiledBackgroundData {
+                priority:       self.bg3_control.priority(),
+                tile_map_addr:  self.bg3_control.tile_map_block() * 2 * 1024,
+                tile_data_addr: self.bg3_control.tile_data_block() * 16 * 1024,
+                use_8bpp:       self.bg3_control.use_8_bpp(),
+                mosaic:         self.bg3_control.is_mosaic(),
+                scroll_x:       self.bg3_x_offset,
+                scroll_y:       self.bg3_y_offset,
+                layout:         self.bg3_control.layout(),
+            }))
+        } else {
+            None
+        }
+    }
+
+    fn get_affine_bg2(&self) -> Option<BackgroundData> {
+        if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
+            Some(BackgroundData::Affine(AffineBackgroundData {
+                priority:       self.bg2_control.priority(),
+                tile_map_addr:  self.bg2_control.tile_map_block() * 2 * 1024,
+                tile_data_addr: self.bg2_control.tile_data_block() * 16 * 1024,
+                use_8bpp:       self.bg2_control.use_8_bpp(),
+                mosaic:         self.bg2_control.is_mosaic(),
+                bg_ref_point_x: I24F8::from_bits(self.bg2_ref_x as i32),
+                bg_ref_point_y: I24F8::from_bits(self.bg2_ref_y as i32),
+                matrix_a:       I24F8::from_bits((self.bg2_matrix_a as i16) as i32),
+                matrix_b:       I24F8::from_bits((self.bg2_matrix_b as i16) as i32),
+                matrix_c:       I24F8::from_bits((self.bg2_matrix_c as i16) as i32),
+                matrix_d:       I24F8::from_bits((self.bg2_matrix_d as i16) as i32),
+                wrap:           self.bg2_control.affine_wraparound(),
+                size:           self.bg2_control.affine_size(),
+            }))
+        } else {
+            None
+        }
+    }
+
+    fn get_affine_bg3(&self) -> Option<BackgroundData> {
+        if self.lcd_control.contains(LCDControl::DISPLAY_BG3) {
+            Some(BackgroundData::Affine(AffineBackgroundData {
+                priority:       self.bg3_control.priority(),
+                tile_map_addr:  self.bg3_control.tile_map_block() * 2 * 1024,
+                tile_data_addr: self.bg3_control.tile_data_block() * 16 * 1024,
+                use_8bpp:       self.bg3_control.use_8_bpp(),
+                mosaic:         self.bg3_control.is_mosaic(),
+                bg_ref_point_x: I24F8::from_bits(self.bg3_ref_x as i32),
+                bg_ref_point_y: I24F8::from_bits(self.bg3_ref_y as i32),
+                matrix_a:       I24F8::from_bits((self.bg3_matrix_a as i16) as i32),
+                matrix_b:       I24F8::from_bits((self.bg3_matrix_b as i16) as i32),
+                matrix_c:       I24F8::from_bits((self.bg3_matrix_c as i16) as i32),
+                matrix_d:       I24F8::from_bits((self.bg3_matrix_d as i16) as i32),
+                wrap:           self.bg3_control.affine_wraparound(),
+                size:           self.bg3_control.affine_size(),
+            }))
+        } else {
+            None
+        }
+    }
+
+    fn get_bitmap_bg(&self, offset: u32, use_15bpp: bool) -> Option<BackgroundData> {
+        if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
+            Some(BackgroundData::Bitmap(BitmapBackgroundData {
+                priority:   self.bg2_control.priority(),
+                data_addr:  offset,
+                use_15bpp:  use_15bpp,
+                mosaic:     self.bg2_control.is_mosaic(),
+            }))
+        } else {
+            None
         }
     }
 
@@ -411,10 +602,7 @@ impl MemInterface16 for VideoRegisters {
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0x0 => {
-                self.lcd_control = LCDControl::from_bits_truncate(data);
-                println!("New mode: {}", self.mode());
-            },
+            0x0 => self.lcd_control = LCDControl::from_bits_truncate(data),
             0x2 => {}, // TODO: green swap
             0x4 => self.set_lcd_status(data),
             0x6 => {},
@@ -435,17 +623,17 @@ impl MemInterface16 for VideoRegisters {
             0x24 => self.bg2_matrix_c = data,
             0x26 => self.bg2_matrix_d = data,
             0x28 => self.bg2_ref_x = bytes::u32::set_lo(self.bg2_ref_x, data),
-            0x2A => self.bg2_ref_x = bytes::u32::set_hi(self.bg2_ref_x, data),
+            0x2A => self.bg2_ref_x = bytes::u32::set_hi(self.bg2_ref_x, sign_extend_12bit(data & 0xFFF)),
             0x2C => self.bg2_ref_y = bytes::u32::set_lo(self.bg2_ref_y, data),
-            0x2E => self.bg2_ref_y = bytes::u32::set_hi(self.bg2_ref_y, data),
+            0x2E => self.bg2_ref_y = bytes::u32::set_hi(self.bg2_ref_y, sign_extend_12bit(data & 0xFFF)),
             0x30 => self.bg3_matrix_a = data,
             0x32 => self.bg3_matrix_b = data,
             0x34 => self.bg3_matrix_c = data,
             0x36 => self.bg3_matrix_d = data,
             0x38 => self.bg3_ref_x = bytes::u32::set_lo(self.bg3_ref_x, data),
-            0x3A => self.bg3_ref_x = bytes::u32::set_hi(self.bg3_ref_x, data),
+            0x3A => self.bg3_ref_x = bytes::u32::set_hi(self.bg3_ref_x, sign_extend_12bit(data & 0xFFF)),
             0x3C => self.bg3_ref_y = bytes::u32::set_lo(self.bg3_ref_y, data),
-            0x3E => self.bg3_ref_y = bytes::u32::set_hi(self.bg3_ref_y, data),
+            0x3E => self.bg3_ref_y = bytes::u32::set_hi(self.bg3_ref_y, sign_extend_12bit(data & 0xFFF)),
             0x40 => {
                 self.win0_x_right = bytes::u16::lo(data);
                 self.win0_x_left = bytes::u16::hi(data);
@@ -487,5 +675,13 @@ impl VideoRegisters {
         let old_flags = self.lcd_status.get_flags();
         let lcd_status = LCDStatus::from_bits_truncate(data & 0xFFF8);
         self.lcd_status = lcd_status | old_flags;
+    }
+}
+
+fn sign_extend_12bit(val: u16) -> u16 {
+    if u16::test_bit(val, 11) {
+        val | 0xF000
+    } else {
+        val
     }
 }

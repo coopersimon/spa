@@ -211,8 +211,8 @@ impl ObjAttrs {
     }
 
     /// Get the sprite tile num to use.
-    pub fn tile_num(&self) -> usize {
-        (self.attrs_2 & ObjAttr2::TILE_NUM).bits() as usize
+    pub fn tile_num(&self) -> u32 {
+        (self.attrs_2 & ObjAttr2::TILE_NUM).bits() as u32
     }
 
     pub fn is_semi_transparent(&self) -> bool {

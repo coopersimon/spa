@@ -5,7 +5,7 @@ mod oam;
 mod palette;
 mod vram;
 
-pub use registers::{VideoRegisters, BackgroundData, BackgroundMapLayout};
+pub use registers::*;
 pub use palette::PaletteRAM;
 pub use oam::OAM;
 pub use vram::VRAM;

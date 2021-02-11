@@ -253,7 +253,7 @@ impl DMAChannel {
             _ => unreachable!()
         };
 
-        self.current_count = self.current_count.wrapping_sub(1);
+        self.current_count = self.current_count.wrapping_sub(1) & self.word_count_mask;
         if self.current_count == 0 {
             DMAAddress::Done{
                 source: src_addr,
@@ -316,7 +316,7 @@ impl DMAChannel {
             self.current_count = self.word_count;
             self.current_src_addr = self.src_addr;
             self.current_dst_addr = self.dst_addr;
-            println!("Enable DMA! Count: {:X}  Src:{:X} Dst:{:X}", self.current_count, self.current_src_addr, self.current_dst_addr);
+            //println!("Enable DMA! Count: {:X}  Src:{:X} Dst:{:X}", self.current_count, self.current_src_addr, self.current_dst_addr);
         }
         self.word_size = if self.control.contains(Control::WORD_TYPE) {4} else {2};
     }

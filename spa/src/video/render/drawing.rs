@@ -1,17 +1,18 @@
 /// Software rendering.
 
+use fixed::types::I24F8;
 use crate::constants::gba;
 use super::{
     colour::*,
     super::memory::*
 };
 
-const VRAM_TILE_BLOCK: usize = 16 * 1024;
-const TILE_SIZE: usize = 8;
+const VRAM_TILE_BLOCK: u32 = 16 * 1024;
+const TILE_SIZE: u32 = 8;
 /// 4bpp tile size in bytes.
-const TILE_BYTES: usize = 32;
-const TILE_MAP_SIZE: usize = 32;
-const VRAM_MAP_BLOCK: usize = TILE_MAP_SIZE * TILE_MAP_SIZE * 2;
+const TILE_BYTES: u32 = 32;
+const TILE_MAP_SIZE: u32 = 32;
+const VRAM_MAP_BLOCK: u32 = TILE_MAP_SIZE * TILE_MAP_SIZE * 2;
 
 pub struct SoftwareRenderer {
     palette_cache:  PaletteCache
@@ -41,15 +42,7 @@ impl SoftwareRenderer {
                 *p = 0;
             }
         } else {
-            match mem.registers.mode() {
-                0 => self.draw_mode_0(mem, target, line),
-                1 => {},
-                2 => {},
-                3 => {},
-                4 => {},
-                5 => {},
-                _ => panic!("unknown mode!"),
-            }
+            self.draw(mem, target, line);
         }
     }
 }
@@ -58,7 +51,7 @@ impl SoftwareRenderer {
 impl SoftwareRenderer {
     /// Draw object pixels to a target line.
     fn draw_obj_line(&self, mem: &VideoMemory, target: &mut [Option<ObjectPixel>], obj_window: &mut [bool], y: i16) {
-        const OBJECT_VRAM_BASE: usize = VRAM_TILE_BLOCK * 4;
+        const OBJECT_VRAM_BASE: u32 = VRAM_TILE_BLOCK * 4;
         let use_1d_tile_mapping = mem.registers.obj_1d_tile_mapping();
         /*let check_windows = regs.windows_enabled();
         let render_objects = if check_windows {
@@ -137,7 +130,7 @@ impl SoftwareRenderer {
     /// The x and y values provided should be scrolled & mosaiced already (i.e., background values and not screen values).
     /// 
     /// If 0 is returned, the pixel is transparent.
-    fn tile_bg_pixel(&self, bg: &BackgroundData, vram: &VRAM, bg_x: usize, bg_y: usize) -> u8 {
+    fn tile_bg_pixel(&self, bg: &TiledBackgroundData, vram: &VRAM, bg_x: u32, bg_y: u32) -> u8 {
         // TODO: Check if pixel is visible through window
 
         // Find tile attrs in bg map
@@ -168,8 +161,8 @@ impl SoftwareRenderer {
         let tile_map_addr = bg.tile_map_addr + tile_map_offset + (submap_x + submap_y * TILE_MAP_SIZE) * 2;
         let attrs = vram.tile_map_attrs(tile_map_addr);
         
-        let mut tile_x = (bg_x % 8) as u8;
-        let mut tile_y = (bg_y % 8) as u8;
+        let mut tile_x = (bg_x % TILE_SIZE) as u8;
+        let mut tile_y = (bg_y % TILE_SIZE) as u8;
         if attrs.h_flip() {
             tile_x = 7 - tile_x;
         }
@@ -189,16 +182,62 @@ impl SoftwareRenderer {
         }
     }
 
-    // TODO: draw affine bg layer
+    /// Get the palette number of a background pixel.
+    /// The x and y values provided should be mosaiced already.
+    /// 
+    /// If 0 is returned, the pixel is transparent.
+    fn affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &VRAM, screen_x: u32, screen_y: u32) -> u8 {
+        // TODO: Check if pixel is visible through window
+
+        // Transform from screen space to BG space.
+        let x_0 = bg.bg_ref_point_x;
+        let y_0 = bg.bg_ref_point_y;
+        let x_i = I24F8::from_bits(screen_x as i32) - x_0;
+        let y_i = I24F8::from_bits(screen_y as i32) - y_0;
+        let x_out = (bg.matrix_a * x_i) + (bg.matrix_b * y_i) + x_0;
+        let y_out = (bg.matrix_c * x_i) + (bg.matrix_d * y_i) + y_0;
+
+        let bg_x = if bg.wrap {
+            (x_out.to_bits() as u32) & (bg.size - 1)
+        } else {
+            let bg_x = x_out.to_bits() as u32;
+            if bg_x >= bg.size {
+                return 0;
+            }
+            bg_x
+        };
+        let bg_y = if bg.wrap {
+            (y_out.to_bits() as u32) & (bg.size - 1)
+        } else {
+            let bg_y = y_out.to_bits() as u32;
+            if bg_y >= bg.size {
+                return 0;
+            }
+            bg_y
+        };
+
+        // Find tile attrs in bg map
+        let map_x = bg_x / TILE_SIZE;
+        let map_y = bg_y / TILE_SIZE;
+
+        // The address of the tile attributes.
+        let tile_map_addr = bg.tile_map_addr + (map_x + map_y * bg.size);
+        let tile_num = vram.affine_map_tile_num(tile_map_addr);
+        
+        let tile_x = (bg_x % TILE_SIZE) as u8;
+        let tile_y = (bg_y % TILE_SIZE) as u8;
+        let tile_addr = bg.tile_data_addr + (tile_num * TILE_BYTES * 2);
+        vram.tile_texel_8bpp(tile_addr, tile_x, tile_y)
+    }
 
     // TODO: draw bitmap bg layer
 }
 
 // Internal: draw modes
 impl SoftwareRenderer {
-    fn draw_mode_0(&self, mem: &VideoMemory, target: &mut [u8], line: u16) {
+    fn draw(&self, mem: &VideoMemory, target: &mut [u8], line: u16) {
         // Gather the backgrounds.
-        let mut bg_prio_data = Vec::<BackgroundData>::new();
+        /*let mut bg_prio_data = Vec::<BackgroundData>::new();
         for bg in (0..4).map(|bg_num| mem.registers.tile_bg_data(bg_num)) {
             if let Some(bg_data) = bg.as_ref() {
                 for i in 0..bg_prio_data.len() {
@@ -208,7 +247,8 @@ impl SoftwareRenderer {
                 }
                 bg_prio_data.push(bg_data.clone());
             }
-        }
+        }*/
+        let bg_data = mem.registers.bg_data_for_mode();
 
         let mut obj_line = [None; gba::H_RES];
         let mut obj_window = [false; gba::H_RES];
@@ -216,48 +256,63 @@ impl SoftwareRenderer {
         for x in 0..gba::H_RES {
             let dest = x * 4;
             // Prio 0
-            let colour = self.eval_mode_0(mem, obj_line[x], &bg_prio_data, x, line as usize);
+            let colour = self.eval_pixel(mem, obj_line[x], &bg_data, x as u32, line as u32);
             target[dest] = colour.r;
             target[dest + 1] = colour.g;
             target[dest + 2] = colour.b;
         }
     }
 
-    fn eval_mode_0(&self, mem: &VideoMemory, obj_pixel: Option<ObjectPixel>, bg_prio_data: &[BackgroundData], x: usize, y: usize) -> Colour {
+    fn eval_pixel(&self, mem: &VideoMemory, obj_pixel: Option<ObjectPixel>, bg_data: &[BackgroundData], x: u32, y: u32) -> Colour {
         if let Some(obj) = obj_pixel {
             for priority in 0..4 {
                 if obj.priority == priority {
                     return self.palette_cache.get_obj(obj.colour);
                 } else {
-                    for bg in bg_prio_data {
-                        if bg.priority == priority {
-                            // TODO: check window...
-                            let scrolled_x = x.wrapping_add(bg.scroll_x as usize);
-                            let scrolled_y = y.wrapping_add(bg.scroll_y as usize);
-                            let texel = self.tile_bg_pixel(bg, &mem.vram, scrolled_x, scrolled_y);
-                            if texel != 0 {
-                                return self.palette_cache.get_bg(texel);
-                            }
+                    for bg in bg_data {
+                        if bg.priority() == priority {
+                            self.bg_pixel(mem, bg, x, y);
                         }
                     }
                 }
             }
         } else {
             for priority in 0..4 {
-                for bg in bg_prio_data {
-                    if bg.priority == priority {
-                        // TODO: check window...
-                        let scrolled_x = x.wrapping_add(bg.scroll_x as usize);
-                        let scrolled_y = y.wrapping_add(bg.scroll_y as usize);
-                        let texel = self.tile_bg_pixel(bg, &mem.vram, scrolled_x, scrolled_y);
-                        if texel != 0 {
-                            return self.palette_cache.get_bg(texel);
-                        }
+                for bg in bg_data {
+                    if bg.priority() == priority {
+                        self.bg_pixel(mem, bg, x, y);
                     }
                 }
             }
         }
         self.palette_cache.get_backdrop()
+    }
+
+    /// Find a pixel value for a particular background.
+    fn bg_pixel(&self, mem: &VideoMemory, bg: &BackgroundData, x: u32, y: u32) -> Option<Colour> {
+        match bg {
+            BackgroundData::Tiled(t) => {
+                // TODO: check window...
+                // TODO: mosaic..?
+                let scrolled_x = x.wrapping_add(t.scroll_x as u32);
+                let scrolled_y = y.wrapping_add(t.scroll_y as u32);
+                let texel = self.tile_bg_pixel(t, &mem.vram, scrolled_x, scrolled_y);
+                if texel != 0 {
+                    Some(self.palette_cache.get_bg(texel))
+                } else {
+                    None
+                }
+            },
+            BackgroundData::Affine(a) => {
+                let texel = self.affine_bg_pixel(a, &mem.vram, x, y);
+                if texel != 0 {
+                    Some(self.palette_cache.get_bg(texel))
+                } else {
+                    None
+                }
+            },
+            BackgroundData::Bitmap(b) => None,
+        }
     }
 }
 
@@ -267,13 +322,13 @@ impl SoftwareRenderer {
 /// Provided the coordinates into an object, get the offset from the base tile.
 /// 
 /// The returned value is the offset in units of tiles. Multiply this by 2 when using 8bpp.
-fn tile_num_for_coord_2d(base_tile_num: usize, obj_x: u8, obj_y: u8) -> usize {
-    const TILE_GRID_WIDTH: usize = 0x20;
-    const TILE_GRID_HEIGHT: usize = 0x20;
+fn tile_num_for_coord_2d(base_tile_num: u32, obj_x: u8, obj_y: u8) -> u32 {
+    const TILE_GRID_WIDTH: u32 = 0x20;
+    const TILE_GRID_HEIGHT: u32 = 0x20;
     let base_tile_x = base_tile_num % TILE_GRID_WIDTH;
     let base_tile_y = base_tile_num / TILE_GRID_WIDTH;
-    let tile_x = (obj_x / 8) as usize;
-    let tile_y = (obj_y / 8) as usize;
+    let tile_x = (obj_x / 8) as u32;
+    let tile_y = (obj_y / 8) as u32;
     let target_tile_x = base_tile_x.wrapping_add(tile_x) % TILE_GRID_WIDTH;
     let target_tile_y = base_tile_y.wrapping_add(tile_y) % TILE_GRID_HEIGHT;
     target_tile_x + (target_tile_y * TILE_GRID_WIDTH)
@@ -281,9 +336,9 @@ fn tile_num_for_coord_2d(base_tile_num: usize, obj_x: u8, obj_y: u8) -> usize {
 
 /// Provided the coordinates into an object, and the base tile of the sprite,
 /// get the tile number for the coords provided.
-fn tile_num_for_coord_1d(base_tile_num: usize, obj_x: u8, obj_y: u8, width_x: u8) -> usize {
-    let tile_width = (width_x / 8) as usize;
-    let tile_x = (obj_x / 8) as usize;
-    let tile_y = (obj_y / 8) as usize;
+fn tile_num_for_coord_1d(base_tile_num: u32, obj_x: u8, obj_y: u8, width_x: u8) -> u32 {
+    let tile_width = (width_x / 8) as u32;
+    let tile_x = (obj_x / 8) as u32;
+    let tile_y = (obj_y / 8) as u32;
     base_tile_num + tile_x + (tile_y * tile_width)
 }
