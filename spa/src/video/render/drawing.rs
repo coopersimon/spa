@@ -343,6 +343,46 @@ impl SoftwareRenderer {
     }
 }
 
+// Debug
+impl SoftwareRenderer {
+    /// Debug: Draws the current VRAM in 8bpp format.
+    pub fn draw_8bpp_tiles(&self, mem: &VideoMemory, target: &mut [u8]) {
+        for y in 0..(48 * 8) {
+            // First 48KB.
+            let tile_row = y / 8;
+            let tile_y = y % 8;
+            for x in 0..(16 * 8) {
+                let tile_col = x / 8;
+                let tile_x = x % 8;
+                // Rows of 16 tiles.
+                let texel = mem.vram.tile_texel_8bpp((tile_row * 1024) + (tile_col * 64), tile_x as u8, tile_y as u8);
+                let colour = self.palette_cache.get_bg(texel);
+                let pixel_num = (((y * 256) + x) * 4) as usize;
+                target[pixel_num] = colour.r;
+                target[pixel_num + 1] = colour.g;
+                target[pixel_num + 2] = colour.b;
+            }
+            // Second 48KB.
+            let tile_row = (y / 8) + 48;
+            for x in (16 * 8)..(32 * 8) {
+                let tile_col = (x / 8) - 16;
+                let tile_x = x % 8;
+                // Rows of 16 tiles.
+                let texel = mem.vram.tile_texel_8bpp((tile_row * 1024) + (tile_col * 64), tile_x as u8, tile_y as u8);
+                let colour = if tile_row >= 64 {
+                    self.palette_cache.get_obj(texel)
+                } else {
+                    self.palette_cache.get_bg(texel)
+                };
+                let pixel_num = (((y * 256) + x) * 4) as usize;
+                target[pixel_num] = colour.r;
+                target[pixel_num + 1] = colour.g;
+                target[pixel_num + 2] = colour.b;
+            }
+        }
+    }
+}
+
 // Helpers: addr calculation
 // TODO: maybe these should be moved?
 

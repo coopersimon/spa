@@ -11,7 +11,7 @@ use crate::{
     timers::Timers,
     joypad::{Joypad, Buttons},
     interrupt::InterruptControl,
-    video::{GBAVideo, Signal, ProceduralRenderer, RenderTarget},
+    video::*,
     audio::GBAAudio
 };
 use dma::{DMA, DMAAddress};
@@ -19,7 +19,7 @@ use cart::{GamePak, GamePakController};
 pub use wram::WRAM;
 
 /// Game Boy Advance memory bus
-pub struct MemoryBus {
+pub struct MemoryBus<R: Renderer> {
     bios:       bios::BIOS,
     internal:   Internal,
 
@@ -29,8 +29,7 @@ pub struct MemoryBus {
     game_pak:           GamePak,
     game_pak_control:   GamePakController,
 
-    video:              GBAVideo<ProceduralRenderer>,
-    render_target:      RenderTarget,
+    video:              GBAVideo<R>,
 
     audio:              GBAAudio,
 
@@ -41,11 +40,10 @@ pub struct MemoryBus {
     interrupt_control:  InterruptControl,
 }
 
-impl MemoryBus {
+impl<R: Renderer> MemoryBus<R> {
     pub fn new(cart_path: &std::path::Path, bios_path: Option<&std::path::Path>) -> std::io::Result<Self> {
         let bios = bios::BIOS::new(bios_path)?;
         let game_pak = cart::GamePak::new(cart_path)?;
-        let render_target = std::rc::Rc::new(std::cell::RefCell::new([0; 240 * 160 * 4]));
         Ok(Self {
             bios:       bios,
             internal:   Internal::new(),
@@ -56,8 +54,7 @@ impl MemoryBus {
             game_pak:           game_pak,
             game_pak_control:   GamePakController::new(),
 
-            video:              GBAVideo::new(ProceduralRenderer::new(render_target.clone())),
-            render_target:      render_target,
+            video:              GBAVideo::new(R::new()),
 
             audio:              GBAAudio::new(),
 
@@ -69,8 +66,12 @@ impl MemoryBus {
         })
     }
 
-    pub fn ref_frame<'a>(&'a self) -> std::cell::Ref<'a, [u8]> {
-        self.render_target.borrow()
+    pub fn get_frame_data(&self, buffer: &mut [u8]) {
+        self.video.get_frame_data(buffer);
+    }
+
+    pub fn render_size(&self) -> (usize, usize) {
+        self.video.render_size()
     }
 
     /// Do a DMA transfer if possible.
@@ -155,7 +156,7 @@ impl MemoryBus {
     }
 }
 
-impl Mem32 for MemoryBus {
+impl<R: Renderer> Mem32 for MemoryBus<R> {
     type Addr = u32;
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
@@ -316,7 +317,7 @@ impl Mem32 for MemoryBus {
 /// There are a ton of devices that sit on IO so use this macro to construct the functions.
 macro_rules! MemoryBusIO {
     {$(($start_addr:expr, $end_addr:expr, $device:ident)),*} => {
-        impl MemoryBus {
+        impl<R: Renderer> MemoryBus<R> {
             fn io_read_byte(&self, addr: u32) -> u8 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_byte(addr - $start_addr),)*

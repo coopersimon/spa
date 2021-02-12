@@ -48,6 +48,7 @@ fn main() {
     let bios_path = cmd_args.value_of("biosrom").map(|s| std::path::Path::new(s));
 
     let mut gba = GBA::new(&cart_path, bios_path);
+    let render_size = gba.render_size();
 
     if cmd_args.is_present("debug") {
         //#[cfg(feature = "debug")]
@@ -55,7 +56,7 @@ fn main() {
     } else {
         let event_loop = EventLoop::new();
         let window = WindowBuilder::new()
-            .with_inner_size(Size::Logical(LogicalSize{width: 480_f64, height: 320_f64}))
+            .with_inner_size(Size::Logical(LogicalSize{width: (render_size.0 * 2) as f64, height: (render_size.1 * 2) as f64}))
             .with_title("SPA")
             .build(&event_loop).unwrap();
 
@@ -102,8 +103,8 @@ fn main() {
         });
 
         let texture_extent = wgpu::Extent3d {
-            width: 240,
-            height: 160,
+            width: render_size.0 as u32,
+            height: render_size.1 as u32,
             depth: 1
         };
 
@@ -278,7 +279,7 @@ fn main() {
 
                         let mut buf = device.create_buffer_mapped(&wgpu::BufferDescriptor {
                             label: None,
-                            size: 240 * 160 * 4,
+                            size: (render_size.0 * render_size.1 * 4) as u64,
                             usage: wgpu::BufferUsage::COPY_SRC | wgpu::BufferUsage::MAP_WRITE
                         });
         

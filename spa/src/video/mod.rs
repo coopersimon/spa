@@ -47,6 +47,14 @@ impl<R: Renderer> GBAVideo<R> {
         }
     }
 
+    pub fn get_frame_data(&self, buffer: &mut [u8]) {
+        self.renderer.get_frame_data(buffer);
+    }
+
+    pub fn render_size(&self) -> (usize, usize) {
+        self.renderer.render_size()
+    }
+
     pub fn clock(&mut self, cycles: usize) -> (Signal, Interrupts) {
         use VideoState::*;
         use Transition::*;
