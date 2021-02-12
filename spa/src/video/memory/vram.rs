@@ -65,9 +65,9 @@ impl VRAM {
         let x_offset = (x / 2) as u32;
         let data = self.data[(addr + y_offset + x_offset) as usize];
         if u8::test_bit(x, 0) {
-            data & 0xF
-        } else {
             data >> 4
+        } else {
+            data & 0xF
         }
     }
 

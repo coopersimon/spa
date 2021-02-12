@@ -77,9 +77,15 @@ impl SoftwareRenderer {
             let palette_bank = object.palette_bank();
             let palette_offset = palette_bank.unwrap_or(0) * 16;
             let use_8bpp = palette_bank.is_none();
+            let tile_shift = if use_8bpp {1} else {0};
             let base_tile_num = object.tile_num();
             let affine = object.affine_param_num();
             let object_y = y - top;
+
+            let x_0 = I24F8::from_num((width / 2) as i32);
+            let y_0 = I24F8::from_num((height / 2) as i32);
+            let y_i = I24F8::from_num(object_y as i32) - y_0;
+            let base_size = object.source_size();
 
             for object_x in 0..width {
                 let x = left + object_x;
@@ -95,19 +101,40 @@ impl SoftwareRenderer {
                 // ALSO TODO: write to obj window
 
                 // Find the pixel
-                let (index_x, index_y) = if let Some(affine_param_num) = affine {
-                    // TODO: affine shit
-                    (0, 0)
+                let (index_x, index_y) = if let Some(affine_params_num) = affine {
+                    let params = mem.oam.affine_params(affine_params_num);
+                    let x_i = I24F8::from_num(object_x as i32) - x_0;
+                    let p_x = (params.pa * x_i) + (params.pb * y_i) + x_0;
+                    let p_y = (params.pc * x_i) + (params.pd * y_i) + y_0;
+                    let index_x = p_x.to_num::<i32>() as u8;
+                    let index_y = p_y.to_num::<i32>() as u8;
+                    if index_x >= base_size.0 || index_y >= base_size.1 {
+                        continue;
+                    }
+                    (index_x, index_y)
                 } else {
                     let index_x = if object.h_flip() {width - object_x - 1} else {object_x} as u8;
                     let index_y = if object.v_flip() {height - object_y - 1} else {object_y} as u8;
                     (index_x, index_y)
                 };
                 let tile_num = if use_1d_tile_mapping {
-                    tile_num_for_coord_1d(base_tile_num, index_x, index_y, width as u8)
+                    let tile_width = (width / 8) as u32;
+                    let tile_x = (index_x / 8) as u32;
+                    let tile_y = (index_y / 8) as u32;
+                    let offset = (tile_x + (tile_y * tile_width)) << tile_shift;
+                    base_tile_num + offset
                 } else {
-                    tile_num_for_coord_2d(base_tile_num, index_x, index_y)
+                    const TILE_GRID_WIDTH: u32 = 0x20;
+                    const TILE_GRID_HEIGHT: u32 = 0x20;
+                    let base_tile_x = base_tile_num % TILE_GRID_WIDTH;
+                    let base_tile_y = base_tile_num / TILE_GRID_WIDTH;
+                    let tile_x = ((index_x / 8) << tile_shift) as u32;
+                    let tile_y = (index_y / 8) as u32;
+                    let target_tile_x = base_tile_x.wrapping_add(tile_x) % TILE_GRID_WIDTH;
+                    let target_tile_y = base_tile_y.wrapping_add(tile_y) % TILE_GRID_HEIGHT;
+                    target_tile_x + (target_tile_y * TILE_GRID_WIDTH)
                 };
+                //println!("Tile base: {}, index: {},{} Tile num: {}", base_tile_num, index_x, index_y, tile_num);
                 let tile_addr = OBJECT_VRAM_BASE + (tile_num * TILE_BYTES);
                 let texel = if use_8bpp {
                     mem.vram.tile_texel_8bpp(tile_addr, index_x, index_y)
@@ -221,7 +248,7 @@ impl SoftwareRenderer {
         let map_y = bg_y / TILE_SIZE;
 
         // The address of the tile attributes.
-        let tile_map_addr = bg.tile_map_addr + (map_x + map_y * bg.size);
+        let tile_map_addr = bg.tile_map_addr + map_x + map_y * bg.size;
         let tile_num = vram.affine_map_tile_num(tile_map_addr);
         
         let tile_x = (bg_x % TILE_SIZE) as u8;
@@ -336,9 +363,9 @@ fn tile_num_for_coord_2d(base_tile_num: u32, obj_x: u8, obj_y: u8) -> u32 {
 
 /// Provided the coordinates into an object, and the base tile of the sprite,
 /// get the tile number for the coords provided.
-fn tile_num_for_coord_1d(base_tile_num: u32, obj_x: u8, obj_y: u8, width_x: u8) -> u32 {
+fn tile_offset_for_coord_1d(obj_x: u8, obj_y: u8, width_x: u8) -> u32 {
     let tile_width = (width_x / 8) as u32;
     let tile_x = (obj_x / 8) as u32;
     let tile_y = (obj_y / 8) as u32;
-    base_tile_num + tile_x + (tile_y * tile_width)
+    tile_x + (tile_y * tile_width)
 }

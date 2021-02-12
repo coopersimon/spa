@@ -29,9 +29,9 @@ checksum = "5a4bad0c5981acc24bc09e532f35160f952e35422603f0563cd7a73c2c2e65a0"
 
 [[package]]
 name = "fixed"
-version = "0.5.7"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f32ca1abdbb21d63a3e02a658a9e3001b172f13c8b46724299e21190c5ee5041"
+checksum = "6ed9c66f2c3a8da3aed1c98c2bd9d345a213fcbeb0f408369a970ffdcdc86a3f"
 dependencies = [
  "typenum",
 ]

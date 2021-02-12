@@ -1,6 +1,7 @@
 /// Object attribute memory (for sprites)
 
 use bitflags::bitflags;
+use fixed::types::I24F8;
 use crate::common::{
     bits::u16,
     meminterface::MemInterface16
@@ -8,10 +9,10 @@ use crate::common::{
 
 /// Parameters used for affine coords.
 pub struct ObjAffineParams {
-    pub pa: u16,
-    pub pb: u16,
-    pub pc: u16,
-    pub pd: u16,
+    pub pa: I24F8,
+    pub pb: I24F8,
+    pub pc: I24F8,
+    pub pd: I24F8,
 }
 
 /// Object attribute memory.
@@ -33,10 +34,10 @@ impl OAM {
     pub fn affine_params(&self, param_num: u16) -> ObjAffineParams {
         let offset = (param_num as usize) * 4;
         ObjAffineParams {
-            pa: self.objects[offset].affine_param,
-            pb: self.objects[offset + 1].affine_param,
-            pc: self.objects[offset + 2].affine_param,
-            pd: self.objects[offset + 3].affine_param,
+            pa: I24F8::from_bits(self.objects[offset].affine_param as i16 as i32),
+            pb: I24F8::from_bits(self.objects[offset + 1].affine_param as i16 as i32),
+            pc: I24F8::from_bits(self.objects[offset + 2].affine_param as i16 as i32),
+            pd: I24F8::from_bits(self.objects[offset + 3].affine_param as i16 as i32),
         }
     }
 }
@@ -158,8 +159,7 @@ impl ObjAttrs {
         (x as i16, y)
     }
 
-    /// Get size of object clipping window.
-    pub fn size(&self) -> (i16, i16) {
+    pub fn source_size(&self) -> (u8, u8) {
         const SHAPE_SQ: u16     = 0 << 14;
         const SHAPE_HOR: u16    = 1 << 14;
         const SHAPE_VER: u16    = 2 << 14;
@@ -169,9 +169,7 @@ impl ObjAttrs {
         const SIZE_LARGE: u16   = 2 << 14;
         const SIZE_XLARGE: u16  = 3 << 14;
 
-        let double_size = self.attrs_0.contains(ObjAttr0::AFFINE | ObjAttr0::DOUBLE_CLIP);
-        let shift = if double_size {1} else {0};
-        let base_size = match (self.attrs_0 & ObjAttr0::SHAPE).bits() {
+        match (self.attrs_0 & ObjAttr0::SHAPE).bits() {
             SHAPE_SQ => match (self.attrs_1 & ObjAttr1::SIZE).bits() {
                 SIZE_SMALL  => (8, 8),
                 SIZE_MID    => (16, 16),
@@ -195,8 +193,15 @@ impl ObjAttrs {
             },
             SHAPE_NONE => (0, 0),
             _ => unreachable!(),
-        };
-        (base_size.0 << shift, base_size.1 << shift)
+        }
+    }
+
+    /// Get size of object clipping window.
+    pub fn size(&self) -> (i16, i16) {
+        let double_size = self.attrs_0.contains(ObjAttr0::AFFINE | ObjAttr0::DOUBLE_CLIP);
+        let shift = if double_size {1} else {0};
+        let base_size = self.source_size();
+        ((base_size.0 as i16) << shift, (base_size.1 as i16) << shift)
     }
 
     /// Get the palette bank for the object.

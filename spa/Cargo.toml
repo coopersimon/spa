@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 bitflags = "1.2"
 bytemuck = "1.5"
-fixed = "0.5.4"
+fixed = "1.6"
 
 [dependencies.arm]
 git = "https://github.com/coopersimon/e-arm"

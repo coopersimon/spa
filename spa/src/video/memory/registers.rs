@@ -1,7 +1,7 @@
 /// Video registers
 
 use bitflags::bitflags;
-use fixed::types::{I8F8, I24F8};
+use fixed::types::I24F8;
 use crate::common::{
     bits::{
         u8, u16
@@ -165,7 +165,6 @@ pub struct AffineBackgroundData {
     pub priority:       u8,
     pub tile_map_addr:  u32,
     pub tile_data_addr: u32,
-    pub use_8bpp:       bool,
     pub mosaic:         bool,
 
     pub bg_ref_point_x: I24F8,
@@ -456,7 +455,6 @@ impl VideoRegisters {
                 priority:       self.bg2_control.priority(),
                 tile_map_addr:  self.bg2_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg2_control.tile_data_block() * 16 * 1024,
-                use_8bpp:       self.bg2_control.use_8_bpp(),
                 mosaic:         self.bg2_control.is_mosaic(),
                 bg_ref_point_x: I24F8::from_bits(self.bg2_ref_x as i32),
                 bg_ref_point_y: I24F8::from_bits(self.bg2_ref_y as i32),
@@ -478,7 +476,6 @@ impl VideoRegisters {
                 priority:       self.bg3_control.priority(),
                 tile_map_addr:  self.bg3_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg3_control.tile_data_block() * 16 * 1024,
-                use_8bpp:       self.bg3_control.use_8_bpp(),
                 mosaic:         self.bg3_control.is_mosaic(),
                 bg_ref_point_x: I24F8::from_bits(self.bg3_ref_x as i32),
                 bg_ref_point_y: I24F8::from_bits(self.bg3_ref_y as i32),
