@@ -72,6 +72,7 @@ impl SoftwareRenderer {
             }
 
             // Lots of stuff we need for the object...
+            let in_obj_window = object.is_obj_window();
             let semi_transparent = object.is_semi_transparent();
             let priority = object.priority();
             let palette_bank = object.palette_bank();
@@ -85,7 +86,10 @@ impl SoftwareRenderer {
             let x_0 = I24F8::from_num((width / 2) as i32);
             let y_0 = I24F8::from_num((height / 2) as i32);
             let y_i = I24F8::from_num(object_y as i32) - y_0;
-            let base_size = object.source_size();
+
+            let source_size = object.source_size();
+            let source_x_0 = I24F8::from_num((source_size.0 / 2) as i32);
+            let source_y_0 = I24F8::from_num((source_size.1 / 2) as i32);
 
             for object_x in 0..width {
                 let x = left + object_x;
@@ -98,17 +102,16 @@ impl SoftwareRenderer {
                     }
                 }
                 // TODO: check if inside window.
-                // ALSO TODO: write to obj window
 
                 // Find the pixel
                 let (index_x, index_y) = if let Some(affine_params_num) = affine {
                     let params = mem.oam.affine_params(affine_params_num);
                     let x_i = I24F8::from_num(object_x as i32) - x_0;
-                    let p_x = (params.pa * x_i) + (params.pb * y_i) + x_0;
-                    let p_y = (params.pc * x_i) + (params.pd * y_i) + y_0;
+                    let p_x = (params.pa * x_i) + (params.pb * y_i) + source_x_0;
+                    let p_y = (params.pc * x_i) + (params.pd * y_i) + source_y_0;
                     let index_x = p_x.to_num::<i32>() as u8;
                     let index_y = p_y.to_num::<i32>() as u8;
-                    if index_x >= base_size.0 || index_y >= base_size.1 {
+                    if index_x >= source_size.0 || index_y >= source_size.1 {
                         continue;
                     }
                     (index_x, index_y)
@@ -117,10 +120,10 @@ impl SoftwareRenderer {
                     let index_y = if object.v_flip() {height - object_y - 1} else {object_y} as u8;
                     (index_x, index_y)
                 };
+                let tile_x = (index_x / 8) as u32;
+                let tile_y = (index_y / 8) as u32;
                 let tile_num = if use_1d_tile_mapping {
                     let tile_width = (width / 8) as u32;
-                    let tile_x = (index_x / 8) as u32;
-                    let tile_y = (index_y / 8) as u32;
                     let offset = (tile_x + (tile_y * tile_width)) << tile_shift;
                     base_tile_num + offset
                 } else {
@@ -128,27 +131,29 @@ impl SoftwareRenderer {
                     const TILE_GRID_HEIGHT: u32 = 0x20;
                     let base_tile_x = base_tile_num % TILE_GRID_WIDTH;
                     let base_tile_y = base_tile_num / TILE_GRID_WIDTH;
-                    let tile_x = ((index_x / 8) << tile_shift) as u32;
-                    let tile_y = (index_y / 8) as u32;
-                    let target_tile_x = base_tile_x.wrapping_add(tile_x) % TILE_GRID_WIDTH;
+                    let target_tile_x = base_tile_x.wrapping_add(tile_x << tile_shift) % TILE_GRID_WIDTH;
                     let target_tile_y = base_tile_y.wrapping_add(tile_y) % TILE_GRID_HEIGHT;
                     target_tile_x + (target_tile_y * TILE_GRID_WIDTH)
                 };
-                //println!("Tile base: {}, index: {},{} Tile num: {}", base_tile_num, index_x, index_y, tile_num);
+                
                 let tile_addr = OBJECT_VRAM_BASE + (tile_num * TILE_BYTES);
                 let texel = if use_8bpp {
-                    mem.vram.tile_texel_8bpp(tile_addr, index_x, index_y)
+                    mem.vram.tile_texel_8bpp(tile_addr, index_x % 8, index_y % 8)
                 } else {
-                    mem.vram.tile_texel_4bpp(tile_addr, index_x, index_y)
+                    mem.vram.tile_texel_4bpp(tile_addr, index_x % 8, index_y % 8)
                 };
                 // Transparent.
                 if texel == 0 {
                     continue;
                 }
-                // Palette lookup.
-                target[x as usize] = Some(ObjectPixel{
-                    colour: palette_offset + texel, priority, semi_transparent
-                });
+                if in_obj_window {
+                    obj_window[x as usize] = true;
+                } else {
+                    // Palette lookup.
+                    target[x as usize] = Some(ObjectPixel{
+                        colour: palette_offset + texel, priority, semi_transparent
+                    });
+                }
             }
         }
     }
