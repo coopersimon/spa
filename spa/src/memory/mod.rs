@@ -173,6 +173,7 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
             0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_byte(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle)),
             0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_byte(addr - 0x0A00_0000), self.game_pak_control.wait_cycles_1(cycle)),
             0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_byte(addr - 0x0C00_0000), self.game_pak_control.wait_cycles_2(cycle)),
+            0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.ram.read_byte(addr & 0xFFFF), self.game_pak_control.sram_wait_cycles()),
 
             _ => (0, 1) // Unused
         }
@@ -203,6 +204,10 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
             0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
             0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle),
             0x0C00_0000..=0x0DFF_FFFF => self.game_pak_control.wait_cycles_2(cycle),
+            0x0E00_0000..=0x0EFF_FFFF => {
+                self.game_pak.ram.write_byte(addr & 0xFFFF, data);
+                self.game_pak_control.sram_wait_cycles()
+            },
 
             _ => 1 // Unused
         }
@@ -222,6 +227,7 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
             0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_halfword(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle)),
             0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_halfword(addr - 0x0A00_0000), self.game_pak_control.wait_cycles_1(cycle)),
             0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_halfword(addr - 0x0C00_0000), self.game_pak_control.wait_cycles_2(cycle)),
+            0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.ram.read_halfword(addr & 0xFFFF), self.game_pak_control.sram_wait_cycles()),
 
             _ => (0, 1) // Unused
         }
@@ -252,6 +258,10 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
             0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
             0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle),
             0x0C00_0000..=0x0DFF_FFFF => self.game_pak_control.wait_cycles_2(cycle),
+            0x0E00_0000..=0x0EFF_FFFF => {
+                self.game_pak.ram.write_halfword(addr & 0xFFFF, data);
+                self.game_pak_control.sram_wait_cycles()
+            },
 
             _ => 1 // Unused
         }
@@ -269,9 +279,10 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
             0x0700_0000..=0x0700_03FF => (self.video.read_word(addr), 1),   // OAM
 
             // Cart
-            0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle) * 2),
-            0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_word(addr - 0x0A00_0000), self.game_pak_control.wait_cycles_1(cycle) * 2),
-            0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_word(addr - 0x0C00_0000), self.game_pak_control.wait_cycles_2(cycle) * 2),
+            0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle) << 1),
+            0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_word(addr - 0x0A00_0000), self.game_pak_control.wait_cycles_1(cycle) << 1),
+            0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_word(addr - 0x0C00_0000), self.game_pak_control.wait_cycles_2(cycle) << 1),
+            0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.ram.read_word(addr & 0xFFFF), self.game_pak_control.sram_wait_cycles() << 1),
 
             _ => (0, 1) // Unused
         }
@@ -304,9 +315,13 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
             },
 
             // Cart
-            0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle) * 2,
-            0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle) * 2,
-            0x0C00_0000..=0x0DFF_FFFF => self.game_pak_control.wait_cycles_2(cycle) * 2,
+            0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle) << 1,
+            0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle) << 1,
+            0x0C00_0000..=0x0DFF_FFFF => self.game_pak_control.wait_cycles_2(cycle) << 1,
+            0x0E00_0000..=0x0EFF_FFFF => {
+                self.game_pak.ram.write_word(addr & 0xFFFF, data);
+                self.game_pak_control.sram_wait_cycles() << 1
+            },
 
             _ => 1 // Unused
         }

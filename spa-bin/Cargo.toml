@@ -19,3 +19,7 @@ winit = "0.22"
 #tag = "0.1.0"
 path = "../spa"
 #features = ["debug"]
+
+#[profile.release]
+#lto = "fat"
+#codegen-units=1

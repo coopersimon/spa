@@ -10,10 +10,11 @@ edition = "2018"
 bitflags = "1.2"
 bytemuck = "1.5"
 fixed = "1.6"
+regex = "1"
 
 [dependencies.arm]
-git = "https://github.com/coopersimon/e-arm"
-#path = "../../arm"
+#git = "https://github.com/coopersimon/e-arm"
+path = "../../arm"
 
 [features]
 debug = []

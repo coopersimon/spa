@@ -1,6 +1,7 @@
 /// Cartridge interface.
 
 mod controller;
+mod ram;
 
 use bytemuck::{
     try_from_bytes
@@ -18,11 +19,12 @@ use crate::common::{
 };
 
 pub use controller::GamePakController;
+use ram::*;
 
 /// The ROM and RAM inside a game pak (cartridge).
 pub struct GamePak {
-    rom: Vec<u8>
-    // TODO: ram
+    rom: Vec<u8>,
+    pub ram: Box<dyn SaveRAM>
 }
 
 impl GamePak {
@@ -30,6 +32,9 @@ impl GamePak {
         let mut cart_file = File::open(cart_path)?;
         let mut buffer = Vec::new();
         cart_file.read_to_end(&mut buffer)?;
+
+        // Detect save file type.
+        let ram = make_save_ram(&buffer, None);
 
         // Fill buffer with garbage.
         let start = buffer.len() / 2;
@@ -39,7 +44,8 @@ impl GamePak {
             buffer.push(u16::hi(data));
         }
         Ok(Self {
-            rom: buffer
+            rom: buffer,
+            ram: ram
         })
     }
 }
@@ -48,10 +54,10 @@ impl MemInterface16 for GamePak {
     fn read_halfword(&self, addr: u32) -> u16 {
         let start = addr as usize;
         let end = (addr + 2) as usize;
-        *try_from_bytes(&self.rom[start..end]).expect(&format!("cannot read halfword at 0x{:X}", addr))
+        *try_from_bytes(&self.rom[start..end]).expect(&format!("cannot read ROM halfword at 0x{:X}", addr))
     }
 
-    fn write_halfword(&mut self, _addr: u32, _data: u16) {
-        // TODO: RAM
+    fn write_halfword(&mut self, addr: u32, _data: u16) {
+        panic!(format!("Trying to write to ROM 0x{:X}", addr));
     }
 }
