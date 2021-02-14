@@ -66,6 +66,14 @@ impl<R: Renderer> MemoryBus<R> {
         })
     }
 
+    pub fn is_halted(&self) -> bool {
+        self.internal.halt
+    }
+
+    pub fn unhalt(&mut self) {
+        self.internal.halt = false;
+    }
+
     pub fn get_frame_data(&self, buffer: &mut [u8]) {
         self.video.get_frame_data(buffer);
     }
@@ -390,8 +398,8 @@ MemoryBusIO!{
 struct Internal {
     post_boot_flag: u8,
     
-    halt:   bool,
-    stop:   bool,
+    pub halt:   bool,
+    pub stop:   bool,
 }
 
 impl Internal {
@@ -419,9 +427,10 @@ impl MemInterface8 for Internal {
         match addr {
             0 => self.post_boot_flag = data & 1,
             1 => if u8::test_bit(data, 7) {
-                self.stop = !self.stop;
+                println!("Stop!");
+                self.stop = true;
             } else {
-                self.halt = !self.halt;
+                self.halt = true;
             },
             2 => {},
             3 => {},

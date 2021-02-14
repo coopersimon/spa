@@ -48,11 +48,16 @@ impl GBA {
     /// The frame is in the format R8G8B8A8.
     pub fn frame(&mut self, frame: &mut [u8]) {
         while self.cycle_count < constants::gba::FRAME_CYCLES {
-            let step_cycles = self.cpu.step();
+            let step_cycles = if !self.cpu.ref_mem().is_halted() {
+                self.cpu.step()
+            } else {
+                1
+            };
             let mem = self.cpu.ref_mem_mut();
             mem.clock(step_cycles);
             let dma_cycles = mem.do_dma();
             if mem.check_irq() {
+                mem.unhalt();
                 self.cpu.interrupt();
             }
             self.cycle_count += step_cycles + dma_cycles;
@@ -102,11 +107,16 @@ impl GBA {
 
     /// Step the device by one CPU cycle.
     pub fn step(&mut self) {
-        let step_cycles = self.cpu.step();
+        let step_cycles = if !self.cpu.ref_mem().is_halted() {
+            self.cpu.step()
+        } else {
+            1
+        };
         let mem = self.cpu.ref_mem_mut();
         mem.clock(step_cycles);
         mem.do_dma();
         if mem.check_irq() {
+            mem.unhalt();
             self.cpu.interrupt();
         }
     }
