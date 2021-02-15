@@ -51,7 +51,7 @@ pub struct Joypad {
 impl Joypad {
     pub fn new() -> Self {
         Self {
-            buttons_pressed:    Buttons::default(),
+            buttons_pressed:    Buttons::from_bits_truncate(0x3FF),
             interrupt_control:  Buttons::default(),
             interrupt_enable:   false,
             interrupt_cond:     false,
@@ -59,7 +59,7 @@ impl Joypad {
     }
 
     pub fn set_button(&mut self, buttons: Buttons, pressed: bool) {
-        self.buttons_pressed.set(buttons, pressed);
+        self.buttons_pressed.set(buttons, !pressed);
     }
 
     pub fn get_interrupt(&self) -> Interrupts {
@@ -107,10 +107,11 @@ impl Joypad {
             return false;
         }
 
+        let set_buttons = Buttons::from_bits_truncate(self.buttons_pressed.bits() ^ 0x3FF);
         if self.interrupt_cond { // AND
-            self.buttons_pressed.contains(self.interrupt_control)
+            set_buttons.contains(self.interrupt_control)
         } else {                 // OR
-            self.buttons_pressed.intersects(self.interrupt_control)
+            set_buttons.intersects(self.interrupt_control)
         }
     }
 }
