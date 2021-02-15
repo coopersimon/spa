@@ -303,7 +303,9 @@ impl SoftwareRenderer {
                 } else {
                     for bg in bg_data {
                         if bg.priority() == priority {
-                            self.bg_pixel(mem, bg, x, y);
+                            if let Some(col) = self.bg_pixel(mem, bg, x, y) {
+                                return col;
+                            }
                         }
                     }
                 }
@@ -312,7 +314,9 @@ impl SoftwareRenderer {
             for priority in 0..4 {
                 for bg in bg_data {
                     if bg.priority() == priority {
-                        self.bg_pixel(mem, bg, x, y);
+                        if let Some(col) = self.bg_pixel(mem, bg, x, y) {
+                            return col;
+                        }
                     }
                 }
             }
@@ -343,7 +347,7 @@ impl SoftwareRenderer {
                     None
                 }
             },
-            BackgroundData::Bitmap(b) => None,
+            BackgroundData::Bitmap(_) => panic!("bitmaps not supported"),
         }
     }
 }
