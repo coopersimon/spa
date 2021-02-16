@@ -10,7 +10,10 @@ use std::{
     },
     fs::File
 };
-use crate::common::meminterface::MemInterface8;
+use crate::common::{
+    meminterface::MemInterface8,
+    bytes::u16
+};
 
 const SRAM_CODE: &'static str = "SRAM";
 //const EEPROM_512_CODE: &'static str = "EPR5";
@@ -49,15 +52,18 @@ pub fn make_save_ram(rom: &[u8], save_path: Option<&Path>) -> Box<dyn SaveRAM> {
 
     use regex::bytes::Regex;
     let re = Regex::new("(EEPROM|SRAM|FLASH|FLASH512|FLASH1M)_V...").expect("couldn't compile regex");
-    let found = re.find(rom).expect("couldn't find any save RAM type!");
-    println!("Found: {}", String::from_utf8(found.as_bytes().to_vec()).unwrap());
-
-    match found.as_bytes().len() {
-        9 => Box::new(SRAM::new(file)),
-        10 | 13 => Box::new(FLASH::new_64(file)),
-        11 => panic!("EEPROM not supported yet"),
-        12 => Box::new(FLASH::new_128(file)),
-        _ => unreachable!()
+    if let Some(found) = re.find(rom) {
+        println!("Found: {}", String::from_utf8(found.as_bytes().to_vec()).unwrap());
+    
+        match found.as_bytes().len() {
+            9 => Box::new(SRAM::new(file)),
+            10 | 13 => Box::new(FLASH::new_64(file)),
+            11 => panic!("EEPROM not supported yet"),
+            12 => Box::new(FLASH::new_128(file)),
+            _ => unreachable!()
+        }
+    } else {
+        Box::new(NoSaveRAM{})
     }
 }
 
@@ -77,6 +83,22 @@ pub trait SaveRAM: MemInterface8 {
     fn flush(&mut self);
 }
 
+/// For games with no save backup.
+pub struct NoSaveRAM {}
+
+impl MemInterface8 for NoSaveRAM {
+    fn read_byte(&self, _addr: u32) -> u8 {
+        0
+    }
+    fn write_byte(&mut self, _addr: u32, _data: u8) {}
+}
+
+impl SaveRAM for NoSaveRAM {
+    fn flush(&mut self) {}
+}
+
+
+/// SRAM. Simple 32kB region of 8-bit battery-backed memory.
 pub struct SRAM {
     ram:    Vec<u8>,
     file:   Option<File>,
@@ -133,6 +155,15 @@ impl SaveRAM for SRAM {
     }
 }
 
+mod flashdev {
+    pub const SST_64: u16 = 0xD4BF;
+    pub const MACRONIX_64: u16 = 0x1CC2;
+    pub const PANASONIC_64: u16 = 0x1B32;
+    pub const ATMEL_64: u16 = 0x3D1F;
+    pub const SANYO_128: u16 = 0x1362;
+    pub const MACRONIX_128: u16 = 0x09C2;
+}
+
 #[derive(Clone, Copy)]
 enum FlashMode {
     Read,
@@ -149,6 +180,7 @@ pub struct FLASH {
     file:           Option<File>,
     bank_offset:    usize,
     mode:           FlashMode,
+    device_type:    u16,
     dirty:          bool,
 }
 
@@ -162,6 +194,7 @@ impl FLASH {
             file:           Some(file),
             bank_offset:    0,
             mode:           FlashMode::Read,
+            device_type:    if size > FLASH_64_SIZE {flashdev::SANYO_128} else {flashdev::PANASONIC_64},
             dirty:          false,
         })
     }
@@ -178,6 +211,7 @@ impl FLASH {
             file:           file,
             bank_offset:    0,
             mode:           FlashMode::Read,
+            device_type:    flashdev::PANASONIC_64,
             dirty:          true,
         }
     }
@@ -194,6 +228,7 @@ impl FLASH {
             file:           file,
             bank_offset:    0,
             mode:           FlashMode::Read,
+            device_type:    flashdev::SANYO_128,
             dirty:          true,
         }
     }
@@ -224,9 +259,9 @@ impl MemInterface8 for FLASH {
         let data = match self.mode {
             // SST
             GetID => if addr == 0 {
-                0xBF
+                u16::lo(self.device_type)
             } else {
-                0xD4
+                u16::hi(self.device_type)
             },
             _ => self.ram[(addr as usize) + self.bank_offset],
         };

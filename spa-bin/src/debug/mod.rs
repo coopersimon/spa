@@ -140,10 +140,10 @@ fn print(s: &str, gba: &mut GBA) {
 
 fn print_all(gba: &mut GBA) {
     let state = gba.get_state();
-    println!("r: {:08X} {:08X} {:08X} {:08X}", state.regs[0], state.regs[1], state.regs[2], state.regs[3]);
-    println!("r: {:08X} {:08X} {:08X} {:08X}", state.regs[4], state.regs[5], state.regs[6], state.regs[7]);
-    println!("r: {:08X} {:08X} {:08X} {:08X}", state.regs[8], state.regs[9], state.regs[10], state.regs[11]);
-    println!("r: {:08X} {:08X} {:08X} {:08X}", state.regs[12], state.regs[13], state.regs[14], state.regs[15]);
+    println!(" 0: {:08X} {:08X} {:08X} {:08X}", state.regs[0], state.regs[1], state.regs[2], state.regs[3]);
+    println!(" 4: {:08X} {:08X} {:08X} {:08X}", state.regs[4], state.regs[5], state.regs[6], state.regs[7]);
+    println!(" 8: {:08X} {:08X} {:08X} {:08X}", state.regs[8], state.regs[9], state.regs[10], state.regs[11]);
+    println!("12: {:08X} {:08X} {:08X} {:08X}", state.regs[12], state.regs[13], state.regs[14], state.regs[15]);
     println!("flags: {:032b}", state.flags);
 }
 
