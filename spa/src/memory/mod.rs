@@ -178,10 +178,10 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
             0x0500_0000..=0x07FF_FFFF => (self.video.read_byte(addr), 1),
 
             // Cart
-            0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_byte(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle)),
-            0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_byte(addr - 0x0A00_0000), self.game_pak_control.wait_cycles_1(cycle)),
-            0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_byte(addr - 0x0C00_0000), self.game_pak_control.wait_cycles_2(cycle)),
-            0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.ram.read_byte(addr & 0xFFFF), self.game_pak_control.sram_wait_cycles()),
+            0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_0(cycle)),
+            0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_1(cycle)),
+            0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_2(cycle)),
+            0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.sram_wait_cycles()),
 
             _ => (0, 1) // Unused
         }
@@ -211,9 +211,9 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
             // Cart
             0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
             0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle),
-            0x0C00_0000..=0x0DFF_FFFF => self.game_pak_control.wait_cycles_2(cycle),
-            0x0E00_0000..=0x0EFF_FFFF => {
-                self.game_pak.ram.write_byte(addr & 0xFFFF, data);
+            0x0C00_0000..=0x0CFF_FFFF => self.game_pak_control.wait_cycles_2(cycle),
+            0x0D00_0000..=0x0EFF_FFFF => {
+                self.game_pak.write_byte(addr, data);
                 self.game_pak_control.sram_wait_cycles()
             },
 
@@ -232,10 +232,10 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
             0x0500_0000..=0x07FF_FFFF => (self.video.read_halfword(addr), 1),
 
             // Cart
-            0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_halfword(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle)),
-            0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_halfword(addr - 0x0A00_0000), self.game_pak_control.wait_cycles_1(cycle)),
-            0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_halfword(addr - 0x0C00_0000), self.game_pak_control.wait_cycles_2(cycle)),
-            0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.ram.read_halfword(addr & 0xFFFF), self.game_pak_control.sram_wait_cycles()),
+            0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_0(cycle)),
+            0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_1(cycle)),
+            0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_2(cycle)),
+            0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.sram_wait_cycles()),
 
             _ => (0, 1) // Unused
         }
@@ -265,9 +265,9 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
             // Cart
             0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
             0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle),
-            0x0C00_0000..=0x0DFF_FFFF => self.game_pak_control.wait_cycles_2(cycle),
-            0x0E00_0000..=0x0EFF_FFFF => {
-                self.game_pak.ram.write_halfword(addr & 0xFFFF, data);
+            0x0C00_0000..=0x0CFF_FFFF => self.game_pak_control.wait_cycles_2(cycle),
+            0x0D00_0000..=0x0EFF_FFFF => {
+                self.game_pak.write_halfword(addr, data);
                 self.game_pak_control.sram_wait_cycles()
             },
 
@@ -287,10 +287,10 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
             0x0700_0000..=0x0700_03FF => (self.video.read_word(addr), 1),   // OAM
 
             // Cart
-            0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr - 0x0800_0000), self.game_pak_control.wait_cycles_0(cycle) << 1),
-            0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_word(addr - 0x0A00_0000), self.game_pak_control.wait_cycles_1(cycle) << 1),
-            0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_word(addr - 0x0C00_0000), self.game_pak_control.wait_cycles_2(cycle) << 1),
-            0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.ram.read_word(addr & 0xFFFF), self.game_pak_control.sram_wait_cycles() << 1),
+            0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_0(cycle) << 1),
+            0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_1(cycle) << 1),
+            0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_2(cycle) << 1),
+            0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.sram_wait_cycles() << 1),
 
             _ => (0, 1) // Unused
         }
@@ -325,9 +325,9 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
             // Cart
             0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle) << 1,
             0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle) << 1,
-            0x0C00_0000..=0x0DFF_FFFF => self.game_pak_control.wait_cycles_2(cycle) << 1,
-            0x0E00_0000..=0x0EFF_FFFF => {
-                self.game_pak.ram.write_word(addr & 0xFFFF, data);
+            0x0C00_0000..=0x0CFF_FFFF => self.game_pak_control.wait_cycles_2(cycle) << 1,
+            0x0D00_0000..=0x0EFF_FFFF => {
+                self.game_pak.write_word(addr, data);
                 self.game_pak_control.sram_wait_cycles() << 1
             },
 
@@ -341,7 +341,7 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
 macro_rules! MemoryBusIO {
     {$(($start_addr:expr, $end_addr:expr, $device:ident)),*} => {
         impl<R: Renderer> MemoryBus<R> {
-            fn io_read_byte(&self, addr: u32) -> u8 {
+            fn io_read_byte(&mut self, addr: u32) -> u8 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_byte(addr - $start_addr),)*
                     _ => 0//panic!(format!("trying to load from unmapped io address ${:08X}", addr)),
@@ -354,7 +354,7 @@ macro_rules! MemoryBusIO {
                 }
             }
 
-            fn io_read_halfword(&self, addr: u32) -> u16 {
+            fn io_read_halfword(&mut self, addr: u32) -> u16 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_halfword(addr - $start_addr),)*
                     _ => 0//panic!(format!("trying to load from unmapped io address ${:08X}", addr)),
@@ -367,7 +367,7 @@ macro_rules! MemoryBusIO {
                 }
             }
 
-            fn io_read_word(&self, addr: u32) -> u32 {
+            fn io_read_word(&mut self, addr: u32) -> u32 {
                 match addr {
                     $($start_addr..=$end_addr => self.$device.read_word(addr - $start_addr),)*
                     _ => 0//panic!(format!("trying to load from unmapped io address ${:08X}", addr)),
@@ -413,7 +413,7 @@ impl Internal {
 }
 
 impl MemInterface8 for Internal {
-    fn read_byte(&self, addr: u32) -> u8 {
+    fn read_byte(&mut self, addr: u32) -> u8 {
         match addr {
             0 => self.post_boot_flag,
             1 => 0,

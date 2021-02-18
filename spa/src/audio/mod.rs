@@ -18,7 +18,7 @@ impl GBAAudio {
 }
 
 impl MemInterface8 for GBAAudio {
-    fn read_byte(&self, addr: u32) -> u8 {
+    fn read_byte(&mut self, addr: u32) -> u8 {
         match addr {
             0x28 => u16::lo(self.soundbias),
             0x29 => u16::hi(self.soundbias),

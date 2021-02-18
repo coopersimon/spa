@@ -547,7 +547,7 @@ impl VideoRegisters {
 }
 
 impl MemInterface16 for VideoRegisters {
-    fn read_halfword(&self, addr: u32) -> u16 {
+    fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
             0x0 => self.lcd_control.bits(),
             0x2 => 0, // TODO: green swap

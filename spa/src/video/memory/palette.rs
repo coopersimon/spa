@@ -43,7 +43,7 @@ impl PaletteRAM {
 }
 
 impl MemInterface16 for PaletteRAM {
-    fn read_halfword(&self, addr: u32) -> u16 {
+    fn read_halfword(&mut self, addr: u32) -> u16 {
         let colour = (addr >> 1) as usize;
         self.palette_ram[colour]
     }

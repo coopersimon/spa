@@ -83,7 +83,7 @@ impl<R: Renderer> GBAVideo<R> {
 // Note that IO (register) addresses are from zero -
 // this is due to the mem bus interface.
 impl<R: Renderer> MemInterface16 for GBAVideo<R> {
-    fn read_halfword(&self, addr: u32) -> u16 {
+    fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
             0x00..=0x57 => self.mem.registers.read_halfword(addr),
             0x0500_0000..=0x0500_03FF => self.mem.palette.read_halfword(addr - 0x0500_0000),

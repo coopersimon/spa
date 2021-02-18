@@ -43,7 +43,7 @@ impl OAM {
 }
 
 impl MemInterface16 for OAM {
-    fn read_halfword(&self, addr: u32) -> u16 {
+    fn read_halfword(&mut self, addr: u32) -> u16 {
         let obj = (addr >> 3) as usize;
         let index = (addr >> 1) & 0x3;
         match index {

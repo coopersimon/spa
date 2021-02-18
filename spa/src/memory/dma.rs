@@ -94,7 +94,7 @@ impl DMA {
 }
 
 impl MemInterface16 for DMA {
-    fn read_halfword(&self, addr: u32) -> u16 {
+    fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
             0x00..=0x0B => self.channels[0].read_halfword(addr),
             0x0C..=0x17 => self.channels[1].read_halfword(addr - 0x0C),
@@ -270,7 +270,7 @@ impl DMAChannel {
 }
 
 impl MemInterface16 for DMAChannel {
-    fn read_halfword(&self, addr: u32) -> u16 {
+    fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
             0x0 => 0,
             0x2 => 0,
@@ -296,7 +296,7 @@ impl MemInterface16 for DMAChannel {
     fn write_word(&mut self, addr: u32, data: u32) {
         match addr {
             0x0 => self.src_addr = data & 0x0FFF_FFFE,
-            0x4 => self.dst_addr = data & 0x07FF_FFFE,
+            0x4 => self.dst_addr = data & 0x0FFF_FFFE,
             0x8 => {
                 self.word_count = u32::lo(data) & self.word_count_mask;
                 self.set_control(u32::hi(data));

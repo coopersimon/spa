@@ -53,7 +53,7 @@ impl InterruptControl {
 }
 
 impl MemInterface16 for InterruptControl {
-    fn read_halfword(&self, addr: u32) -> u16 {
+    fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
             0x0 => self.interrupt_enable.bits(),
             0x2 => self.interrupt_req.bits(),

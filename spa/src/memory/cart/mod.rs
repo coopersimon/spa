@@ -23,8 +23,11 @@ use ram::*;
 
 /// The ROM and RAM inside a game pak (cartridge).
 pub struct GamePak {
-    rom: Vec<u8>,
-    pub ram: Box<dyn SaveRAM>
+    rom:    Vec<u8>,
+    ram:    Box<dyn SaveRAM>,
+    /// ROM is larger than 16MB
+    large:  bool,
+    eeprom: bool,
 }
 
 impl GamePak {
@@ -34,7 +37,8 @@ impl GamePak {
         cart_file.read_to_end(&mut buffer)?;
 
         // Detect save file type.
-        let ram = make_save_ram(&buffer, None);
+        let (ram, eeprom) = make_save_ram(&buffer, None);
+        let is_large = buffer.len() > 0x0100_0000;
 
         // Fill buffer with garbage.
         let start = buffer.len() / 2;
@@ -44,20 +48,39 @@ impl GamePak {
             buffer.push(u16::hi(data));
         }
         Ok(Self {
-            rom: buffer,
-            ram: ram
+            rom:    buffer,
+            ram:    ram,
+            large:  is_large,
+            eeprom: eeprom,
         })
     }
 }
 
 impl MemInterface16 for GamePak {
-    fn read_halfword(&self, addr: u32) -> u16 {
-        let start = addr as usize;
-        let end = (addr + 2) as usize;
-        *try_from_bytes(&self.rom[start..end]).expect(&format!("cannot read ROM halfword at 0x{:X}", addr))
+    fn read_halfword(&mut self, addr: u32) -> u16 {
+        let start = (addr % 0x0200_0000) as usize;
+        let end = start + 2;
+        match addr {
+            0x0900_0000..=0x09FF_FEFF if self.eeprom && self.large => *try_from_bytes(&self.rom[start..end]).expect(&format!("cannot read ROM halfword at 0x{:X}", addr)),
+            0x0900_0000..=0x09FF_FFFF if self.eeprom => self.ram.read_halfword(addr),
+            0x0B00_0000..=0x0BFF_FEFF if self.eeprom && self.large => *try_from_bytes(&self.rom[start..end]).expect(&format!("cannot read ROM halfword at 0x{:X}", addr)),
+            0x0B00_0000..=0x0BFF_FFFF if self.eeprom => self.ram.read_halfword(addr),
+            0x0D00_0000..=0x0DFF_FEFF if self.eeprom && self.large => *try_from_bytes(&self.rom[start..end]).expect(&format!("cannot read ROM halfword at 0x{:X}", addr)),
+            0x0D00_0000..=0x0DFF_FFFF if self.eeprom => self.ram.read_halfword(addr),
+            0x0800_0000..=0x0DFF_FFFF => *try_from_bytes(&self.rom[start..end]).expect(&format!("cannot read ROM halfword at 0x{:X}", addr)),
+            0x0E00_0000..=0x0EFF_FFFF => self.ram.read_halfword(addr & 0xFFFF),
+            _ => unreachable!()
+        }
     }
 
-    fn write_halfword(&mut self, addr: u32, _data: u16) {
-        panic!(format!("Trying to write to ROM 0x{:X}", addr));
+    fn write_halfword(&mut self, addr: u32, data: u16) {
+        match addr {
+            0x0900_0000..=0x09FF_FFFF if self.eeprom => self.ram.write_halfword(addr, data),
+            0x0B00_0000..=0x0BFF_FFFF if self.eeprom => self.ram.write_halfword(addr, data),
+            0x0D00_0000..=0x0DFF_FFFF if self.eeprom => self.ram.write_halfword(addr, data),
+            0x0E00_0000..=0x0EFF_FFFF => self.ram.write_halfword(addr & 0xFFFF, data),
+            0x0800_0000..=0x0DFF_FFFF => panic!(format!("Trying to write to ROM 0x{:X}", addr)),
+            _ => unreachable!()
+        }
     }
 }

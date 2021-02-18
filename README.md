@@ -6,7 +6,6 @@ Shows startup screen and boots into games, but usually freezes or crashes there.
 
 ### TODO
 - Audio
-- EEPROM implementation
 - Bitmap backgrounds
 - Render thread
 - Frame capture DMA

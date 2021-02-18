@@ -6,10 +6,10 @@
 /// 
 /// Lower bytes will be read/written first.
 pub trait MemInterface8 {
-    fn read_byte(&self, addr: u32) -> u8;
+    fn read_byte(&mut self, addr: u32) -> u8;
     fn write_byte(&mut self, addr: u32, data: u8);
 
-    fn read_halfword(&self, addr: u32) -> u16 {
+    fn read_halfword(&mut self, addr: u32) -> u16 {
         use crate::common::bytes::u16;
         let lo = self.read_byte(addr);
         let hi = self.read_byte(addr + 1);
@@ -21,7 +21,7 @@ pub trait MemInterface8 {
         self.write_byte(addr + 1, u16::hi(data));
     }
 
-    fn read_word(&self, addr: u32) -> u32 {
+    fn read_word(&mut self, addr: u32) -> u32 {
         use crate::common::bytes::u32;
         let lo = self.read_halfword(addr);
         let hi = self.read_halfword(addr + 2);
@@ -40,7 +40,7 @@ pub trait MemInterface8 {
 /// 
 /// Lower bytes will be read/written first.
 pub trait MemInterface16 {
-    fn read_byte(&self, addr: u32) -> u8 {
+    fn read_byte(&mut self, addr: u32) -> u8 {
         use crate::common::bytes::u16;
         let data = self.read_halfword(addr & 0xFFFF_FFFE);
         match addr & 1 {
@@ -60,10 +60,10 @@ pub trait MemInterface16 {
         }
     }
 
-    fn read_halfword(&self, addr: u32) -> u16;
+    fn read_halfword(&mut self, addr: u32) -> u16;
     fn write_halfword(&mut self, addr: u32, data: u16);
 
-    fn read_word(&self, addr: u32) -> u32 {
+    fn read_word(&mut self, addr: u32) -> u32 {
         use crate::common::bytes::u32;
         let lo = self.read_halfword(addr);
         let hi = self.read_halfword(addr + 2);
