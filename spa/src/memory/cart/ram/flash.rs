@@ -165,7 +165,7 @@ impl MemInterface8 for FLASH {
                 self.mode = Read;
                 self.dirty = true;
             },
-            SelectBank if addr == 0x5555 => {
+            SelectBank if addr == 0 => {
                 self.bank_offset = (data as usize) * 0x10000;
                 self.mode = Read;
             },

@@ -30,7 +30,7 @@ impl TileMapAttrs {
     }
 
     pub fn palette_num(self) -> u8 {
-        ((self & TileMapAttrs::TILE_NUM).bits() >> 12) as u8
+        ((self & TileMapAttrs::PALETTE).bits() >> 12) as u8
     }
 }
 

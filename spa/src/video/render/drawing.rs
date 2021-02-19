@@ -165,9 +165,16 @@ impl SoftwareRenderer {
     fn tile_bg_pixel(&self, bg: &TiledBackgroundData, vram: &VRAM, bg_x: u32, bg_y: u32) -> u8 {
         // TODO: Check if pixel is visible through window
 
+        let (x, y) = match bg.layout {
+            BackgroundMapLayout::Small => (bg_x % 256, bg_y % 256),
+            BackgroundMapLayout::Wide => (bg_x % 512, bg_y % 256),
+            BackgroundMapLayout::Tall => (bg_x % 256, bg_y % 512),
+            BackgroundMapLayout::Large => (bg_x % 512, bg_y % 512),
+        };
+
         // Find tile attrs in bg map
-        let map_x = bg_x / TILE_SIZE;
-        let map_y = bg_y / TILE_SIZE;
+        let map_x = x / TILE_SIZE;
+        let map_y = y / TILE_SIZE;
         let tile_map_offset = match bg.layout {
             BackgroundMapLayout::Small => 0,
             BackgroundMapLayout::Wide => if map_x >= TILE_MAP_SIZE {
@@ -193,8 +200,8 @@ impl SoftwareRenderer {
         let tile_map_addr = bg.tile_map_addr + tile_map_offset + (submap_x + submap_y * TILE_MAP_SIZE) * 2;
         let attrs = vram.tile_map_attrs(tile_map_addr);
         
-        let mut tile_x = (bg_x % TILE_SIZE) as u8;
-        let mut tile_y = (bg_y % TILE_SIZE) as u8;
+        let mut tile_x = (x % TILE_SIZE) as u8;
+        let mut tile_y = (y % TILE_SIZE) as u8;
         if attrs.h_flip() {
             tile_x = 7 - tile_x;
         }
@@ -363,12 +370,13 @@ impl SoftwareRenderer {
                 }
             },
             BackgroundData::Affine(a) => {
-                let texel = self.affine_bg_pixel(a, &mem.vram, x, y);
+                /*let texel = self.affine_bg_pixel(a, &mem.vram, x, y);
                 if texel != 0 {
                     Some(self.palette_cache.get_bg(texel))
                 } else {
                     None
-                }
+                }*/
+                None
             },
             BackgroundData::Bitmap(b) => self.bitmap_bg_pixel(b, &mem.vram, &self.palette_cache, x, y)
         }

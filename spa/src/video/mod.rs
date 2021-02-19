@@ -150,7 +150,7 @@ impl<R: Renderer> GBAVideo<R> {
             EnterVHBlank => {
                 self.state = VHBlank;
                 self.mem.registers.set_h_blank(true);
-                (Signal::HBlank, self.mem.registers.h_blank_irq())
+                (Signal::None, Interrupts::default())
             },
             ExitVHBlank => {
                 self.state = VBlank;

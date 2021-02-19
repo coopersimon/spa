@@ -13,8 +13,8 @@ fixed = "1.6"
 regex = "1"
 
 [dependencies.arm]
-#git = "https://github.com/coopersimon/e-arm"
-path = "../../arm"
+git = "https://github.com/coopersimon/e-arm"
+#path = "../../arm"
 
 [features]
 debug = []
