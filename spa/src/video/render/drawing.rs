@@ -262,7 +262,30 @@ impl SoftwareRenderer {
         vram.tile_texel_8bpp(tile_addr, tile_x, tile_y)
     }
 
-    // TODO: draw bitmap bg layer
+    /// Draw a bitmap pixel.
+    fn bitmap_bg_pixel(&self, bg: &BitmapBackgroundData, vram: &VRAM, palette: &PaletteCache, bg_x: u32, bg_y: u32) -> Option<Colour> {
+        // TODO: Check if pixel is visible through window
+
+        if bg.small {
+            let bitmap_x = (bg_x as usize).wrapping_sub(gba::SMALL_BITMAP_LEFT);
+            let bitmap_y = (bg_y as usize).wrapping_sub(gba::SMALL_BITMAP_TOP);
+            if bitmap_x >= gba::SMALL_BITMAP_WIDTH || bitmap_y >= gba::SMALL_BITMAP_HEIGHT {
+                return None;
+            }
+            let colour = vram.small_bitmap_texel_15bpp(bg.data_addr, bitmap_x as u32, bitmap_y as u32);
+            Some(Colour::from_555(colour))
+        } else if bg.use_15bpp {
+            let colour = vram.bitmap_texel_15bpp(0, bg_x, bg_y);
+            Some(Colour::from_555(colour))
+        } else {
+            let texel = vram.bitmap_texel_8bpp(bg.data_addr, bg_x, bg_y);
+            if texel == 0 {
+                None
+            } else {
+                Some(palette.get_bg(texel))
+            }
+        }
+    }
 }
 
 // Internal: draw modes
@@ -347,7 +370,7 @@ impl SoftwareRenderer {
                     None
                 }
             },
-            BackgroundData::Bitmap(_) => panic!("bitmaps not supported"),
+            BackgroundData::Bitmap(b) => self.bitmap_bg_pixel(b, &mem.vram, &self.palette_cache, x, y)
         }
     }
 }

@@ -184,6 +184,7 @@ pub struct BitmapBackgroundData {
     pub data_addr:      u32,
     pub use_15bpp:      bool,
     pub mosaic:         bool,
+    pub small:          bool,
 }
 
 /************* BG DATA ***************/
@@ -367,13 +368,13 @@ impl VideoRegisters {
                 insert(self.get_affine_bg2());
                 insert(self.get_affine_bg3());
             },
-            3 => if let Some(bg_data) = self.get_bitmap_bg(0, true) {
+            3 => if let Some(bg_data) = self.get_bitmap_bg(0, true, false) {
                 backgrounds.push(bg_data);
             },
-            4 => if let Some(bg_data) = self.get_bitmap_bg(if self.bitmap_frame() {0x9600} else {0}, false) {
+            4 => if let Some(bg_data) = self.get_bitmap_bg(if self.bitmap_frame() {0x9600} else {0}, false, false) {
                 backgrounds.push(bg_data);
             },
-            5 => if let Some(bg_data) = self.get_bitmap_bg(if self.bitmap_frame() {0xA000} else {0}, true) {
+            5 => if let Some(bg_data) = self.get_bitmap_bg(if self.bitmap_frame() {0xA000} else {0}, true, true) {
                 backgrounds.push(bg_data);
             },
             _ => unreachable!()
@@ -491,13 +492,14 @@ impl VideoRegisters {
         }
     }
 
-    fn get_bitmap_bg(&self, offset: u32, use_15bpp: bool) -> Option<BackgroundData> {
+    fn get_bitmap_bg(&self, offset: u32, use_15bpp: bool, small: bool) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
             Some(BackgroundData::Bitmap(BitmapBackgroundData {
                 priority:   self.bg2_control.priority(),
                 data_addr:  offset,
                 use_15bpp:  use_15bpp,
                 mosaic:     self.bg2_control.is_mosaic(),
+                small:      small,
             }))
         } else {
             None

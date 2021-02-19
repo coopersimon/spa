@@ -77,17 +77,40 @@ impl VRAM {
         let x_offset = x as u32;
         self.data[(addr + y_offset + x_offset) as usize]
     }
+
+    /// Get a bitmap texel, using 256-colour palette.
+    pub fn bitmap_texel_8bpp(&self, addr: u32, x: u32, y: u32) -> u8 {
+        let y_offset = y * 240;
+        self.data[(addr + y_offset + x) as usize]
+    }
+
+    /// Get a bitmap texel, using direct colour.
+    /// Bitmap size is 240x160.
+    pub fn bitmap_texel_15bpp(&self, addr: u32, x: u32, y: u32) -> u16 {
+        let y_offset = y * 480;
+        let x_offset = x * 2;
+        let texel_addr = (addr + y_offset + x_offset) as usize;
+
+        let start = texel_addr;
+        let end = start + 2;
+        *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read bitmap texel at 0x{:X}", start))
+    }
+
+    /// Get a bitmap texel, using direct colour.
+    /// Bitmap size is 160x128.
+    pub fn small_bitmap_texel_15bpp(&self, addr: u32, x: u32, y: u32) -> u16 {
+        let y_offset = y * 320;
+        let x_offset = x * 2;
+        let texel_addr = (addr + y_offset + x_offset) as usize;
+
+        let start = texel_addr;
+        let end = start + 2;
+        *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read bitmap texel at 0x{:X}", start))
+    }
 }
 
 // Memory interface
 impl VRAM {
-    /*pub fn read_byte(&self, addr: u32) -> u8 {
-        self.data[addr as usize]
-    }
-    pub fn write_byte(&mut self, addr: u32, data: u8) {
-        self.data[addr as usize] = data;
-    }*/
-
     pub fn read_halfword(&self, addr: u32) -> u16 {
         let start = addr as usize;
         let end = (addr + 2) as usize;

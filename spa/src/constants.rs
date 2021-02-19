@@ -15,6 +15,13 @@ pub mod gba {
     /// Number of dots spent in V-blank.
     pub const V_BLANK_RES: usize = 68;
 
+    /// Width of bitmap in mode 5.
+    pub const SMALL_BITMAP_WIDTH: usize = 160;
+    /// Height of bitmap in mode 5.
+    pub const SMALL_BITMAP_HEIGHT: usize = 128;
+    pub const SMALL_BITMAP_LEFT: usize = (H_RES - SMALL_BITMAP_WIDTH) / 2;
+    pub const SMALL_BITMAP_TOP: usize = (V_RES - SMALL_BITMAP_HEIGHT) / 2;
+
     /// Cycles needed for a whole frame.
     pub const FRAME_CYCLES: usize = DOT_TIME * (H_RES + H_BLANK_RES) * (V_RES + V_BLANK_RES);
 

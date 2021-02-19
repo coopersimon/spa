@@ -57,6 +57,32 @@ impl GamePak {
 }
 
 impl MemInterface16 for GamePak {
+    fn read_byte(&mut self, addr: u32) -> u8 {
+        let rom_addr = (addr % 0x0200_0000) as usize;
+        match addr {
+            0x0900_0000..=0x09FF_FEFF if self.eeprom && self.large => self.rom[rom_addr],
+            0x0900_0000..=0x09FF_FFFF if self.eeprom => self.ram.read_byte(addr),
+            0x0B00_0000..=0x0BFF_FEFF if self.eeprom && self.large => self.rom[rom_addr],
+            0x0B00_0000..=0x0BFF_FFFF if self.eeprom => self.ram.read_byte(addr),
+            0x0D00_0000..=0x0DFF_FEFF if self.eeprom && self.large => self.rom[rom_addr],
+            0x0D00_0000..=0x0DFF_FFFF if self.eeprom => self.ram.read_byte(addr),
+            0x0800_0000..=0x0DFF_FFFF => self.rom[rom_addr],
+            0x0E00_0000..=0x0EFF_FFFF => self.ram.read_byte(addr & 0xFFFF),
+            _ => unreachable!()
+        }
+    }
+
+    fn write_byte(&mut self, addr: u32, data: u8) {
+        match addr {
+            0x0900_0000..=0x09FF_FFFF if self.eeprom => self.ram.write_byte(addr, data),
+            0x0B00_0000..=0x0BFF_FFFF if self.eeprom => self.ram.write_byte(addr, data),
+            0x0D00_0000..=0x0DFF_FFFF if self.eeprom => self.ram.write_byte(addr, data),
+            0x0E00_0000..=0x0EFF_FFFF => self.ram.write_byte(addr & 0xFFFF, data),
+            0x0800_0000..=0x0DFF_FFFF => panic!(format!("Trying to write to ROM 0x{:X}", addr)),
+            _ => unreachable!()
+        }
+    }
+
     fn read_halfword(&mut self, addr: u32) -> u16 {
         let start = (addr % 0x0200_0000) as usize;
         let end = start + 2;
