@@ -5,8 +5,10 @@ The core of the emulator.
 Status of selected games:
 - Metroid Fusion: Starts up, shows intro, shows menu. Background graphics are partially corrupted, colours wrong
 - Metroid Zero Mission: As above
-- Crash Bandicoot XS / 2: Need bitmap support
-- Doom 1 / 2: Need bitmap support
+- Crash Bandicoot XS: Loads up intro, looks a bit corrupted. Crash sprite comes up and looks ok, then game sets PC=8000EB3 at 8034508
+- Crash Bandicoot 2: Tries to run an undefined instruction shortly after running
+- Doom: Black screen, no response.
+- Doom II: Tries to write word to 0x1C06 (ROM ???) almost immediately
 - Final Fantasy Dawn of Souls: Tries to read video address below VRAM
 - Final Fantasy IV: Tries to branch to unaligned address (very alarming... CPU bug)
 - Final Fantasy V: White screen, no response
@@ -16,7 +18,7 @@ Status of selected games:
 - Golden Sun: Corrupted intro, shows character name input, then black screen & no response.
 - Harry Potter 2: Tries to read unaligned ROM value.
 - Incredibles: Shows initial screen (wrong palette) then tries to write to invalid OAM address
-- LEGO Star Wars: Need bitmap support
+- LEGO Star Wars: Language selection screen appears before trying to access unaligned halfword.
 - Mario Kart Super Circuit: Tries to write unaligned halfword to ROM.
 - Mother 1+2: Loads up ok. Cart select has some graphical corruption but otherwise looks mostly ok.
     - Mother 1: Title, character naming, and intro works. Palette is wrong. Then when gameplay begins it tries to read an unaligned halfword

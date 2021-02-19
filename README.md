@@ -2,11 +2,14 @@
 A GameBoy Advance emulator written in rust. See "spa" for the crate, and "spa-bin" for the runnable example implementation.
 
 ## Status
-Shows startup screen and boots into games, but usually freezes or crashes there.
+BIOS seems to startup OK, with varying success when actually running games.
+
+See spa/README.md for the full list of tested games.
 
 ### TODO
 - Audio
-- Bitmap backgrounds
 - Render thread
 - Frame capture DMA
 - Internal "hardware" BIOS
+- Lots of rendering fixes
+- Deal with rampant unaligned memory accesses
