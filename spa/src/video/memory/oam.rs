@@ -150,15 +150,23 @@ impl ObjAttrs {
     }
 
     /// Get top-left corner of object.
-    pub fn coords(&self) -> (i16, i16) {
-        let y = ((self.attrs_0 & ObjAttr0::Y_COORD).bits() as i8) as i16;
+    /// 
+    /// The y-coordinate actually depends on if the sprite is 128 pixels tall.
+    /// If it is, then the value will be treated as signed.
+    pub fn coords(&self, height: i16) -> (u16, i16) {
+        let y = if height >= 128 {
+            ((self.attrs_0 & ObjAttr0::Y_COORD).bits() as i8) as i16
+        } else {
+            (self.attrs_0 & ObjAttr0::Y_COORD).bits() as i16
+        };
         let mut x = (self.attrs_1 & ObjAttr1::X_COORD).bits();
         if u16::test_bit(x, 8) {
             x |= 0xFE00;
         }
-        (x as i16, y)
+        (x, y)
     }
 
+    /// Get the size of the underlying object.
     pub fn source_size(&self) -> (u8, u8) {
         const SHAPE_SQ: u16     = 0 << 14;
         const SHAPE_HOR: u16    = 1 << 14;
@@ -197,11 +205,11 @@ impl ObjAttrs {
     }
 
     /// Get size of object clipping window.
-    pub fn size(&self) -> (i16, i16) {
+    pub fn size(&self) -> (u16, i16) {
         let double_size = self.attrs_0.contains(ObjAttr0::AFFINE | ObjAttr0::DOUBLE_CLIP);
         let shift = if double_size {1} else {0};
         let base_size = self.source_size();
-        ((base_size.0 as i16) << shift, (base_size.1 as i16) << shift)
+        ((base_size.0 as u16) << shift, (base_size.1 as i16) << shift)
     }
 
     /// Get the palette bank for the object.

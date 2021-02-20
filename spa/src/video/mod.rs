@@ -1,5 +1,6 @@
 /// GBA video
 
+mod background;
 mod memory;
 mod render;
 

@@ -4,13 +4,14 @@ use fixed::types::I24F8;
 use crate::constants::gba;
 use super::{
     colour::*,
-    super::memory::*
+    super::memory::*,
+    super::background::*
 };
 
 const VRAM_TILE_BLOCK: u32 = 16 * 1024;
 const TILE_SIZE: u32 = 8;
-/// 4bpp tile size in bytes.
-const TILE_BYTES: u32 = 32;
+const TILE_BYTES_4BPP: u32 = 32;
+const TILE_BYTES_8BPP: u32 = 64;
 const TILE_MAP_SIZE: u32 = 32;
 const VRAM_MAP_BLOCK: u32 = TILE_MAP_SIZE * TILE_MAP_SIZE * 2;
 
@@ -65,8 +66,8 @@ impl SoftwareRenderer {
             if !object.is_enabled() {
                 continue;
             }
-            let (left, top) = object.coords();
             let (width, height) = object.size();
+            let (left, top) = object.coords(height);
             if y < top || y >= (top + height) {
                 continue;
             }
@@ -81,7 +82,7 @@ impl SoftwareRenderer {
             let tile_shift = if use_8bpp {1} else {0};
             let base_tile_num = object.tile_num();
             let affine = object.affine_param_num();
-            let object_y = y - top;
+            let object_y = y.wrapping_sub(top);
 
             let x_0 = I24F8::from_num((width / 2) as i32);
             let y_0 = I24F8::from_num((height / 2) as i32);
@@ -92,8 +93,8 @@ impl SoftwareRenderer {
             let source_y_0 = I24F8::from_num((source_size.1 / 2) as i32);
 
             for object_x in 0..width {
-                let x = left + object_x;
-                if x < 0 || x >= (gba::H_RES as i16) {
+                let x = left.wrapping_add(object_x);
+                if x >= (gba::H_RES as u16) {
                     continue;
                 }
                 if let Some(existing_pixel) = &target[x as usize] {
@@ -136,7 +137,7 @@ impl SoftwareRenderer {
                     target_tile_x + (target_tile_y * TILE_GRID_WIDTH)
                 };
                 
-                let tile_addr = OBJECT_VRAM_BASE + (tile_num * TILE_BYTES);
+                let tile_addr = OBJECT_VRAM_BASE + (tile_num * TILE_BYTES_4BPP);
                 let texel = if use_8bpp {
                     mem.vram.tile_texel_8bpp(tile_addr, index_x % 8, index_y % 8)
                 } else {
@@ -208,10 +209,11 @@ impl SoftwareRenderer {
         if attrs.v_flip() {
             tile_y = 7 - tile_y;
         }
-        let tile_addr = bg.tile_data_addr + (attrs.tile_num() * TILE_BYTES);
         let texel = if bg.use_8bpp {
+            let tile_addr = bg.tile_data_addr + (attrs.tile_num() * TILE_BYTES_8BPP);
             vram.tile_texel_8bpp(tile_addr, tile_x, tile_y)
         } else {
+            let tile_addr = bg.tile_data_addr + (attrs.tile_num() * TILE_BYTES_4BPP);
             vram.tile_texel_4bpp(tile_addr, tile_x, tile_y)
         };
         if texel == 0 {
@@ -231,24 +233,24 @@ impl SoftwareRenderer {
         // Transform from screen space to BG space.
         let x_0 = bg.bg_ref_point_x;
         let y_0 = bg.bg_ref_point_y;
-        let x_i = I24F8::from_bits(screen_x as i32) - x_0;
-        let y_i = I24F8::from_bits(screen_y as i32) - y_0;
+        let x_i = I24F8::from_num(screen_x as i32) - x_0;
+        let y_i = I24F8::from_num(screen_y as i32) - y_0;
         let x_out = (bg.matrix_a * x_i) + (bg.matrix_b * y_i) + x_0;
         let y_out = (bg.matrix_c * x_i) + (bg.matrix_d * y_i) + y_0;
 
         let bg_x = if bg.wrap {
-            (x_out.to_bits() as u32) & (bg.size - 1)
+            (x_out.to_num::<i32>() as u32) & (bg.size - 1)
         } else {
-            let bg_x = x_out.to_bits() as u32;
+            let bg_x = x_out.to_num::<i32>() as u32;
             if bg_x >= bg.size {
                 return 0;
             }
             bg_x
         };
         let bg_y = if bg.wrap {
-            (y_out.to_bits() as u32) & (bg.size - 1)
+            (y_out.to_num::<i32>() as u32) & (bg.size - 1)
         } else {
-            let bg_y = y_out.to_bits() as u32;
+            let bg_y = y_out.to_num::<i32>() as u32;
             if bg_y >= bg.size {
                 return 0;
             }
@@ -258,14 +260,15 @@ impl SoftwareRenderer {
         // Find tile attrs in bg map
         let map_x = bg_x / TILE_SIZE;
         let map_y = bg_y / TILE_SIZE;
+        let map_size = bg.size / TILE_SIZE;
 
         // The address of the tile attributes.
-        let tile_map_addr = bg.tile_map_addr + map_x + map_y * bg.size;
+        let tile_map_addr = bg.tile_map_addr + map_x + map_y * map_size;
         let tile_num = vram.affine_map_tile_num(tile_map_addr);
         
         let tile_x = (bg_x % TILE_SIZE) as u8;
         let tile_y = (bg_y % TILE_SIZE) as u8;
-        let tile_addr = bg.tile_data_addr + (tile_num * TILE_BYTES * 2);
+        let tile_addr = bg.tile_data_addr + (tile_num * TILE_BYTES_8BPP);
         vram.tile_texel_8bpp(tile_addr, tile_x, tile_y)
     }
 
@@ -370,13 +373,12 @@ impl SoftwareRenderer {
                 }
             },
             BackgroundData::Affine(a) => {
-                /*let texel = self.affine_bg_pixel(a, &mem.vram, x, y);
+                let texel = self.affine_bg_pixel(a, &mem.vram, x, y);
                 if texel != 0 {
                     Some(self.palette_cache.get_bg(texel))
                 } else {
                     None
-                }*/
-                None
+                }
             },
             BackgroundData::Bitmap(b) => self.bitmap_bg_pixel(b, &mem.vram, &self.palette_cache, x, y)
         }

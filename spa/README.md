@@ -5,20 +5,20 @@ The core of the emulator.
 Status of selected games:
 - Metroid Fusion: Seems to run ok
 - Metroid Zero Mission: As above - in gameplay, one background doesn't go away.
-- Crash Bandicoot XS: Intro has some scrolling issues. Gameplay background graphics look completely wrong.
-- Crash Bandicoot 2: Intro looks good, gameplay background graphics look completely wrong.
+- Crash Bandicoot XS: Looks good.
+- Crash Bandicoot 2: Looks good.
 - Doom: Intros load up OK. Frame rate is terrible. Actual gameplay is flickering all over the place.
 - Doom II: Tries to write word to 0x1C06 (ROM ???) almost immediately
 - Final Fantasy Dawn of Souls: Intro, title, naming and game look mostly ok. Frame rate is bad. Weird clipping of sprites near bottom of screen.
-- Final Fantasy IV: Game loads up ok, title and intro missing affine bgs (temporarily disabled)
-- Final Fantasy V: Game loads up ok, title looks a bit corrupted. Intro is ok but veeeerry bad frame rate and sprite clipping visible.
+- Final Fantasy IV: Intro and title look good, when game begins scrolling background looks odd (individual tiles aren't scrolling)
+- Final Fantasy V: Game loads up ok, pre-intro looks odd. title looks ok. Intro is ok but veeeerry bad frame rate and sprite clipping visible.
 - Final Fantasy VI: Shows square enix logo then fades to black and never returns (could be affine bg or frame rate issues)
-- Final Fantasy Tactics Advance: Start of intro OK, rest of intro doesn't work. Title has a lot of corruption.
+- Final Fantasy Tactics Advance: Start of intro OK, rest of intro doesn't work. Title and start look good.
 - Four Swords: Tries to read unaligned ROM value (in LDM)
-- Golden Sun: Corrupted intro, shows character name input, shows a tiny amount of intro then tries to read unaligned ROM halfword.
-- Harry Potter 2: Corrupted title graphics. Intro also has corrupted backgrounds.
-- Incredibles: Loads up and gameplay + sprites seem to be ok. Background graphics are _completely_ broken.
-- LEGO Star Wars: Loads up ok. Some background graphics look corrupted.
+- Golden Sun: Titles look good, shows character name input, shows a tiny amount of intro then tries to read unaligned ROM halfword.
+- Harry Potter 2: Looks good
+- Incredibles: Looks good
+- LEGO Star Wars: Looks good
 - Mario Kart Super Circuit: Tries to write unaligned halfword to ROM.
 - Mother 1+2: Loads up ok. Cart select looks good.
     - Mother 1: Title, character naming, and intro works. Then when gameplay begins it tries to read an unaligned halfword
@@ -28,15 +28,15 @@ Status of selected games:
 - Pokemon FireRed: As above.
 - Pokemon Mystery Dungeon (red): Seems pretty good.
 - Super Mario Bros (NES): Black screen. Might be EEPROM trouble.
-- Super Mario Bros 3 (Advance 4): Title graphics are corrupted. Actual game seems to begin ok (level select), but when level begins it tries to write an unaligned halfword
-- Super Mario World: Intro and startup looks mostly OK, when gameplay begins it tries to write unaligned VRAM halfword.
-- The Minish Cap: Loads up ok, graphics are a bit corrupted.
+- Super Mario Bros 3 (Advance 4): Looks good, but when level begins it tries to write an unaligned halfword
+- Super Mario World: Looks good, when gameplay begins it tries to write unaligned VRAM halfword.
+- The Minish Cap: Looks good.
 - Yoshi's Island: Tries to load unaligned ROM word.
 
 ## Known Bugs
-- It seems 8bpp tiled background tiles are wrong. 8bpp sprites look ok so I think this is to do with picking them.
-- Sprites beyond y +128 are being wrapped incorrectly by the looks.
-- Affine backgrounds are disabled for now, rendering process is incorrect.
+- Lots of the above games simply say "looks good" when actually there are still lots of graphical glitches. This is simply because certain things have not been implemented yet.
+    - Notably, windows and blending.
+- Sprites now look a lot better but sprites at high y don't wrap properly.
 - Performance is terrible across the board - a rendering thread would help, as would better rendering algos, JIT would help a lot more.
 - Loads of unaligned memory accesses. Some of these may be bugs, however it's seeming like at least some are intentional.
 

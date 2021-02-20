@@ -10,6 +10,7 @@ use crate::common::{
     meminterface::MemInterface16
 };
 use crate::interrupt::Interrupts;
+use super::super::background::*;
 
 bitflags! {
     #[derive(Default)]
@@ -116,78 +117,6 @@ impl BGControl {
         }
     }
 }
-
-/************* BG DATA ***************/
-
-#[derive(Clone)]
-pub enum BackgroundData {
-    Tiled(TiledBackgroundData),
-    Affine(AffineBackgroundData),
-    Bitmap(BitmapBackgroundData)
-}
-
-impl BackgroundData {
-    pub fn priority(&self) -> u8 {
-        use BackgroundData::*;
-        match self {
-            Tiled(t) => t.priority,
-            Affine(a) => a.priority,
-            Bitmap(b) => b.priority
-        }
-    }
-}
-
-#[derive(Clone)]
-pub enum BackgroundMapLayout {
-    Small,  // 1x1 map
-    Wide,   // 2x1 map
-    Tall,   // 1x2 map
-    Large   // 2x2 map
-}
-
-/// Data for a tiled background.
-#[derive(Clone)]
-pub struct TiledBackgroundData {
-    pub priority:       u8,
-    pub tile_map_addr:  u32,
-    pub tile_data_addr: u32,
-    pub use_8bpp:       bool,
-    pub mosaic:         bool,
-
-    pub scroll_x:   u16,
-    pub scroll_y:   u16,
-    pub layout:     BackgroundMapLayout,
-}
-
-/// Data for a tiled background.
-#[derive(Clone)]
-pub struct AffineBackgroundData {
-    pub priority:       u8,
-    pub tile_map_addr:  u32,
-    pub tile_data_addr: u32,
-    pub mosaic:         bool,
-
-    pub bg_ref_point_x: I24F8,
-    pub bg_ref_point_y: I24F8,
-    pub matrix_a:       I24F8,
-    pub matrix_b:       I24F8,
-    pub matrix_c:       I24F8,
-    pub matrix_d:       I24F8,
-    pub wrap:           bool,
-    pub size:           u32,
-}
-
-/// Data for a bitmap background.
-#[derive(Clone)]
-pub struct BitmapBackgroundData {
-    pub priority:       u8,
-    pub data_addr:      u32,
-    pub use_15bpp:      bool,
-    pub mosaic:         bool,
-    pub small:          bool,
-}
-
-/************* BG DATA ***************/
 
 bitflags! {
     #[derive(Default)]
@@ -371,7 +300,7 @@ impl VideoRegisters {
             3 => if let Some(bg_data) = self.get_bitmap_bg(0, true, false) {
                 backgrounds.push(bg_data);
             },
-            4 => if let Some(bg_data) = self.get_bitmap_bg(if self.bitmap_frame() {0x9600} else {0}, false, false) {
+            4 => if let Some(bg_data) = self.get_bitmap_bg(if self.bitmap_frame() {0xA000} else {0}, false, false) {
                 backgrounds.push(bg_data);
             },
             5 => if let Some(bg_data) = self.get_bitmap_bg(if self.bitmap_frame() {0xA000} else {0}, true, true) {
