@@ -27,7 +27,7 @@ pub struct GBAVideo<R: Renderer> {
     state:          VideoState,
 
     cycle_count:    usize,
-    v_count:        u16,
+    v_count:        u8,
 
     mem:            VideoMemory,
 
@@ -70,7 +70,7 @@ impl<R: Renderer> GBAVideo<R> {
             } else {
                 self.transition_state(EnterVBlank, H_BLANK_CYCLES)
             },
-            VHBlank if self.cycle_count >= H_BLANK_CYCLES => if self.v_count < V_MAX2 {
+            VHBlank if self.cycle_count >= H_BLANK_CYCLES => if self.v_count < VBLANK_MAX {
                 self.transition_state(ExitVHBlank, H_BLANK_CYCLES)
             } else {
                 self.transition_state(StartFrame, H_BLANK_CYCLES)

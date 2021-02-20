@@ -37,7 +37,7 @@ impl SoftwareRenderer {
         }
     }
 
-    pub fn draw_line(&self, mem: &VideoMemory, target: &mut [u8], line: u16) {
+    pub fn draw_line(&self, mem: &VideoMemory, target: &mut [u8], line: u8) {
         if mem.registers.in_fblank() {
             for p in target {
                 *p = 0;
@@ -51,7 +51,7 @@ impl SoftwareRenderer {
 // Internal: draw layers
 impl SoftwareRenderer {
     /// Draw object pixels to a target line.
-    fn draw_obj_line(&self, mem: &VideoMemory, target: &mut [Option<ObjectPixel>], obj_window: &mut [bool], y: i16) {
+    fn draw_obj_line(&self, mem: &VideoMemory, target: &mut [Option<ObjectPixel>], obj_window: &mut [bool], y: u8) {
         const OBJECT_VRAM_BASE: u32 = VRAM_TILE_BLOCK * 4;
         let use_1d_tile_mapping = mem.registers.obj_1d_tile_mapping();
         /*let check_windows = regs.windows_enabled();
@@ -66,12 +66,12 @@ impl SoftwareRenderer {
             if !object.is_enabled() {
                 continue;
             }
+            let (left, top) = object.coords();
             let (width, height) = object.size();
-            let (left, top) = object.coords(height);
-            if y < top || y >= (top + height) {
+            let object_y = y.wrapping_sub(top);
+            if object_y >= height {
                 continue;
             }
-
             // Lots of stuff we need for the object...
             let in_obj_window = object.is_obj_window();
             let semi_transparent = object.is_semi_transparent();
@@ -82,7 +82,6 @@ impl SoftwareRenderer {
             let tile_shift = if use_8bpp {1} else {0};
             let base_tile_num = object.tile_num();
             let affine = object.affine_param_num();
-            let object_y = y.wrapping_sub(top);
 
             let x_0 = I24F8::from_num((width / 2) as i32);
             let y_0 = I24F8::from_num((height / 2) as i32);
@@ -300,7 +299,7 @@ impl SoftwareRenderer {
 
 // Internal: draw modes
 impl SoftwareRenderer {
-    fn draw(&self, mem: &VideoMemory, target: &mut [u8], line: u16) {
+    fn draw(&self, mem: &VideoMemory, target: &mut [u8], line: u8) {
         // Gather the backgrounds.
         /*let mut bg_prio_data = Vec::<BackgroundData>::new();
         for bg in (0..4).map(|bg_num| mem.registers.tile_bg_data(bg_num)) {
@@ -317,7 +316,7 @@ impl SoftwareRenderer {
 
         let mut obj_line = [None; gba::H_RES];
         let mut obj_window = [false; gba::H_RES];
-        self.draw_obj_line(mem, &mut obj_line, &mut obj_window, line as i16);
+        self.draw_obj_line(mem, &mut obj_line, &mut obj_window, line);
         for x in 0..gba::H_RES {
             let dest = x * 4;
             // Prio 0

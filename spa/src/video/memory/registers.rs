@@ -153,7 +153,7 @@ bitflags! {
 pub struct VideoRegisters {
     lcd_control:    LCDControl,
     lcd_status:     LCDStatus,
-    vcount:         u16,
+    vcount:         u8,
 
     bg0_control:    BGControl,
     bg1_control:    BGControl,
@@ -220,9 +220,9 @@ impl VideoRegisters {
     }
 
     /// Set V-count.
-    pub fn set_v_count(&mut self, count: u16) {
+    pub fn set_v_count(&mut self, count: u8) {
         self.vcount = count;
-        self.lcd_status.set(LCDStatus::VCOUNT_FLAG, bytes::u16::lo(count) == bytes::u16::hi(self.lcd_status.bits()));
+        self.lcd_status.set(LCDStatus::VCOUNT_FLAG, count == bytes::u16::hi(self.lcd_status.bits()));
     }
 
     pub fn v_blank_irq(&self) -> Interrupts {
@@ -483,7 +483,7 @@ impl MemInterface16 for VideoRegisters {
             0x0 => self.lcd_control.bits(),
             0x2 => 0, // TODO: green swap
             0x4 => self.lcd_status.bits(),
-            0x6 => self.vcount,
+            0x6 => self.vcount as u16,
             0x8 => self.bg0_control.bits(),
             0xA => self.bg1_control.bits(),
             0xC => self.bg2_control.bits(),

@@ -10,7 +10,7 @@ pub trait Renderer {
     fn new() -> Self;
 
     /// Render a single line.
-    fn render_line(&mut self, mem: &mut super::VideoMemory, line: u16);
+    fn render_line(&mut self, mem: &mut super::VideoMemory, line: u8);
     /// Start rendering the frame.
     fn start_frame(&mut self);
     /// Complete rendering the frame.
@@ -35,7 +35,7 @@ impl Renderer for ProceduralRenderer {
         }
     }
 
-    fn render_line(&mut self, mem: &mut super::VideoMemory, line: u16) {
+    fn render_line(&mut self, mem: &mut super::VideoMemory, line: u8) {
         self.renderer.setup_caches(mem);
         let start_offset = (line as usize) * (gba::H_RES * 4);
         let end_offset = start_offset + (gba::H_RES * 4);
@@ -73,7 +73,7 @@ impl Renderer for DebugTileRenderer {
         }
     }
 
-    fn render_line(&mut self, mem: &mut super::VideoMemory, line: u16) {
+    fn render_line(&mut self, mem: &mut super::VideoMemory, line: u8) {
         self.renderer.setup_caches(mem);
         if line == 0 {
             self.renderer.draw_8bpp_tiles(mem, &mut self.target);
