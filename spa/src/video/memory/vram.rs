@@ -1,7 +1,5 @@
 
-use bytemuck::{
-    try_from_bytes, try_from_bytes_mut
-};
+use std::convert::TryInto;
 use bitflags::bitflags;
 use crate::common::bits::{u8, u16};
 
@@ -50,8 +48,8 @@ impl VRAM {
     pub fn tile_map_attrs(&self, addr: u32) -> TileMapAttrs {
         let start = addr as usize;
         let end = start + 2;
-        let data = *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read tile map attrs at 0x{:X}", addr));
-        TileMapAttrs::from_bits_truncate(data)
+        let data = (self.data[start..end]).try_into().unwrap();
+        TileMapAttrs::from_bits_truncate(u16::from_le_bytes(data))
     }
 
     /// Get the tile number for an affine background.
@@ -93,7 +91,8 @@ impl VRAM {
 
         let start = texel_addr;
         let end = start + 2;
-        *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read bitmap texel at 0x{:X}", start))
+        let data = (self.data[start..end]).try_into().unwrap();
+        u16::from_le_bytes(data)
     }
 
     /// Get a bitmap texel, using direct colour.
@@ -105,7 +104,8 @@ impl VRAM {
 
         let start = texel_addr;
         let end = start + 2;
-        *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read bitmap texel at 0x{:X}", start))
+        let data = (self.data[start..end]).try_into().unwrap();
+        u16::from_le_bytes(data)
     }
 }
 
@@ -113,25 +113,15 @@ impl VRAM {
 impl VRAM {
     pub fn read_halfword(&self, addr: u32) -> u16 {
         let start = addr as usize;
-        let end = (addr + 2) as usize;
-        *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read vram halfword at 0x{:X}", addr))
+        let end = start + 2;
+        let data: [u8; 2] = (self.data[start..end]).try_into().unwrap();
+        u16::from_le_bytes(data)
     }
     pub fn write_halfword(&mut self, addr: u32, data: u16) {
         let start = addr as usize;
-        let end = (addr + 2) as usize;
-        let dest = try_from_bytes_mut(&mut self.data[start..end]).expect(&format!("cannot write vram halfword at 0x{:X}", addr));
-        *dest = data;
+        let end = start + 2;
+        for (dest, byte) in self.data[start..end].iter_mut().zip(&data.to_le_bytes()) {
+            *dest = *byte;
+        }
     }
-
-    /*pub fn read_word(&self, addr: u32) -> u32 {
-        let start = addr as usize;
-        let end = (addr + 4) as usize;
-        *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read vram word at 0x{:X}", addr))
-    }
-    pub fn write_word(&mut self, addr: u32, data: u32) {
-        let start = addr as usize;
-        let end = (addr + 4) as usize;
-        let dest = try_from_bytes_mut(&mut self.data[start..end]).expect(&format!("cannot write vram word at 0x{:X}", addr));
-        *dest = data;
-    }*/
 }

@@ -1,12 +1,12 @@
 /// Simple BIOS for GBA
 
-use bytemuck::try_from_bytes;
 use std::{
     io::{
         Result, Read
     },
     path::Path,
-    fs::File
+    fs::File,
+    convert::TryInto
 };
 
 /// A simple BIOS if the full ROM is not available.
@@ -40,13 +40,15 @@ impl BIOS {
 
     pub fn read_halfword(&self, addr: u32) -> u16 {
         let start = addr as usize;
-        let end = (addr + 2) as usize;
-        *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read halfword at 0x{:08X}", addr))
+        let end = start + 2;
+        let data = (self.data[start..end]).try_into().unwrap();
+        u16::from_le_bytes(data)
     }
 
     pub fn read_word(&self, addr: u32) -> u32 {
         let start = addr as usize;
-        let end = (addr + 4) as usize;
-        *try_from_bytes(&self.data[start..end]).expect(&format!("cannot read word at 0x{:08X}", addr))
+        let end = start + 4;
+        let data = (self.data[start..end]).try_into().unwrap();
+        u32::from_le_bytes(data)
     }
 }

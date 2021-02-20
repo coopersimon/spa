@@ -1,7 +1,5 @@
 /// Work RAM
-use bytemuck::{
-    try_from_bytes, try_from_bytes_mut
-};
+use std::convert::TryInto;
 
 /// Work RAM.
 /// Can read and write quantities of 8, 16, and 32 bits.
@@ -23,25 +21,29 @@ impl WRAM {
 
     pub fn read_halfword(&self, addr: u32) -> u16 {
         let start = addr as usize;
-        let end = (addr + 2) as usize;
-        *try_from_bytes(&self.0[start..end]).expect(&format!("cannot read halfword at 0x{:X}", addr))
+        let end = start + 2;
+        let data = (self.0[start..end]).try_into().unwrap();
+        u16::from_le_bytes(data)
     }
     pub fn write_halfword(&mut self, addr: u32, data: u16) {
         let start = addr as usize;
-        let end = (addr + 2) as usize;
-        let dest = try_from_bytes_mut(&mut self.0[start..end]).expect(&format!("cannot write halfword at 0x{:X}", addr));
-        *dest = data;
+        let end = start + 2;
+        for (dest, byte) in self.0[start..end].iter_mut().zip(&data.to_le_bytes()) {
+            *dest = *byte;
+        }
     }
 
     pub fn read_word(&self, addr: u32) -> u32 {
         let start = addr as usize;
-        let end = (addr + 4) as usize;
-        *try_from_bytes(&self.0[start..end]).expect(&format!("cannot read word at 0x{:X}", addr))
+        let end = start + 4;
+        let data = (self.0[start..end]).try_into().unwrap();
+        u32::from_le_bytes(data)
     }
     pub fn write_word(&mut self, addr: u32, data: u32) {
         let start = addr as usize;
-        let end = (addr + 4) as usize;
-        let dest = try_from_bytes_mut(&mut self.0[start..end]).expect(&format!("cannot write word at 0x{:X}", addr));
-        *dest = data;
+        let end = start + 4;
+        for (dest, byte) in self.0[start..end].iter_mut().zip(&data.to_le_bytes()) {
+            *dest = *byte;
+        }
     }
 }

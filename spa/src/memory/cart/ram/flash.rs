@@ -121,7 +121,7 @@ impl FLASH {
 impl MemInterface8 for FLASH {
     fn read_byte(&mut self, addr: u32) -> u8 {
         use FlashMode::*;
-        let data = match self.mode {
+        match self.mode {
             // SST
             GetID => if addr == 0 {
                 u16::lo(self.device_type)
@@ -129,12 +129,9 @@ impl MemInterface8 for FLASH {
                 u16::hi(self.device_type)
             },
             _ => self.ram[(addr as usize) + self.bank_offset],
-        };
-        println!("FLASH: {:X} -> d{:X}", addr, data);
-        data
+        }
     }
     fn write_byte(&mut self, addr: u32, data: u8) {
-        println!("FLASH: d{:X} -> {:X}", data, addr);
         use FlashMode::*;
         match self.mode {
             ModeAA if addr == 0x2AAA && data == 0x55 => {

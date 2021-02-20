@@ -13,3 +13,4 @@ See spa/README.md for the full list of tested games.
 - Internal "hardware" BIOS
 - Lots of rendering fixes
 - Deal with rampant unaligned memory accesses
+- Separate render thread.
