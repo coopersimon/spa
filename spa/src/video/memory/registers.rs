@@ -149,6 +149,22 @@ bitflags! {
     }
 }
 
+impl Into<ColourEffect> for ColourSpecialControl {
+    fn into(self) -> ColourEffect {
+        const NO_EFFECT: u16 = 0 << 6;
+        const BLEND: u16 = 1 << 6;
+        const BRIGHTEN: u16 = 2 << 6;
+        const DARKEN: u16 = 3 << 6;
+        match (self & ColourSpecialControl::EFFECT).bits() {
+            NO_EFFECT => ColourEffect::None,
+            BLEND => ColourEffect::AlphaBlend,
+            BRIGHTEN => ColourEffect::Brighten,
+            DARKEN => ColourEffect::Darken,
+            _ => unreachable!()
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct VideoRegisters {
     lcd_control:    LCDControl,
@@ -364,6 +380,10 @@ impl VideoRegisters {
                     self.win_obj_inside.contains(WindowControl::BG0_ENABLE),
                     self.win_outside.contains(WindowControl::BG0_ENABLE)
                 ),
+                blend_mask:     BlendMask::make(
+                    self.colour_special.contains(ColourSpecialControl::BG0_TARGET_1) && self.use_blend_layer_1(),
+                    self.colour_special.contains(ColourSpecialControl::BG0_TARGET_2)
+                ),
                 type_data: BackgroundTypeData::Tiled(tiled_data)
             })
         } else {
@@ -389,6 +409,10 @@ impl VideoRegisters {
                     self.win1_inside.contains(WindowControl::BG1_ENABLE),
                     self.win_obj_inside.contains(WindowControl::BG1_ENABLE),
                     self.win_outside.contains(WindowControl::BG1_ENABLE)
+                ),
+                blend_mask:     BlendMask::make(
+                    self.colour_special.contains(ColourSpecialControl::BG1_TARGET_1) && self.use_blend_layer_1(),
+                    self.colour_special.contains(ColourSpecialControl::BG1_TARGET_2)
                 ),
                 type_data: BackgroundTypeData::Tiled(tiled_data)
             })
@@ -416,6 +440,10 @@ impl VideoRegisters {
                     self.win_obj_inside.contains(WindowControl::BG2_ENABLE),
                     self.win_outside.contains(WindowControl::BG2_ENABLE)
                 ),
+                blend_mask:     BlendMask::make(
+                    self.colour_special.contains(ColourSpecialControl::BG2_TARGET_1) && self.use_blend_layer_1(),
+                    self.colour_special.contains(ColourSpecialControl::BG2_TARGET_2)
+                ),
                 type_data: BackgroundTypeData::Tiled(tiled_data)
             })
         } else {
@@ -441,6 +469,10 @@ impl VideoRegisters {
                     self.win1_inside.contains(WindowControl::BG3_ENABLE),
                     self.win_obj_inside.contains(WindowControl::BG3_ENABLE),
                     self.win_outside.contains(WindowControl::BG3_ENABLE)
+                ),
+                blend_mask:     BlendMask::make(
+                    self.colour_special.contains(ColourSpecialControl::BG3_TARGET_1) && self.use_blend_layer_1(),
+                    self.colour_special.contains(ColourSpecialControl::BG3_TARGET_2)
                 ),
                 type_data: BackgroundTypeData::Tiled(tiled_data)
             })
@@ -472,6 +504,10 @@ impl VideoRegisters {
                     self.win_obj_inside.contains(WindowControl::BG2_ENABLE),
                     self.win_outside.contains(WindowControl::BG2_ENABLE)
                 ),
+                blend_mask:     BlendMask::make(
+                    self.colour_special.contains(ColourSpecialControl::BG2_TARGET_1) && self.use_blend_layer_1(),
+                    self.colour_special.contains(ColourSpecialControl::BG2_TARGET_2)
+                ),
                 type_data: BackgroundTypeData::Affine(affine_data)
             })
         } else {
@@ -502,6 +538,10 @@ impl VideoRegisters {
                     self.win_obj_inside.contains(WindowControl::BG3_ENABLE),
                     self.win_outside.contains(WindowControl::BG3_ENABLE)
                 ),
+                blend_mask:     BlendMask::make(
+                    self.colour_special.contains(ColourSpecialControl::BG3_TARGET_1) && self.use_blend_layer_1(),
+                    self.colour_special.contains(ColourSpecialControl::BG3_TARGET_2)
+                ),
                 type_data: BackgroundTypeData::Affine(affine_data)
             })
         } else {
@@ -524,6 +564,10 @@ impl VideoRegisters {
                     self.win1_inside.contains(WindowControl::BG2_ENABLE),
                     self.win_obj_inside.contains(WindowControl::BG2_ENABLE),
                     self.win_outside.contains(WindowControl::BG2_ENABLE)
+                ),
+                blend_mask:     BlendMask::make(
+                    self.colour_special.contains(ColourSpecialControl::BG2_TARGET_1) && self.use_blend_layer_1(),
+                    self.colour_special.contains(ColourSpecialControl::BG2_TARGET_2)
                 ),
                 type_data: BackgroundTypeData::Bitmap(bitmap_data)
             })
@@ -561,6 +605,15 @@ impl VideoRegisters {
         )
     }
 
+    pub fn colour_window_mask(&self) -> WindowMask {
+        WindowMask::make(
+            self.win0_inside.contains(WindowControl::COLOUR_SPECIAL),
+            self.win1_inside.contains(WindowControl::COLOUR_SPECIAL),
+            self.win_obj_inside.contains(WindowControl::COLOUR_SPECIAL),
+            self.win_outside.contains(WindowControl::COLOUR_SPECIAL)
+        )
+    }
+
     /// Check if window 0 should be used for this line.
     pub fn y_inside_window_0(&self, y: u8) -> bool {
         y >= self.win0_y_top && y < self.win0_y_bottom
@@ -574,6 +627,36 @@ impl VideoRegisters {
     }
     pub fn x_inside_window_1(&self, x: u8) -> bool {
         x >= self.win1_x_left && x < self.win1_x_right
+    }
+
+    // Colour special effects
+    fn use_blend_layer_1(&self) -> bool {
+        self.colour_special.intersects(ColourSpecialControl::EFFECT)
+    }
+    pub fn colour_effect(&self) -> ColourEffect {
+        self.colour_special.into()
+    }
+    pub fn obj_blend_mask(&self) -> BlendMask {
+        BlendMask::make(
+            self.colour_special.contains(ColourSpecialControl::OBJ_TARGET_1),
+            self.colour_special.contains(ColourSpecialControl::OBJ_TARGET_2)
+        )
+    }
+    pub fn backdrop_blend_mask(&self) -> BlendMask {
+        BlendMask::make(
+            self.colour_special.contains(ColourSpecialControl::BD_TARGET_1),
+            self.colour_special.contains(ColourSpecialControl::BD_TARGET_2)
+        )
+    }
+    
+    pub fn get_alpha_coeffs(&self) -> (u16, u16) {
+        let eva = self.alpha_coeffs & 0x1F;
+        let evb = (self.alpha_coeffs >> 8) & 0x1F;
+        (std::cmp::min(0x10, eva), std::cmp::min(0x10, evb))
+    }
+    pub fn get_brightness_coeff(&self) -> u16 {
+        let evy = (self.brightness & 0x1F) as u16;
+        std::cmp::min(0x10, evy)
     }
 }
 

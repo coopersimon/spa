@@ -313,35 +313,56 @@ impl SoftwareRenderer {
     }
 
     fn eval_pixel(&self, mem: &VideoMemory, obj_pixel: Option<ObjectPixel>, obj_window: bool, bg_data: &[BackgroundData], x: u8, y: u8) -> Colour {
+        let colour_window = || {
+            self.window_pixel(&mem.registers, mem.registers.colour_window_mask(), obj_window, x, y)
+        };
+        let mut target_1 = None;
         for priority in 0..4 {
             if let Some(obj) = obj_pixel {
                 if obj.priority == priority {
-                    if mem.registers.windows_enabled() {
-                        if self.window_pixel(&mem.registers, mem.registers.obj_window_mask(), obj_window, x, y) {
-                            return self.palette_cache.get_obj(obj.colour);
+                    if self.window_pixel(&mem.registers, mem.registers.obj_window_mask(), obj_window, x, y) {
+                        let col = self.palette_cache.get_obj(obj.colour);
+                        if colour_window() {
+                            match self.colour_effect(&mem.registers, mem.registers.obj_blend_mask(), col, target_1, obj.semi_transparent) {
+                                Blended::Colour(c) => return c,
+                                Blended::AlphaTarget1(a) => target_1 = Some(a),
+                            }
+                        } else {
+                            return col;
                         }
-                    } else {
-                        return self.palette_cache.get_obj(obj.colour);
                     }
                 }
             }
             for bg in bg_data {
                 if bg.priority == priority {
                     if let Some(col) = self.bg_pixel(mem, bg, obj_window, x, y) {
-                        return col;
+                        if colour_window() {
+                            match self.colour_effect(&mem.registers, bg.blend_mask, col, target_1, false) {
+                                Blended::Colour(c) => return c,
+                                Blended::AlphaTarget1(a) => target_1 = Some(a),
+                            }
+                        } else {
+                            return col;
+                        }
                     }
                 }
             }
         }
-        self.palette_cache.get_backdrop()
+        let col = self.palette_cache.get_backdrop();
+        if colour_window() {
+            match self.colour_effect(&mem.registers, mem.registers.backdrop_blend_mask(), col, target_1, false) {
+                Blended::Colour(c) => c,
+                Blended::AlphaTarget1(a) => a,
+            }
+        } else {
+            col
+        }
     }
 
     /// Find a pixel value for a particular background.
     fn bg_pixel(&self, mem: &VideoMemory, bg: &BackgroundData, obj_window: bool, x: u8, y: u8) -> Option<Colour> {
-        if mem.registers.windows_enabled() {
-            if !self.window_pixel(&mem.registers, bg.window_mask, obj_window, x, y) {
-                return None;
-            }
+        if !self.window_pixel(&mem.registers, bg.window_mask, obj_window, x, y) {
+            return None;
         }
         // TODO: mosaic
         match &bg.type_data {
@@ -359,6 +380,9 @@ impl SoftwareRenderer {
 
     /// Check if a background pixel should appear through windows.
     fn window_pixel(&self, regs: &VideoRegisters, mask: WindowMask, obj_window: bool, x: u8, y: u8) -> bool {
+        if !regs.windows_enabled() {
+            return true;
+        }
         if regs.window_0_enabled() {
             if regs.x_inside_window_0(x) && regs.y_inside_window_0(y) {
                 return mask.contains(WindowMask::WINDOW_0);
@@ -376,6 +400,45 @@ impl SoftwareRenderer {
         }
         mask.contains(WindowMask::OUT_WIN)
     }
+
+    /// Apply colour effects.
+    fn colour_effect(&self, regs: &VideoRegisters, mask: BlendMask, colour: Colour, target_1: Option<Colour>, semi_transparent: bool) -> Blended {
+        use Blended::*;
+        if let Some(target_1) = target_1 {
+            if mask.contains(BlendMask::LAYER_2) {
+                let alpha_coeffs = regs.get_alpha_coeffs();
+                Colour(apply_alpha_blend(alpha_coeffs.0, alpha_coeffs.1, target_1, colour))
+            } else {
+                Colour(target_1)
+            }
+        } else if semi_transparent {
+            AlphaTarget1(colour)
+        } else {
+            match regs.colour_effect() {
+                ColourEffect::AlphaBlend => if mask.contains(BlendMask::LAYER_1) {
+                    AlphaTarget1(colour)
+                } else {
+                    Colour(colour)
+                },
+                ColourEffect::Brighten => if mask.contains(BlendMask::LAYER_1) {
+                    Colour(apply_brighten(regs.get_brightness_coeff(), colour))
+                } else {
+                    Colour(colour)
+                },
+                ColourEffect::Darken => if mask.contains(BlendMask::LAYER_1) {
+                    Colour(apply_darken(regs.get_brightness_coeff(), colour))
+                } else {
+                    Colour(colour)
+                },
+                _ => Colour(colour)
+            }
+        }
+    }
+}
+
+enum Blended {
+    AlphaTarget1(Colour),
+    Colour(Colour)
 }
 
 // Debug
@@ -415,5 +478,38 @@ impl SoftwareRenderer {
                 target[pixel_num + 2] = colour.b;
             }
         }
+    }
+}
+
+fn apply_alpha_blend(eva: u16, evb: u16, target_1: Colour, target_2: Colour) -> Colour {
+    let r_mid = (target_1.r as u16) * eva + (target_2.r as u16) * evb;
+    let g_mid = (target_1.g as u16) * eva + (target_2.g as u16) * evb;
+    let b_mid = (target_1.b as u16) * eva + (target_2.b as u16) * evb;
+    Colour {
+        r: std::cmp::min(0xFF, (r_mid >> 4) as u8),
+        g: std::cmp::min(0xFF, (g_mid >> 4) as u8),
+        b: std::cmp::min(0xFF, (b_mid >> 4) as u8),
+    }
+}
+
+fn apply_brighten(evy: u16, target: Colour) -> Colour {
+    let r_var = (((0xFF - target.r) as u16) * evy) >> 4;
+    let g_var = (((0xFF - target.g) as u16) * evy) >> 4;
+    let b_var = (((0xFF - target.b) as u16) * evy) >> 4;
+    Colour {
+        r: target.r.saturating_add(r_var as u8),
+        g: target.g.saturating_add(g_var as u8),
+        b: target.b.saturating_add(b_var as u8),
+    }
+}
+
+fn apply_darken(evy: u16, target: Colour) -> Colour {
+    let r_var = ((target.r as u16) * evy) >> 4;
+    let g_var = ((target.g as u16) * evy) >> 4;
+    let b_var = ((target.b as u16) * evy) >> 4;
+    Colour {
+        r: target.r.saturating_sub(r_var as u8),
+        g: target.g.saturating_sub(g_var as u8),
+        b: target.b.saturating_sub(b_var as u8),
     }
 }

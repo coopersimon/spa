@@ -3,9 +3,18 @@ use fixed::types::I24F8;
 
 use crate::common::bits::u8;
 
+/// Colour special effect
+pub enum ColourEffect {
+    None,
+    AlphaBlend,
+    Brighten,
+    Darken
+}
+
 pub struct BackgroundData {
     pub priority:       u8,
     pub window_mask:    WindowMask,
+    pub blend_mask:     BlendMask,
     pub type_data:      BackgroundTypeData,
 }
 
@@ -34,6 +43,23 @@ impl WindowMask {
         ret.set(WindowMask::WINDOW_1, win1);
         ret.set(WindowMask::OBJ_WIN, obj_win);
         ret.set(WindowMask::OUT_WIN, out_win);
+        ret
+    }
+}
+
+bitflags! {
+    #[derive(Default)]
+    pub struct BlendMask: u8 {
+        const LAYER_2   = u8::bit(1);
+        const LAYER_1   = u8::bit(0);
+    }
+}
+
+impl BlendMask {
+    pub fn make(layer_1: bool, layer_2: bool) -> Self {
+        let mut ret = BlendMask::default();
+        ret.set(BlendMask::LAYER_1, layer_1);
+        ret.set(BlendMask::LAYER_2, layer_2);
         ret
     }
 }
