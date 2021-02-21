@@ -13,9 +13,9 @@ Status of selected games:
 - Final Fantasy IV: Intro and title look good, when game begins scrolling background looks odd (individual tiles aren't scrolling)
 - Final Fantasy V: Looks good.
 - Final Fantasy VI: Shows square enix logo then fades to black and stops responding
-- Final Fantasy Tactics Advance: Mostly looks good, some inverted colour blending.
+- Final Fantasy Tactics Advance: Looks good.
 - Four Swords: Works ok. still probably tries an unaligned load.
-- Golden Sun: Looks good. Light sources are blending strangely.
+- Golden Sun: Looks good.
 - Harry Potter 2: Looks good
 - Incredibles: Looks good
 - LEGO Star Wars: Looks good
@@ -23,8 +23,8 @@ Status of selected games:
 - Mother 1+2: Loads up ok. Cart select looks good.
     - Mother 1: Looks good.
     - Mother 2: Title, character naming, and intro works. Demo crashes trying to access incorrect VRAM address.
-- Mother 3: Works ok. Some weird scrolling issues in intro. Clouds are blending incorrectly also.
-- Pokemon Emerald: Loads up OK. Intro "game freak" colour blending looks off. "Internal clock battery has run dry".
+- Mother 3: Works ok. Some weird scrolling issues in intro.
+- Pokemon Emerald: Loads up OK. "Internal clock battery has run dry".
 - Pokemon FireRed: Loads up OK. Mostly looks good.
 - Pokemon Mystery Dungeon (red): Seems pretty good.
 - Super Mario Bros (NES): Black screen. Might be EEPROM trouble.
@@ -33,7 +33,7 @@ Status of selected games:
 - The Minish Cap: Looks good.
 - Yoshi's Island: Intro looks good. Title screen affine background looks wrong. Title also has some strange colour blending effect. When gameplay begins, frozen white screen.
 - Advance Wars: Looks good.
-- F-Zero Maximum Velocity: Title and setup works ok (title itself has some colour blending issue), actual game backgrounds perspective is off.
+- F-Zero Maximum Velocity: Title and setup works ok, actual game backgrounds perspective is off.
 - Pokemon Ruby: Intro has some issues. Mostly ok (similar to Emerald)
 - Fire Emblem: mostly looks ok.
 - Sonic Advance: Loads up and shows some scrolling backgrounds and doesn't respond.

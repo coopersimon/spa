@@ -486,9 +486,9 @@ fn apply_alpha_blend(eva: u16, evb: u16, target_1: Colour, target_2: Colour) -> 
     let g_mid = (target_1.g as u16) * eva + (target_2.g as u16) * evb;
     let b_mid = (target_1.b as u16) * eva + (target_2.b as u16) * evb;
     Colour {
-        r: std::cmp::min(0xFF, (r_mid >> 4) as u8),
-        g: std::cmp::min(0xFF, (g_mid >> 4) as u8),
-        b: std::cmp::min(0xFF, (b_mid >> 4) as u8),
+        r: std::cmp::min(0xFF, r_mid >> 4) as u8,
+        g: std::cmp::min(0xFF, g_mid >> 4) as u8,
+        b: std::cmp::min(0xFF, b_mid >> 4) as u8,
     }
 }
 
