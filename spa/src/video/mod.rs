@@ -118,7 +118,7 @@ impl<R: Renderer> GBAVideo<R> {
                 self.v_count = 0;
                 self.mem.registers.set_h_blank(false);
                 self.mem.registers.set_v_blank(false);
-                self.mem.registers.set_v_count(0);
+                self.mem.registers.reset_v_count();
                 self.renderer.start_frame();
                 self.renderer.render_line(&mut self.mem, 0);
                 (Signal::None, self.mem.registers.v_count_irq())
@@ -127,7 +127,7 @@ impl<R: Renderer> GBAVideo<R> {
                 self.state = Drawing;
                 self.v_count += 1;
                 self.mem.registers.set_h_blank(false);
-                self.mem.registers.set_v_count(self.v_count);
+                self.mem.registers.inc_v_count();
                 self.renderer.render_line(&mut self.mem, self.v_count);
                 (Signal::None, self.mem.registers.v_count_irq())
             },
@@ -157,7 +157,7 @@ impl<R: Renderer> GBAVideo<R> {
                 self.state = VBlank;
                 self.v_count += 1;
                 self.mem.registers.set_h_blank(false);
-                self.mem.registers.set_v_count(self.v_count);
+                self.mem.registers.inc_v_count();
                 (Signal::None, self.mem.registers.v_count_irq())
             },
         }

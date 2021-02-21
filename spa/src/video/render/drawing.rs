@@ -54,14 +54,7 @@ impl SoftwareRenderer {
     fn draw_obj_line(&self, mem: &VideoMemory, target: &mut [Option<ObjectPixel>], obj_window: &mut [bool], y: u8) {
         const OBJECT_VRAM_BASE: u32 = VRAM_TILE_BLOCK * 4;
         let use_1d_tile_mapping = mem.registers.obj_1d_tile_mapping();
-        /*let check_windows = regs.windows_enabled();
-        let render_objects = if check_windows {
-            let check_win0 = regs.obj_window_0() && regs.y_inside_window_0(y as u8);
-            let check_win1 = regs.obj_window_1() && regs.y_inside_window_1(y as u8);
-            let check_outside = !check_win0 && !check_win1
-        };*/
 
-        // TODO: check windows for line
         for object in mem.oam.ref_objects() {
             if !object.is_enabled() {
                 continue;
@@ -123,7 +116,7 @@ impl SoftwareRenderer {
                 let tile_x = (index_x / 8) as u32;
                 let tile_y = (index_y / 8) as u32;
                 let tile_num = if use_1d_tile_mapping {
-                    let tile_width = (width / 8) as u32;
+                    let tile_width = (source_size.0 / 8) as u32;
                     let offset = (tile_x + (tile_y * tile_width)) << tile_shift;
                     base_tile_num + offset
                 } else {
@@ -158,13 +151,11 @@ impl SoftwareRenderer {
         }
     }
 
-    /// Get the palette number of a background pixel.
+    /// Get the colour of a background pixel.
     /// The x and y values provided should be scrolled & mosaiced already (i.e., background values and not screen values).
     /// 
-    /// If 0 is returned, the pixel is transparent.
-    fn tile_bg_pixel(&self, bg: &TiledBackgroundData, vram: &VRAM, bg_x: u32, bg_y: u32) -> u8 {
-        // TODO: Check if pixel is visible through window
-
+    /// If None is returned, the pixel is transparent.
+    fn tile_bg_pixel(&self, bg: &TiledBackgroundData, vram: &VRAM, bg_x: u32, bg_y: u32) -> Option<Colour> {
         let (x, y) = match bg.layout {
             BackgroundMapLayout::Small => (bg_x % 256, bg_y % 256),
             BackgroundMapLayout::Wide => (bg_x % 512, bg_y % 256),
@@ -216,9 +207,9 @@ impl SoftwareRenderer {
             vram.tile_texel_4bpp(tile_addr, tile_x, tile_y)
         };
         if texel == 0 {
-            0
+            None
         } else {
-            (attrs.palette_num() * 16) + texel
+            Some(self.palette_cache.get_bg((attrs.palette_num() * 16) + texel))
         }
     }
 
@@ -226,14 +217,12 @@ impl SoftwareRenderer {
     /// The x and y values provided should be mosaiced already.
     /// 
     /// If 0 is returned, the pixel is transparent.
-    fn affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &VRAM, screen_x: u32, screen_y: u32) -> u8 {
-        // TODO: Check if pixel is visible through window
-
+    fn affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &VRAM, screen_x: u8, screen_y: u8) -> Option<Colour> {
         // Transform from screen space to BG space.
         let x_0 = bg.bg_ref_point_x;
         let y_0 = bg.bg_ref_point_y;
-        let x_i = I24F8::from_num(screen_x as i32) - x_0;
-        let y_i = I24F8::from_num(screen_y as i32) - y_0;
+        let x_i = I24F8::from_num(screen_x as i32);
+        let y_i = I24F8::from_num(screen_y as i32);
         let x_out = (bg.matrix_a * x_i) + (bg.matrix_b * y_i) + x_0;
         let y_out = (bg.matrix_c * x_i) + (bg.matrix_d * y_i) + y_0;
 
@@ -242,7 +231,7 @@ impl SoftwareRenderer {
         } else {
             let bg_x = x_out.to_num::<i32>() as u32;
             if bg_x >= bg.size {
-                return 0;
+                return None;
             }
             bg_x
         };
@@ -251,10 +240,12 @@ impl SoftwareRenderer {
         } else {
             let bg_y = y_out.to_num::<i32>() as u32;
             if bg_y >= bg.size {
-                return 0;
+                return None;
             }
             bg_y
         };
+
+        //println!("dx: {},{} mat: {},{},{},{} in: {},{} out: {},{}", x_0, y_0, bg.matrix_a, bg.matrix_b, bg.matrix_c, bg.matrix_d, screen_x, screen_y, x_out, y_out);
 
         // Find tile attrs in bg map
         let map_x = bg_x / TILE_SIZE;
@@ -268,20 +259,23 @@ impl SoftwareRenderer {
         let tile_x = (bg_x % TILE_SIZE) as u8;
         let tile_y = (bg_y % TILE_SIZE) as u8;
         let tile_addr = bg.tile_data_addr + (tile_num * TILE_BYTES_8BPP);
-        vram.tile_texel_8bpp(tile_addr, tile_x, tile_y)
+        let texel = vram.tile_texel_8bpp(tile_addr, tile_x, tile_y);
+        if texel == 0 {
+            None
+        } else {
+            Some(self.palette_cache.get_bg(texel))
+        }
     }
 
     /// Draw a bitmap pixel.
-    fn bitmap_bg_pixel(&self, bg: &BitmapBackgroundData, vram: &VRAM, palette: &PaletteCache, bg_x: u32, bg_y: u32) -> Option<Colour> {
-        // TODO: Check if pixel is visible through window
-
+    fn bitmap_bg_pixel(&self, bg: &BitmapBackgroundData, vram: &VRAM, bg_x: u8, bg_y: u8) -> Option<Colour> {
         if bg.small {
-            let bitmap_x = (bg_x as usize).wrapping_sub(gba::SMALL_BITMAP_LEFT);
-            let bitmap_y = (bg_y as usize).wrapping_sub(gba::SMALL_BITMAP_TOP);
+            let bitmap_x = bg_x.wrapping_sub(gba::SMALL_BITMAP_LEFT);
+            let bitmap_y = bg_y.wrapping_sub(gba::SMALL_BITMAP_TOP);
             if bitmap_x >= gba::SMALL_BITMAP_WIDTH || bitmap_y >= gba::SMALL_BITMAP_HEIGHT {
                 return None;
             }
-            let colour = vram.small_bitmap_texel_15bpp(bg.data_addr, bitmap_x as u32, bitmap_y as u32);
+            let colour = vram.small_bitmap_texel_15bpp(bg.data_addr, bitmap_x, bitmap_y);
             Some(Colour::from_555(colour))
         } else if bg.use_15bpp {
             let colour = vram.bitmap_texel_15bpp(0, bg_x, bg_y);
@@ -291,7 +285,7 @@ impl SoftwareRenderer {
             if texel == 0 {
                 None
             } else {
-                Some(palette.get_bg(texel))
+                Some(self.palette_cache.get_bg(texel))
             }
         }
     }
@@ -301,54 +295,40 @@ impl SoftwareRenderer {
 impl SoftwareRenderer {
     fn draw(&self, mem: &VideoMemory, target: &mut [u8], line: u8) {
         // Gather the backgrounds.
-        /*let mut bg_prio_data = Vec::<BackgroundData>::new();
-        for bg in (0..4).map(|bg_num| mem.registers.tile_bg_data(bg_num)) {
-            if let Some(bg_data) = bg.as_ref() {
-                for i in 0..bg_prio_data.len() {
-                    if bg_data.priority < bg_prio_data[i].priority {
-                        bg_prio_data.insert(i, bg_data.clone());
-                    }
-                }
-                bg_prio_data.push(bg_data.clone());
-            }
-        }*/
         let bg_data = mem.registers.bg_data_for_mode();
 
         let mut obj_line = [None; gba::H_RES];
         let mut obj_window = [false; gba::H_RES];
-        self.draw_obj_line(mem, &mut obj_line, &mut obj_window, line);
+        if mem.registers.is_obj_enabled() {
+            self.draw_obj_line(mem, &mut obj_line, &mut obj_window, line);
+        }
         for x in 0..gba::H_RES {
             let dest = x * 4;
             // Prio 0
-            let colour = self.eval_pixel(mem, obj_line[x], &bg_data, x as u32, line as u32);
+            let colour = self.eval_pixel(mem, obj_line[x], obj_window[x], &bg_data, x as u8, line);
             target[dest] = colour.r;
             target[dest + 1] = colour.g;
             target[dest + 2] = colour.b;
         }
     }
 
-    fn eval_pixel(&self, mem: &VideoMemory, obj_pixel: Option<ObjectPixel>, bg_data: &[BackgroundData], x: u32, y: u32) -> Colour {
-        if let Some(obj) = obj_pixel {
-            for priority in 0..4 {
+    fn eval_pixel(&self, mem: &VideoMemory, obj_pixel: Option<ObjectPixel>, obj_window: bool, bg_data: &[BackgroundData], x: u8, y: u8) -> Colour {
+        for priority in 0..4 {
+            if let Some(obj) = obj_pixel {
                 if obj.priority == priority {
-                    return self.palette_cache.get_obj(obj.colour);
-                } else {
-                    for bg in bg_data {
-                        if bg.priority() == priority {
-                            if let Some(col) = self.bg_pixel(mem, bg, x, y) {
-                                return col;
-                            }
+                    if mem.registers.windows_enabled() {
+                        if self.window_pixel(&mem.registers, mem.registers.obj_window_mask(), obj_window, x, y) {
+                            return self.palette_cache.get_obj(obj.colour);
                         }
+                    } else {
+                        return self.palette_cache.get_obj(obj.colour);
                     }
                 }
             }
-        } else {
-            for priority in 0..4 {
-                for bg in bg_data {
-                    if bg.priority() == priority {
-                        if let Some(col) = self.bg_pixel(mem, bg, x, y) {
-                            return col;
-                        }
+            for bg in bg_data {
+                if bg.priority == priority {
+                    if let Some(col) = self.bg_pixel(mem, bg, obj_window, x, y) {
+                        return col;
                     }
                 }
             }
@@ -357,30 +337,44 @@ impl SoftwareRenderer {
     }
 
     /// Find a pixel value for a particular background.
-    fn bg_pixel(&self, mem: &VideoMemory, bg: &BackgroundData, x: u32, y: u32) -> Option<Colour> {
-        match bg {
-            BackgroundData::Tiled(t) => {
-                // TODO: check window...
-                // TODO: mosaic..?
-                let scrolled_x = x.wrapping_add(t.scroll_x as u32);
-                let scrolled_y = y.wrapping_add(t.scroll_y as u32);
-                let texel = self.tile_bg_pixel(t, &mem.vram, scrolled_x, scrolled_y);
-                if texel != 0 {
-                    Some(self.palette_cache.get_bg(texel))
-                } else {
-                    None
-                }
-            },
-            BackgroundData::Affine(a) => {
-                let texel = self.affine_bg_pixel(a, &mem.vram, x, y);
-                if texel != 0 {
-                    Some(self.palette_cache.get_bg(texel))
-                } else {
-                    None
-                }
-            },
-            BackgroundData::Bitmap(b) => self.bitmap_bg_pixel(b, &mem.vram, &self.palette_cache, x, y)
+    fn bg_pixel(&self, mem: &VideoMemory, bg: &BackgroundData, obj_window: bool, x: u8, y: u8) -> Option<Colour> {
+        if mem.registers.windows_enabled() {
+            if !self.window_pixel(&mem.registers, bg.window_mask, obj_window, x, y) {
+                return None;
+            }
         }
+        // TODO: mosaic
+        match &bg.type_data {
+            BackgroundTypeData::Tiled(t) => {
+                let scrolled_x = (x as u32).wrapping_add(t.scroll_x as u32);
+                let scrolled_y = (y as u32).wrapping_add(t.scroll_y as u32);
+                self.tile_bg_pixel(t, &mem.vram, scrolled_x, scrolled_y)
+            },
+            BackgroundTypeData::Affine(a) => {
+                self.affine_bg_pixel(a, &mem.vram, x, y)
+            },
+            BackgroundTypeData::Bitmap(b) => self.bitmap_bg_pixel(b, &mem.vram, x, y)
+        }
+    }
+
+    /// Check if a background pixel should appear through windows.
+    fn window_pixel(&self, regs: &VideoRegisters, mask: WindowMask, obj_window: bool, x: u8, y: u8) -> bool {
+        if regs.window_0_enabled() {
+            if regs.x_inside_window_0(x) && regs.y_inside_window_0(y) {
+                return mask.contains(WindowMask::WINDOW_0);
+            }
+        }
+        if regs.window_1_enabled() {
+            if regs.x_inside_window_1(x) && regs.y_inside_window_1(y) {
+                return mask.contains(WindowMask::WINDOW_1);
+            }
+        }
+        if regs.window_obj_enabled() {
+            if obj_window {
+                return mask.contains(WindowMask::OBJ_WIN);
+            }
+        }
+        mask.contains(WindowMask::OUT_WIN)
     }
 }
 
@@ -422,31 +416,4 @@ impl SoftwareRenderer {
             }
         }
     }
-}
-
-// Helpers: addr calculation
-// TODO: maybe these should be moved?
-
-/// Provided the coordinates into an object, get the offset from the base tile.
-/// 
-/// The returned value is the offset in units of tiles. Multiply this by 2 when using 8bpp.
-fn tile_num_for_coord_2d(base_tile_num: u32, obj_x: u8, obj_y: u8) -> u32 {
-    const TILE_GRID_WIDTH: u32 = 0x20;
-    const TILE_GRID_HEIGHT: u32 = 0x20;
-    let base_tile_x = base_tile_num % TILE_GRID_WIDTH;
-    let base_tile_y = base_tile_num / TILE_GRID_WIDTH;
-    let tile_x = (obj_x / 8) as u32;
-    let tile_y = (obj_y / 8) as u32;
-    let target_tile_x = base_tile_x.wrapping_add(tile_x) % TILE_GRID_WIDTH;
-    let target_tile_y = base_tile_y.wrapping_add(tile_y) % TILE_GRID_HEIGHT;
-    target_tile_x + (target_tile_y * TILE_GRID_WIDTH)
-}
-
-/// Provided the coordinates into an object, and the base tile of the sprite,
-/// get the tile number for the coords provided.
-fn tile_offset_for_coord_1d(obj_x: u8, obj_y: u8, width_x: u8) -> u32 {
-    let tile_width = (width_x / 8) as u32;
-    let tile_x = (obj_x / 8) as u32;
-    let tile_y = (obj_y / 8) as u32;
-    tile_x + (tile_y * tile_width)
 }

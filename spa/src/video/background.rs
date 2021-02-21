@@ -1,21 +1,40 @@
+use bitflags::bitflags;
 use fixed::types::I24F8;
+
+use crate::common::bits::u8;
+
+pub struct BackgroundData {
+    pub priority:       u8,
+    pub window_mask:    WindowMask,
+    pub type_data:      BackgroundTypeData,
+}
 
 #[derive(Clone)]
 /// Background data for use by renderers
-pub enum BackgroundData {
+pub enum BackgroundTypeData {
     Tiled(TiledBackgroundData),
     Affine(AffineBackgroundData),
     Bitmap(BitmapBackgroundData)
 }
 
-impl BackgroundData {
-    pub fn priority(&self) -> u8 {
-        use BackgroundData::*;
-        match self {
-            Tiled(t) => t.priority,
-            Affine(a) => a.priority,
-            Bitmap(b) => b.priority
-        }
+bitflags! {
+    #[derive(Default)]
+    pub struct WindowMask: u8 {
+        const OUT_WIN   = u8::bit(3);
+        const OBJ_WIN   = u8::bit(2);
+        const WINDOW_1  = u8::bit(1);
+        const WINDOW_0  = u8::bit(0);
+    }
+}
+
+impl WindowMask {
+    pub fn make(win0: bool, win1: bool, obj_win: bool, out_win: bool) -> Self {
+        let mut ret = WindowMask::default();
+        ret.set(WindowMask::WINDOW_0, win0);
+        ret.set(WindowMask::WINDOW_1, win1);
+        ret.set(WindowMask::OBJ_WIN, obj_win);
+        ret.set(WindowMask::OUT_WIN, out_win);
+        ret
     }
 }
 
@@ -30,7 +49,6 @@ pub enum BackgroundMapLayout {
 /// Data for a tiled background.
 #[derive(Clone)]
 pub struct TiledBackgroundData {
-    pub priority:       u8,
     pub tile_map_addr:  u32,
     pub tile_data_addr: u32,
     pub use_8bpp:       bool,
@@ -44,7 +62,6 @@ pub struct TiledBackgroundData {
 /// Data for a tiled background.
 #[derive(Clone)]
 pub struct AffineBackgroundData {
-    pub priority:       u8,
     pub tile_map_addr:  u32,
     pub tile_data_addr: u32,
     pub mosaic:         bool,
@@ -62,7 +79,6 @@ pub struct AffineBackgroundData {
 /// Data for a bitmap background.
 #[derive(Clone)]
 pub struct BitmapBackgroundData {
-    pub priority:       u8,
     pub data_addr:      u32,
     pub use_15bpp:      bool,
     pub mosaic:         bool,

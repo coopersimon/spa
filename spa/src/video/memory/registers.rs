@@ -169,19 +169,35 @@ pub struct VideoRegisters {
     bg3_x_offset:   u16,
     bg3_y_offset:   u16,
     
+    // Public affine regs
     bg2_matrix_a:   u16,
     bg2_matrix_b:   u16,
     bg2_matrix_c:   u16,
     bg2_matrix_d:   u16,
     bg2_ref_x:      u32,
     bg2_ref_y:      u32,
+    // Internal affine regs
+    bg2_internal_a: I24F8,
+    bg2_internal_b: I24F8,
+    bg2_internal_c: I24F8,
+    bg2_internal_d: I24F8,
+    bg2_internal_x: I24F8,
+    bg2_internal_y: I24F8,
 
+    // Public affine regs
     bg3_matrix_a:   u16,
     bg3_matrix_b:   u16,
     bg3_matrix_c:   u16,
     bg3_matrix_d:   u16,
     bg3_ref_x:      u32,
     bg3_ref_y:      u32,
+    // Internal affine regs
+    bg3_internal_a: I24F8,
+    bg3_internal_b: I24F8,
+    bg3_internal_c: I24F8,
+    bg3_internal_d: I24F8,
+    bg3_internal_x: I24F8,
+    bg3_internal_y: I24F8,
 
     win0_x_right:   u8,
     win0_x_left:    u8,
@@ -219,10 +235,24 @@ impl VideoRegisters {
         self.lcd_status.set(LCDStatus::HBLANK_FLAG, enable);
     }
 
-    /// Set V-count.
-    pub fn set_v_count(&mut self, count: u8) {
-        self.vcount = count;
-        self.lcd_status.set(LCDStatus::VCOUNT_FLAG, count == bytes::u16::hi(self.lcd_status.bits()));
+    /// Increment v-count by one.
+    pub fn inc_v_count(&mut self) {
+        self.vcount += 1;
+        self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.vcount == bytes::u16::hi(self.lcd_status.bits()));
+        //self.bg2_internal_x += self.bg2_internal_b;
+        //self.bg2_internal_y += self.bg2_internal_d;
+        //self.bg3_internal_x += self.bg3_internal_b;
+        //self.bg3_internal_y += self.bg3_internal_d;
+    }
+
+    /// Reset v-count to zero.
+    pub fn reset_v_count(&mut self) {
+        self.vcount = 0;
+        self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.vcount == bytes::u16::hi(self.lcd_status.bits()));
+        self.bg2_internal_x = I24F8::from_bits(self.bg2_ref_x as i32);
+        self.bg2_internal_y = I24F8::from_bits(self.bg2_ref_y as i32);
+        self.bg3_internal_x = I24F8::from_bits(self.bg3_ref_x as i32);
+        self.bg3_internal_y = I24F8::from_bits(self.bg3_ref_y as i32);
     }
 
     pub fn v_blank_irq(&self) -> Interrupts {
@@ -260,6 +290,10 @@ impl VideoRegisters {
         (self.lcd_control & LCDControl::MODE).bits()
     }
 
+    pub fn is_obj_enabled(&self) -> bool {
+        self.lcd_control.contains(LCDControl::DISPLAY_OBJ)
+    }
+
     fn bitmap_frame(&self) -> bool {
         self.lcd_control.contains(LCDControl::FRAME_DISPLAY)
     }
@@ -273,7 +307,7 @@ impl VideoRegisters {
         let mut insert = |bg: Option<BackgroundData>| {
             if let Some(bg_data) = bg {
                 for i in 0..backgrounds.len() {
-                    if bg_data.priority() < backgrounds[i].priority() {
+                    if bg_data.priority < backgrounds[i].priority {
                         backgrounds.insert(i, bg_data);
                         return;
                     }
@@ -313,8 +347,7 @@ impl VideoRegisters {
 
     fn get_tiled_bg0(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG0) {
-            Some(BackgroundData::Tiled(TiledBackgroundData {
-                priority:       self.bg0_control.priority(),
+            let tiled_data = TiledBackgroundData {
                 tile_map_addr:  self.bg0_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg0_control.tile_data_block() * 16 * 1024,
                 use_8bpp:       self.bg0_control.use_8_bpp(),
@@ -322,7 +355,17 @@ impl VideoRegisters {
                 scroll_x:       self.bg0_x_offset,
                 scroll_y:       self.bg0_y_offset,
                 layout:         self.bg0_control.layout(),
-            }))
+            };
+            Some(BackgroundData {
+                priority:       self.bg0_control.priority(),
+                window_mask:    WindowMask::make(
+                    self.win0_inside.contains(WindowControl::BG0_ENABLE),
+                    self.win1_inside.contains(WindowControl::BG0_ENABLE),
+                    self.win_obj_inside.contains(WindowControl::BG0_ENABLE),
+                    self.win_outside.contains(WindowControl::BG0_ENABLE)
+                ),
+                type_data: BackgroundTypeData::Tiled(tiled_data)
+            })
         } else {
             None
         }
@@ -330,8 +373,7 @@ impl VideoRegisters {
 
     fn get_tiled_bg1(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG1) {
-            Some(BackgroundData::Tiled(TiledBackgroundData {
-                priority:       self.bg1_control.priority(),
+            let tiled_data = TiledBackgroundData {
                 tile_map_addr:  self.bg1_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg1_control.tile_data_block() * 16 * 1024,
                 use_8bpp:       self.bg1_control.use_8_bpp(),
@@ -339,7 +381,17 @@ impl VideoRegisters {
                 scroll_x:       self.bg1_x_offset,
                 scroll_y:       self.bg1_y_offset,
                 layout:         self.bg1_control.layout(),
-            }))
+            };
+            Some(BackgroundData {
+                priority:       self.bg1_control.priority(),
+                window_mask:    WindowMask::make(
+                    self.win0_inside.contains(WindowControl::BG1_ENABLE),
+                    self.win1_inside.contains(WindowControl::BG1_ENABLE),
+                    self.win_obj_inside.contains(WindowControl::BG1_ENABLE),
+                    self.win_outside.contains(WindowControl::BG1_ENABLE)
+                ),
+                type_data: BackgroundTypeData::Tiled(tiled_data)
+            })
         } else {
             None
         }
@@ -347,8 +399,7 @@ impl VideoRegisters {
 
     fn get_tiled_bg2(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
-            Some(BackgroundData::Tiled(TiledBackgroundData {
-                priority:       self.bg2_control.priority(),
+            let tiled_data = TiledBackgroundData {
                 tile_map_addr:  self.bg2_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg2_control.tile_data_block() * 16 * 1024,
                 use_8bpp:       self.bg2_control.use_8_bpp(),
@@ -356,7 +407,17 @@ impl VideoRegisters {
                 scroll_x:       self.bg2_x_offset,
                 scroll_y:       self.bg2_y_offset,
                 layout:         self.bg2_control.layout(),
-            }))
+            };
+            Some(BackgroundData {
+                priority:       self.bg2_control.priority(),
+                window_mask:    WindowMask::make(
+                    self.win0_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win1_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win_obj_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win_outside.contains(WindowControl::BG2_ENABLE)
+                ),
+                type_data: BackgroundTypeData::Tiled(tiled_data)
+            })
         } else {
             None
         }
@@ -364,8 +425,7 @@ impl VideoRegisters {
 
     fn get_tiled_bg3(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG3) {
-            Some(BackgroundData::Tiled(TiledBackgroundData {
-                priority:       self.bg3_control.priority(),
+            let tiled_data = TiledBackgroundData {
                 tile_map_addr:  self.bg3_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg3_control.tile_data_block() * 16 * 1024,
                 use_8bpp:       self.bg3_control.use_8_bpp(),
@@ -373,7 +433,17 @@ impl VideoRegisters {
                 scroll_x:       self.bg3_x_offset,
                 scroll_y:       self.bg3_y_offset,
                 layout:         self.bg3_control.layout(),
-            }))
+            };
+            Some(BackgroundData {
+                priority:       self.bg3_control.priority(),
+                window_mask:    WindowMask::make(
+                    self.win0_inside.contains(WindowControl::BG3_ENABLE),
+                    self.win1_inside.contains(WindowControl::BG3_ENABLE),
+                    self.win_obj_inside.contains(WindowControl::BG3_ENABLE),
+                    self.win_outside.contains(WindowControl::BG3_ENABLE)
+                ),
+                type_data: BackgroundTypeData::Tiled(tiled_data)
+            })
         } else {
             None
         }
@@ -381,20 +451,29 @@ impl VideoRegisters {
 
     fn get_affine_bg2(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
-            Some(BackgroundData::Affine(AffineBackgroundData {
-                priority:       self.bg2_control.priority(),
+            let affine_data = AffineBackgroundData {
                 tile_map_addr:  self.bg2_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg2_control.tile_data_block() * 16 * 1024,
                 mosaic:         self.bg2_control.is_mosaic(),
-                bg_ref_point_x: I24F8::from_bits(self.bg2_ref_x as i32),
-                bg_ref_point_y: I24F8::from_bits(self.bg2_ref_y as i32),
-                matrix_a:       I24F8::from_bits((self.bg2_matrix_a as i16) as i32),
-                matrix_b:       I24F8::from_bits((self.bg2_matrix_b as i16) as i32),
-                matrix_c:       I24F8::from_bits((self.bg2_matrix_c as i16) as i32),
-                matrix_d:       I24F8::from_bits((self.bg2_matrix_d as i16) as i32),
+                bg_ref_point_x: self.bg2_internal_x,
+                bg_ref_point_y: self.bg2_internal_y,
+                matrix_a:       self.bg2_internal_a,
+                matrix_b:       self.bg2_internal_b,
+                matrix_c:       self.bg2_internal_c,
+                matrix_d:       self.bg2_internal_d,
                 wrap:           self.bg2_control.affine_wraparound(),
                 size:           self.bg2_control.affine_size(),
-            }))
+            };
+            Some(BackgroundData {
+                priority:       self.bg2_control.priority(),
+                window_mask:    WindowMask::make(
+                    self.win0_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win1_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win_obj_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win_outside.contains(WindowControl::BG2_ENABLE)
+                ),
+                type_data: BackgroundTypeData::Affine(affine_data)
+            })
         } else {
             None
         }
@@ -402,20 +481,29 @@ impl VideoRegisters {
 
     fn get_affine_bg3(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG3) {
-            Some(BackgroundData::Affine(AffineBackgroundData {
-                priority:       self.bg3_control.priority(),
+            let affine_data = AffineBackgroundData {
                 tile_map_addr:  self.bg3_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg3_control.tile_data_block() * 16 * 1024,
                 mosaic:         self.bg3_control.is_mosaic(),
-                bg_ref_point_x: I24F8::from_bits(self.bg3_ref_x as i32),
-                bg_ref_point_y: I24F8::from_bits(self.bg3_ref_y as i32),
-                matrix_a:       I24F8::from_bits((self.bg3_matrix_a as i16) as i32),
-                matrix_b:       I24F8::from_bits((self.bg3_matrix_b as i16) as i32),
-                matrix_c:       I24F8::from_bits((self.bg3_matrix_c as i16) as i32),
-                matrix_d:       I24F8::from_bits((self.bg3_matrix_d as i16) as i32),
+                bg_ref_point_x: self.bg3_internal_x,
+                bg_ref_point_y: self.bg3_internal_y,
+                matrix_a:       self.bg3_internal_a,
+                matrix_b:       self.bg3_internal_b,
+                matrix_c:       self.bg3_internal_c,
+                matrix_d:       self.bg3_internal_d,
                 wrap:           self.bg3_control.affine_wraparound(),
                 size:           self.bg3_control.affine_size(),
-            }))
+            };
+            Some(BackgroundData {
+                priority:       self.bg3_control.priority(),
+                window_mask:    WindowMask::make(
+                    self.win0_inside.contains(WindowControl::BG3_ENABLE),
+                    self.win1_inside.contains(WindowControl::BG3_ENABLE),
+                    self.win_obj_inside.contains(WindowControl::BG3_ENABLE),
+                    self.win_outside.contains(WindowControl::BG3_ENABLE)
+                ),
+                type_data: BackgroundTypeData::Affine(affine_data)
+            })
         } else {
             None
         }
@@ -423,20 +511,25 @@ impl VideoRegisters {
 
     fn get_bitmap_bg(&self, offset: u32, use_15bpp: bool, small: bool) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
-            Some(BackgroundData::Bitmap(BitmapBackgroundData {
-                priority:   self.bg2_control.priority(),
+            let bitmap_data = BitmapBackgroundData {
                 data_addr:  offset,
                 use_15bpp:  use_15bpp,
                 mosaic:     self.bg2_control.is_mosaic(),
                 small:      small,
-            }))
+            };
+            Some(BackgroundData {
+                priority:       self.bg2_control.priority(),
+                window_mask:    WindowMask::make(
+                    self.win0_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win1_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win_obj_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win_outside.contains(WindowControl::BG2_ENABLE)
+                ),
+                type_data: BackgroundTypeData::Bitmap(bitmap_data)
+            })
         } else {
             None
         }
-    }
-
-    pub fn is_obj_enabled(&self) -> bool {
-        self.lcd_control.contains(LCDControl::DISPLAY_OBJ)
     }
 
     /// Returns true if tiles should map in 1D.
@@ -449,29 +542,36 @@ impl VideoRegisters {
     pub fn windows_enabled(&self) -> bool {
         self.lcd_control.intersects(LCDControl::DISPLAY_WIN0 | LCDControl::DISPLAY_WIN1 | LCDControl::DISPLAY_OBJ_WIN)
     }
+    pub fn window_0_enabled(&self) -> bool {
+        self.lcd_control.contains(LCDControl::DISPLAY_WIN0)
+    }
+    pub fn window_1_enabled(&self) -> bool {
+        self.lcd_control.contains(LCDControl::DISPLAY_WIN1)
+    }
+    pub fn window_obj_enabled(&self) -> bool {
+        self.lcd_control.contains(LCDControl::DISPLAY_OBJ_WIN)
+    }
 
-    pub fn obj_window_0(&self) -> bool {
-        self.lcd_control.contains(LCDControl::DISPLAY_WIN0) && self.win0_inside.contains(WindowControl::OBJ_ENABLE)
+    pub fn obj_window_mask(&self) -> WindowMask {
+        WindowMask::make(
+            self.win0_inside.contains(WindowControl::OBJ_ENABLE),
+            self.win1_inside.contains(WindowControl::OBJ_ENABLE),
+            self.win_obj_inside.contains(WindowControl::OBJ_ENABLE),
+            self.win_outside.contains(WindowControl::OBJ_ENABLE)
+        )
     }
 
     /// Check if window 0 should be used for this line.
     pub fn y_inside_window_0(&self, y: u8) -> bool {
         y >= self.win0_y_top && y < self.win0_y_bottom
     }
-
     pub fn x_inside_window_0(&self, x: u8) -> bool {
         x >= self.win0_x_left && x < self.win0_x_right
     }
-
-    pub fn obj_window_1(&self) -> bool {
-        self.lcd_control.contains(LCDControl::DISPLAY_WIN1) && self.win1_inside.contains(WindowControl::OBJ_ENABLE)
-    }
-
     /// Check if window 0 should be used for this line.
     pub fn y_inside_window_1(&self, y: u8) -> bool {
         y >= self.win1_y_top && y < self.win1_y_bottom
     }
-
     pub fn x_inside_window_1(&self, x: u8) -> bool {
         x >= self.win1_x_left && x < self.win1_x_right
     }
@@ -546,22 +646,70 @@ impl MemInterface16 for VideoRegisters {
             0x1A => self.bg2_y_offset = data,
             0x1C => self.bg3_x_offset = data,
             0x1E => self.bg3_y_offset = data,
-            0x20 => self.bg2_matrix_a = data,
-            0x22 => self.bg2_matrix_b = data,
-            0x24 => self.bg2_matrix_c = data,
-            0x26 => self.bg2_matrix_d = data,
-            0x28 => self.bg2_ref_x = bytes::u32::set_lo(self.bg2_ref_x, data),
-            0x2A => self.bg2_ref_x = bytes::u32::set_hi(self.bg2_ref_x, sign_extend_12bit(data & 0xFFF)),
-            0x2C => self.bg2_ref_y = bytes::u32::set_lo(self.bg2_ref_y, data),
-            0x2E => self.bg2_ref_y = bytes::u32::set_hi(self.bg2_ref_y, sign_extend_12bit(data & 0xFFF)),
-            0x30 => self.bg3_matrix_a = data,
-            0x32 => self.bg3_matrix_b = data,
-            0x34 => self.bg3_matrix_c = data,
-            0x36 => self.bg3_matrix_d = data,
-            0x38 => self.bg3_ref_x = bytes::u32::set_lo(self.bg3_ref_x, data),
-            0x3A => self.bg3_ref_x = bytes::u32::set_hi(self.bg3_ref_x, sign_extend_12bit(data & 0xFFF)),
-            0x3C => self.bg3_ref_y = bytes::u32::set_lo(self.bg3_ref_y, data),
-            0x3E => self.bg3_ref_y = bytes::u32::set_hi(self.bg3_ref_y, sign_extend_12bit(data & 0xFFF)),
+            0x20 => {
+                self.bg2_matrix_a = data;
+                self.bg2_internal_a = I24F8::from_bits((self.bg2_matrix_a as i16) as i32);
+            },
+            0x22 => {
+                self.bg2_matrix_b = data;
+                self.bg2_internal_b = I24F8::from_bits((self.bg2_matrix_b as i16) as i32);
+            },
+            0x24 => {
+                self.bg2_matrix_c = data;
+                self.bg2_internal_c = I24F8::from_bits((self.bg2_matrix_c as i16) as i32);
+            },
+            0x26 => {
+                self.bg2_matrix_d = data;
+                self.bg2_internal_d = I24F8::from_bits((self.bg2_matrix_d as i16) as i32);
+            },
+            0x28 => {
+                self.bg2_ref_x = bytes::u32::set_lo(self.bg2_ref_x, data);
+                self.bg2_internal_x = I24F8::from_bits(self.bg2_ref_x as i32);
+            },
+            0x2A => {
+                self.bg2_ref_x = bytes::u32::set_hi(self.bg2_ref_x, sign_extend_12bit(data & 0xFFF));
+                self.bg2_internal_x = I24F8::from_bits(self.bg2_ref_x as i32);
+            },
+            0x2C => {
+                self.bg2_ref_y = bytes::u32::set_lo(self.bg2_ref_y, data);
+                self.bg2_internal_y = I24F8::from_bits(self.bg2_ref_y as i32);
+            },
+            0x2E => {
+                self.bg2_ref_y = bytes::u32::set_hi(self.bg2_ref_y, sign_extend_12bit(data & 0xFFF));
+                self.bg2_internal_y = I24F8::from_bits(self.bg2_ref_y as i32);
+            },
+            0x30 => {
+                self.bg3_matrix_a = data;
+                self.bg3_internal_a = I24F8::from_bits((self.bg3_matrix_a as i16) as i32);
+            },
+            0x32 => {
+                self.bg3_matrix_b = data;
+                self.bg3_internal_b = I24F8::from_bits((self.bg3_matrix_b as i16) as i32);
+            },
+            0x34 => {
+                self.bg3_matrix_c = data;
+                self.bg3_internal_c = I24F8::from_bits((self.bg3_matrix_c as i16) as i32);
+            },
+            0x36 => {
+                self.bg3_matrix_d = data;
+                self.bg3_internal_d = I24F8::from_bits((self.bg3_matrix_d as i16) as i32);
+            },
+            0x38 => {
+                self.bg3_ref_x = bytes::u32::set_lo(self.bg3_ref_x, data);
+                self.bg3_internal_x = I24F8::from_bits(self.bg3_ref_x as i32);
+            },
+            0x3A => {
+                self.bg3_ref_x = bytes::u32::set_hi(self.bg3_ref_x, sign_extend_12bit(data & 0xFFF));
+                self.bg3_internal_x = I24F8::from_bits(self.bg3_ref_x as i32);
+            },
+            0x3C => {
+                self.bg3_ref_y = bytes::u32::set_lo(self.bg3_ref_y, data);
+                self.bg3_internal_y = I24F8::from_bits(self.bg3_ref_y as i32);
+            },
+            0x3E => {
+                self.bg3_ref_y = bytes::u32::set_hi(self.bg3_ref_y, sign_extend_12bit(data & 0xFFF));
+                self.bg3_internal_y = I24F8::from_bits(self.bg3_ref_y as i32);
+            },
             0x40 => {
                 self.win0_x_right = bytes::u16::lo(data);
                 self.win0_x_left = bytes::u16::hi(data);

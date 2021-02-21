@@ -77,16 +77,17 @@ impl VRAM {
     }
 
     /// Get a bitmap texel, using 256-colour palette.
-    pub fn bitmap_texel_8bpp(&self, addr: u32, x: u32, y: u32) -> u8 {
-        let y_offset = y * 240;
-        self.data[(addr + y_offset + x) as usize]
+    pub fn bitmap_texel_8bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
+        let y_offset = (y as u32) * 240;
+        let x_offset = x as u32;
+        self.data[(addr + y_offset + x_offset) as usize]
     }
 
     /// Get a bitmap texel, using direct colour.
     /// Bitmap size is 240x160.
-    pub fn bitmap_texel_15bpp(&self, addr: u32, x: u32, y: u32) -> u16 {
-        let y_offset = y * 480;
-        let x_offset = x * 2;
+    pub fn bitmap_texel_15bpp(&self, addr: u32, x: u8, y: u8) -> u16 {
+        let y_offset = (y as u32) * 480;
+        let x_offset = (x as u32) * 2;
         let texel_addr = (addr + y_offset + x_offset) as usize;
 
         let start = texel_addr;
@@ -97,9 +98,9 @@ impl VRAM {
 
     /// Get a bitmap texel, using direct colour.
     /// Bitmap size is 160x128.
-    pub fn small_bitmap_texel_15bpp(&self, addr: u32, x: u32, y: u32) -> u16 {
-        let y_offset = y * 320;
-        let x_offset = x * 2;
+    pub fn small_bitmap_texel_15bpp(&self, addr: u32, x: u8, y: u8) -> u16 {
+        let y_offset = (y as u32) * 320;
+        let x_offset = (x as u32) * 2;
         let texel_addr = (addr + y_offset + x_offset) as usize;
 
         let start = texel_addr;
