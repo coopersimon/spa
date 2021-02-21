@@ -10,7 +10,7 @@ mod audio;
 use arm::{
     ARM7TDMI, ARMCore
 };
-
+use std::path::Path;
 use memory::MemoryBus;
 
 pub enum Button {
@@ -33,8 +33,8 @@ pub struct GBA {
 }
 
 impl GBA {
-    pub fn new(cart_path: &std::path::Path, bios_path: Option<&std::path::Path>) -> Self {
-        let bus = MemoryBus::new(cart_path, bios_path).unwrap();
+    pub fn new(rom_path: &Path, save_path: Option<&Path>, bios_path: Option<&Path>) -> Self {
+        let bus = MemoryBus::new(rom_path, save_path, bios_path).unwrap();
         Self {
             cpu: ARM7TDMI::new(bus, std::collections::HashMap::new()),
 
@@ -64,6 +64,7 @@ impl GBA {
         }
         self.cycle_count -= constants::gba::FRAME_CYCLES;
         self.cpu.ref_mem().get_frame_data(frame);
+        self.cpu.ref_mem_mut().flush_save();
     }
 
     pub fn render_size(&mut self) -> (usize, usize) {

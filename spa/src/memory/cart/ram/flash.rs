@@ -53,7 +53,8 @@ impl FLASH {
     /// Create FLASH from an existing save file.
     pub fn new_from_file(mut file: File, size: usize) -> Result<Self> {
         let mut buffer = vec![0; size];
-        file.read_to_end(&mut buffer)?;
+        file.seek(SeekFrom::Start(4))?;
+        file.read_exact(&mut buffer)?;
         Ok(Self {
             ram:            buffer,
             file:           Some(file),

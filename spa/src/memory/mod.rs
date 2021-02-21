@@ -5,6 +5,7 @@ mod cart;
 mod bios;
 
 use arm::{Mem32, MemCycleType};
+use std::path::Path;
 use crate::{
     common::bits::u8,
     common::meminterface::{MemInterface8, MemInterface16},
@@ -41,9 +42,9 @@ pub struct MemoryBus<R: Renderer> {
 }
 
 impl<R: Renderer> MemoryBus<R> {
-    pub fn new(cart_path: &std::path::Path, bios_path: Option<&std::path::Path>) -> std::io::Result<Self> {
+    pub fn new(rom_path: &Path, save_path: Option<&Path>, bios_path: Option<&Path>) -> std::io::Result<Self> {
         let bios = bios::BIOS::new(bios_path)?;
-        let game_pak = cart::GamePak::new(cart_path)?;
+        let game_pak = cart::GamePak::new(rom_path, save_path)?;
         Ok(Self {
             bios:       bios,
             internal:   Internal::new(),
@@ -161,6 +162,11 @@ impl<R: Renderer> MemoryBus<R> {
 
     pub fn set_button(&mut self, buttons: Buttons, pressed: bool) {
         self.joypad.set_button(buttons, pressed);
+    }
+
+    /// Write the save file to memory if dirty.
+    pub fn flush_save(&mut self) {
+        self.game_pak.flush_save();
     }
 }
 

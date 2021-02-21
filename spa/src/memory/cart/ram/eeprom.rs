@@ -79,7 +79,8 @@ impl EEPROM {
             EEPROMSize::Unknown => panic!("don't create unknown EEPROM sizes from files")
         };
         let mut buffer = vec![0; buffer_size];
-        file.read_to_end(&mut buffer)?;
+        file.seek(SeekFrom::Start(4))?;
+        file.read_exact(&mut buffer)?;
         Ok(Self {
             ram:            buffer,
             file:           Some(file),

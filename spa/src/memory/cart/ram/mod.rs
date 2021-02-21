@@ -10,7 +10,10 @@ use std::{
         Result,
         Read,
     },
-    fs::File
+    fs::{
+        File,
+        OpenOptions
+    }
 };
 use crate::common::meminterface::MemInterface8;
 
@@ -40,9 +43,7 @@ pub fn make_save_ram(rom: &[u8], save_path: Option<&Path>) -> (Box<dyn SaveRAM>,
 
     // See if save file exists.
     let file = if let Some(path) = save_path {
-        if let Ok(file) = File::open(path) {
-            //let mut save_reader = BufReader::new(file);
-            //save_reader.read_exact(&mut ram.data).map_err(|e| e.to_string())?;
+        if let Ok(file) = OpenOptions::new().read(true).write(true).open(path) {
             match make_from_existing(file) {
                 Ok(save_ram) => return save_ram,
                 Err(e) => println!("Can't use existing file: {}", e)
@@ -74,7 +75,9 @@ pub fn make_save_ram(rom: &[u8], save_path: Option<&Path>) -> (Box<dyn SaveRAM>,
 fn make_from_existing(mut file: File) -> Result<(Box<dyn SaveRAM>, bool)> {
     let mut buf = vec![0; 4];
     file.read_exact(&mut buf)?;
-    match String::from_utf8(buf).unwrap().as_str() {
+    let s = String::from_utf8(buf).unwrap();
+    println!("Found existing save: {}", s);
+    match s.as_str() {
         SRAM_CODE => Ok((Box::new(SRAM::new_from_file(file)?), false)),
         FLASH_64_CODE => Ok((Box::new(FLASH::new_from_file(file, FLASH_64_SIZE)?), false)),
         FLASH_128_CODE => Ok((Box::new(FLASH::new_from_file(file, FLASH_128_SIZE)?), false)),

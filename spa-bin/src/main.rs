@@ -32,22 +32,23 @@ fn main() {
         (version: crate_version!())
         (author: "Simon Cooper")
         (about: "Gameboy Advance emulator.")
-        (@arg CART: "The path to the game cart to use.")
+        (@arg ROM: "The path to the game ROM to use.")
         (@arg debug: -d "Enter debug mode.")
-        //(@arg save: -s +takes_value "Save file path.")
+        (@arg save: -s +takes_value "Save file path.")
         (@arg biosrom: -r +takes_value "BIOS ROM path. Needed for certain games.")
     );
 
     let cmd_args = app.get_matches();
 
-    let cart_path = match cmd_args.value_of("CART") {
+    let rom_path = match cmd_args.value_of("ROM") {
         Some(c) => std::path::Path::new(c),
-        None => panic!("Usage: spa [cart name]. Run with --help for more options."),
+        None => panic!("Usage: spa [ROM name]. Run with --help for more options."),
     };
 
+    let save_path = cmd_args.value_of("save").map(|s| std::path::Path::new(s));
     let bios_path = cmd_args.value_of("biosrom").map(|s| std::path::Path::new(s));
 
-    let mut gba = GBA::new(&cart_path, bios_path);
+    let mut gba = GBA::new(&rom_path, save_path, bios_path);
     let render_size = gba.render_size();
 
     if cmd_args.is_present("debug") {

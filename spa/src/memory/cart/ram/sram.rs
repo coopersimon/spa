@@ -26,7 +26,8 @@ impl SRAM {
     /// Create SRAM from an existing save file.
     pub fn new_from_file(mut file: File) -> Result<Self> {
         let mut buffer = vec![0; SRAM_SIZE];
-        file.read_to_end(&mut buffer)?;
+        file.seek(SeekFrom::Start(4))?;
+        file.read_exact(&mut buffer)?;
         Ok(Self {
             ram:    buffer,
             file:   Some(file),

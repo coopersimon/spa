@@ -29,13 +29,13 @@ pub struct GamePak {
 }
 
 impl GamePak {
-    pub fn new(cart_path: &Path) -> Result<Self> {
-        let mut cart_file = File::open(cart_path)?;
+    pub fn new(rom_path: &Path, save_path: Option<&Path>) -> Result<Self> {
+        let mut rom_file = File::open(rom_path)?;
         let mut buffer = Vec::new();
-        cart_file.read_to_end(&mut buffer)?;
+        rom_file.read_to_end(&mut buffer)?;
 
         // Detect save file type.
-        let (ram, eeprom) = make_save_ram(&buffer, None);
+        let (ram, eeprom) = make_save_ram(&buffer, save_path);
         let is_large = buffer.len() > 0x0100_0000;
 
         // Fill buffer with garbage.
@@ -51,6 +51,10 @@ impl GamePak {
             large:  is_large,
             eeprom: eeprom,
         })
+    }
+
+    pub fn flush_save(&mut self) {
+        self.ram.flush();
     }
 }
 
