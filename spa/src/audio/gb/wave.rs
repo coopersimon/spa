@@ -62,6 +62,11 @@ impl Wave {
 
     pub fn set_playback_reg(&mut self, val: u8) {
         self.playback_reg = val;
+        self.pattern_index = if u8::test_bit(val, 6) {
+            32
+        } else {
+            0
+        };
     }
 
     pub fn set_length_reg(&mut self, val: u8) {
@@ -110,12 +115,17 @@ impl GBChannel for Wave {
         self.freq_counter += cycles;
         if self.freq_counter >= self.freq_modulo {
             self.freq_counter -= self.freq_modulo;
-            let pattern_offset = if u8::test_bit(self.playback_reg, 5) {
-                32
+            if u8::test_bit(self.playback_reg, 5) {
+                self.pattern_index = (self.pattern_index + 1) % 64;
             } else {
-                0
-            };
-            self.pattern_index = pattern_offset + (self.pattern_index + 1) % 32;
+                let pattern_offset = if u8::test_bit(self.playback_reg, 6) {
+                    32
+                } else {
+                    0
+                };
+                let index = (self.pattern_index + 1) % 32;
+                self.pattern_index = pattern_offset + index;
+            }
         }
     }
 

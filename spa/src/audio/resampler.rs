@@ -33,11 +33,10 @@ impl Iterator for Resampler {
     type Item = Stereo<f32>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while self.converter.is_exhausted() {
-            if let Ok(source_sample_rate) = self.source_rate_recv.try_recv() {
-                self.converter.set_hz_to_hz(source_sample_rate, self.target_rate);
-            }
+        if let Ok(source_sample_rate) = self.source_rate_recv.try_recv() {
+            self.converter.set_hz_to_hz(source_sample_rate, self.target_rate);
         }
+        while self.converter.is_exhausted() {}
         Some(self.converter.next())
     }
 }

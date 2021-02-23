@@ -82,5 +82,7 @@ pub const fn u4_to_i8(amplitude: u8) -> i8 {
 
 // Convert from 4-bit signed samples to 8-bit signed.
 pub const fn i4_to_i8(amplitude: u8) -> i8 {
-    ((amplitude << 4) | amplitude) as i8
+    let hi = amplitude << 4;
+    let lo = (amplitude & 7) << 1;
+    (hi | lo) as i8
 }
