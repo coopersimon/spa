@@ -151,16 +151,29 @@ impl<R: Renderer> MemoryBus<R> {
     /// Indicate to the memory bus that cycles have passed.
     /// The cycles passed into here should come from the CPU.
     pub fn clock(&mut self, cycles: usize) {
-        self.audio.clock(cycles);
         let (video_signal, video_irq) = self.video.clock(cycles);
         match video_signal {
             Signal::VBlank => self.dma.on_vblank(),
             Signal::HBlank => self.dma.on_hblank(),
             Signal::None => {},
         }
+
+        let (timer_irq, timer_0, timer_1) = self.timers.clock(cycles);
+        if timer_0 {
+            if self.audio.timer_0_tick() {
+                self.dma.on_sound_fifo_1();
+            }
+        }
+        if timer_1 {
+            if self.audio.timer_1_tick() {
+                self.dma.on_sound_fifo_2();
+            }
+        }
+        self.audio.clock(cycles);
+
         self.interrupt_control.interrupt_request(
             self.joypad.get_interrupt() |
-            self.timers.clock(cycles)   |
+            timer_irq |
             video_irq
         );
     }
@@ -400,7 +413,7 @@ macro_rules! MemoryBusIO {
 
 MemoryBusIO!{
     (0x0400_0000, 0x0400_0057, video),
-    (0x0400_0060, 0x0400_008F, audio),
+    (0x0400_0060, 0x0400_00AF, audio),
     (0x0400_00B0, 0x0400_00DF, dma),
     (0x0400_0100, 0x0400_010F, timers),
     (0x0400_0130, 0x0400_0133, joypad),

@@ -23,12 +23,17 @@ impl Timers {
     }
 
     /// Clock the timers. Should be done as often as possible.
-    /// Returns any interrupts to request.
-    pub fn clock(&mut self, cycles: usize) -> Interrupts {
+    /// 
+    /// Returns any interrupts to request,
+    /// as well as two bools indicating if timer 0 or 1 overflowed.
+    pub fn clock(&mut self, cycles: usize) -> (Interrupts, bool, bool) {
         let mut interrupts = Interrupts::default();
+        let mut timer_0 = false;
+        let mut timer_1 = false;
         let mut overflows = self.timers[0].clock(cycles);
         if overflows > 0 {
             interrupts.insert(self.timers[0].get_interrupt());
+            timer_0 = true;
         }
         for t in 1..4 {
             overflows = if self.timers[t].cascade_enabled() {
@@ -42,9 +47,12 @@ impl Timers {
             };
             if overflows > 0 {
                 interrupts.insert(self.timers[t].get_interrupt());
+                if t == 1 {
+                    timer_1 = true;
+                }
             }
         }
-        interrupts
+        (interrupts, timer_0, timer_1)
     }
 
     pub fn read_byte(&self, addr: u32) -> u8 {

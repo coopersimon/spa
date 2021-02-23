@@ -41,10 +41,10 @@ impl DMA {
     pub fn new() -> Self {
         Self {
             channels: [
-                DMAChannel::new(Interrupts::DMA_0, 0x3FFF),
-                DMAChannel::new(Interrupts::DMA_1, 0x3FFF),
-                DMAChannel::new(Interrupts::DMA_2, 0x3FFF),
-                DMAChannel::new(Interrupts::DMA_3, 0xFFFF),
+                DMAChannel::new(Interrupts::DMA_0, 0x3FFF, false),
+                DMAChannel::new(Interrupts::DMA_1, 0x3FFF, true),
+                DMAChannel::new(Interrupts::DMA_2, 0x3FFF, true),
+                DMAChannel::new(Interrupts::DMA_3, 0xFFFF, false),
             ],
             active: [
                 false, false, false, false
@@ -82,8 +82,12 @@ impl DMA {
     }
 
     /// To be called when requested by sound FIFO.
-    pub fn on_sound_fifo(&mut self) {
+    pub fn on_sound_fifo_1(&mut self) {
         self.active[1] = self.active[1] || self.channels[1].should_start_special();
+    }
+
+    /// To be called when requested by sound FIFO.
+    pub fn on_sound_fifo_2(&mut self) {
         self.active[2] = self.active[2] || self.channels[2].should_start_special();
     }
 
@@ -187,12 +191,13 @@ pub struct DMAChannel {
     current_count:      u16,
 
     // Channel-specific data (will remain const)
+    fifo_special:       bool,
     word_count_mask:    u16,
     interrupt:          Interrupts,
 }
 
 impl DMAChannel {
-    pub fn new(interrupt: Interrupts, word_count_mask: u16) -> Self {
+    pub fn new(interrupt: Interrupts, word_count_mask: u16, fifo: bool) -> Self {
         Self {
             src_addr:           0,
             dst_addr:           0,
@@ -204,6 +209,7 @@ impl DMAChannel {
             current_dst_addr:   0,
             current_count:      0,
 
+            fifo_special:       fifo,
             word_count_mask:    word_count_mask,
             interrupt:          interrupt,
         }
@@ -231,7 +237,7 @@ impl DMAChannel {
 
     /// Check to see if a 32-bit word should be transferred.
     pub fn transfer_32bit_word(&self) -> bool {
-        self.control.contains(Control::WORD_TYPE)
+        self.fifo_mode() || self.control.contains(Control::WORD_TYPE)
     }
 
     /// Get next pair of addresses.
@@ -313,19 +319,28 @@ impl DMAChannel {
         self.control = Control::from_bits_truncate(data);
         let enabled = self.control.contains(Control::ENABLE);
         if enabled && !was_enabled {
-            self.current_count = self.word_count;
+            self.current_count = if self.fifo_mode() {
+                4
+            } else {
+                self.word_count
+            };
             self.current_src_addr = self.src_addr;
             self.current_dst_addr = self.dst_addr;
             //println!("Enable DMA! Count: {:X}  Src:{:X} Dst:{:X}", self.current_count, self.current_src_addr, self.current_dst_addr);
         }
-        self.word_size = if self.control.contains(Control::WORD_TYPE) {4} else {2};
+        self.word_size = if self.transfer_32bit_word() {4} else {2};
     }
 
     /// Call on completion of DMA transfer.
     fn reset(&mut self) -> Interrupts {
         if self.control.contains(Control::REPEAT) {
-            self.current_count = self.word_count;
-            if (self.control & Control::DST_ADDR_MODE).bits() == u16::bits(5, 6) {
+            let fifo_mode = self.fifo_mode();
+            self.current_count = if fifo_mode {
+                4
+            } else {
+                self.word_count
+            };
+            if fifo_mode || (self.control & Control::DST_ADDR_MODE).bits() == u16::bits(5, 6) {
                 self.current_dst_addr = self.dst_addr;
             }
         } else {
@@ -337,5 +352,9 @@ impl DMAChannel {
         } else {
             Interrupts::default()
         }
+    }
+
+    fn fifo_mode(&self) -> bool {
+        self.fifo_special && self.should_start_special()
     }
 }

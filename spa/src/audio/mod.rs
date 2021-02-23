@@ -33,7 +33,7 @@ bitflags! {
 
 bitflags! {
     #[derive(Default)]
-    struct PSGMixing: u8 {
+    struct FifoMixing: u8 {
         const B_RESET_FIFO      = u8::bit(7);
         const B_TIMER_SELECT    = u8::bit(6);
         const B_ENABLE_LEFT     = u8::bit(5);
@@ -78,16 +78,22 @@ pub struct GBAAudio {
     noise:      noise::Noise,
 
     // Control registers
-    gb_vol:     u8,
-    gb_enable:  ChannelEnables,
-    master_vol: MasterVolume,
-    psg_mixing: PSGMixing,
-    sound_on:   PowerControl,
-    soundbias:  u16,
+    gb_vol:         u8,
+    gb_enable:      ChannelEnables,
+    master_vol:     MasterVolume,
+    fifo_mixing:    FifoMixing,
+    sound_on:       bool,
+    soundbias:      u16,
 
     // Fifo
-    fifo_a:     [i8; 32],
-    fifo_b:     [i8; 32],
+    fifo_a:         [i8; 32],
+    buffer_a:       i16,
+    write_index_a:  usize,
+    read_index_a:   usize,
+    fifo_b:         [i8; 32],
+    buffer_b:       i16,
+    write_index_b:  usize,
+    read_index_b:   usize,
 
     // Comms with audio thread
     sample_buffer:      Vec<Stereo<f32>>,
@@ -111,15 +117,21 @@ impl GBAAudio {
             wave:       wave::Wave::new(),
             noise:      noise::Noise::new(),
 
-            gb_vol:     0,
-            gb_enable:  ChannelEnables::default(),
-            master_vol: MasterVolume::default(),
-            psg_mixing: PSGMixing::default(),
-            sound_on:   PowerControl::default(),
-            soundbias:  0x200,
+            gb_vol:         0,
+            gb_enable:      ChannelEnables::default(),
+            master_vol:     MasterVolume::default(),
+            fifo_mixing:    FifoMixing::default(),
+            sound_on:       false,
+            soundbias:      0x200,
 
-            fifo_a:     [0; 32],
-            fifo_b:     [0; 32],
+            fifo_a:         [0; 32],
+            buffer_a:       0,
+            write_index_a:  0,
+            read_index_a:   0,
+            fifo_b:         [0; 32],
+            buffer_b:       0,
+            write_index_b:  0,
+            read_index_b:   0,
 
             sample_buffer:      Vec::new(),
             sample_sender:      None,
@@ -168,6 +180,58 @@ impl GBAAudio {
             }
         }
     }
+
+    /// Called when timer 0 overflows.
+    /// 
+    /// If true is returned, DMA1 should transfer more data into the buffer.
+    pub fn timer_0_tick(&mut self) -> bool {
+        let mut dma = false;
+        if self.sound_on {
+            if !self.fifo_mixing.contains(FifoMixing::A_TIMER_SELECT) {
+                self.buffer_a = self.fifo_a[self.read_index_a] as i16;
+                self.read_index_a = (self.read_index_a + 1) % 32;
+                let bytes_remaining = (self.write_index_a - self.read_index_a) % 32;
+                if bytes_remaining < 16 {
+                    dma = true;
+                }
+            }
+            if !self.fifo_mixing.contains(FifoMixing::B_TIMER_SELECT) {
+                self.buffer_b = self.fifo_b[self.read_index_b] as i16;
+                self.read_index_b = (self.read_index_b + 1) % 32;
+                let bytes_remaining = (self.write_index_b - self.read_index_b) % 32;
+                if bytes_remaining < 16 {
+                    dma = true;
+                }
+            }
+        }
+        dma
+    }
+
+    /// Called when timer 1 overflows.
+    /// 
+    /// If true is returned, DMA2 should transfer more data into the buffer.
+    pub fn timer_1_tick(&mut self) -> bool {
+        let mut dma = false;
+        if self.sound_on {
+            if self.fifo_mixing.contains(FifoMixing::A_TIMER_SELECT) {
+                self.buffer_a = self.fifo_a[self.read_index_a] as i16;
+                self.read_index_a = (self.read_index_a + 1) % 32;
+                let bytes_remaining = (self.write_index_a - self.read_index_a) % 32;
+                if bytes_remaining < 16 {
+                    dma = true;
+                }
+            }
+            if self.fifo_mixing.contains(FifoMixing::B_TIMER_SELECT) {
+                self.buffer_b = self.fifo_b[self.read_index_b] as i16;
+                self.read_index_b = (self.read_index_b + 1) % 32;
+                let bytes_remaining = (self.write_index_b - self.read_index_b) % 32;
+                if bytes_remaining < 16 {
+                    dma = true;
+                }
+            }
+        }
+        dma
+    }
 }
 
 impl MemInterface8 for GBAAudio {
@@ -199,8 +263,15 @@ impl MemInterface8 for GBAAudio {
             0x20 => self.gb_vol,
             0x21 => self.gb_enable.bits(),
             0x22 => self.master_vol.bits(),
-            0x23 => self.psg_mixing.bits(),
-            0x24 => self.sound_on.bits(),
+            0x23 => self.fifo_mixing.bits(),
+            0x24 => {
+                let mut sound_on = PowerControl::default();
+                sound_on.set(PowerControl::PLAYING_1, self.square_1.is_enabled());
+                sound_on.set(PowerControl::PLAYING_2, self.square_2.is_enabled());
+                sound_on.set(PowerControl::PLAYING_3, self.wave.is_enabled());
+                sound_on.set(PowerControl::PLAYING_4, self.noise.is_enabled());
+                sound_on.bits()
+            },
             0x28 => u16::lo(self.soundbias),
             0x29 => u16::hi(self.soundbias),
 
@@ -238,10 +309,31 @@ impl MemInterface8 for GBAAudio {
             0x20 => self.gb_vol = data,
             0x21 => self.gb_enable = ChannelEnables::from_bits_truncate(data),
             0x22 => self.master_vol = MasterVolume::from_bits_truncate(data),
-            0x23 => self.psg_mixing = PSGMixing::from_bits_truncate(data),
+            0x23 => {
+                self.fifo_mixing = FifoMixing::from_bits_truncate(data);
+                if self.fifo_mixing.contains(FifoMixing::A_RESET_FIFO) {
+                    for d in &mut self.fifo_a {
+                        *d = 0;
+                    }
+                    self.buffer_a = 0;
+                    self.write_index_a = 0;
+                    self.read_index_a = 0;
+                }
+                if self.fifo_mixing.contains(FifoMixing::B_RESET_FIFO) {
+                    for d in &mut self.fifo_b {
+                        *d = 0;
+                    }
+                    self.buffer_b = 0;
+                    self.write_index_b = 0;
+                    self.read_index_b = 0;
+                }
+            },
             0x24 => {
-                self.sound_on = PowerControl::from_bits_truncate(data);
-                // TODO: enable
+                let sound_on = PowerControl::from_bits_truncate(data);
+                self.sound_on = sound_on.contains(PowerControl::POWER);
+                if !self.sound_on {
+                    self.reset();
+                }
             },
             0x28 => self.soundbias = u16::set_lo(self.soundbias, data),
             0x29 => {
@@ -251,6 +343,9 @@ impl MemInterface8 for GBAAudio {
 
             0x30..=0x3F => self.wave.write_wave(addr - 0x30, data),
 
+            0x40..=0x43 => self.write_fifo_a(data),
+            0x44..=0x47 => self.write_fifo_b(data),
+
             _ => {}
         }
     }
@@ -258,12 +353,14 @@ impl MemInterface8 for GBAAudio {
 
 impl GBAAudio {
     fn generate_sample(&mut self) -> Stereo<f32> {
-        if self.sound_on.contains(PowerControl::POWER) {
+        if self.sound_on {
             let bias = (self.soundbias & 0x3FE) as i16;
             let (gb_left, gb_right) = self.mix_gb_samples();
 
-            let left = clamp(gb_left + bias, 0, 0x3FF);
-            let right = clamp(gb_right + bias, 0, 0x3FF);
+            let (fifo_left, fifo_right) = self.mix_fifo_samples();
+
+            let left = clamp(gb_left + fifo_left + bias, 0, 0x3FF);
+            let right = clamp(gb_right + fifo_right + bias, 0, 0x3FF);
 
             [to_output(left), to_output(right)]
         } else {
@@ -302,6 +399,37 @@ impl GBAAudio {
         }
     }
 
+    fn mix_fifo_samples(&mut self) -> (i16, i16) {
+        /*let fifo_a = if self.master_vol.contains(MasterVolume::SOUND_A_VOL) {
+            self.buffer_a << 2
+        } else {
+            self.buffer_a << 1
+        };
+
+        let fifo_b = if self.master_vol.contains(MasterVolume::SOUND_B_VOL) {
+            self.buffer_b << 2
+        } else {
+            self.buffer_b << 1
+        };
+
+        let (mut left, mut right) = (0, 0);
+        if self.fifo_mixing.contains(FifoMixing::A_ENABLE_LEFT) {
+            left += fifo_a;
+        }
+        if self.fifo_mixing.contains(FifoMixing::B_ENABLE_LEFT) {
+            left += fifo_b;
+        }
+        if self.fifo_mixing.contains(FifoMixing::A_ENABLE_RIGHT) {
+            right += fifo_a;
+        }
+        if self.fifo_mixing.contains(FifoMixing::B_ENABLE_RIGHT) {
+            right += fifo_b;
+        }
+
+        (left, right)*/
+        (0, 0)
+    }
+
     fn reset(&mut self) {
         self.square_1.reset();
         self.square_2.reset();
@@ -330,7 +458,16 @@ impl GBAAudio {
         }
     }
 
-    // TODO: call every 4 CPU cycles.
+    fn write_fifo_a(&mut self, data: u8) {
+        self.fifo_a[self.write_index_a] = data as i8;
+        self.write_index_a = (self.write_index_a + 1) % 32;
+    }
+    fn write_fifo_b(&mut self, data: u8) {
+        self.fifo_b[self.write_index_b] = data as i8;
+        self.write_index_b = (self.write_index_b + 1) % 32;
+    }
+
+    /// Call every 4 GBA clocks.
     fn clock_channels(&mut self) {
         const FRAME_MODULO: usize = 8192; // Clock rate / 8192 = 512
         // Advance samples
