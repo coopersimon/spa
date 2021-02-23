@@ -7,7 +7,8 @@ BIOS seems to startup OK, with varying success when actually running games.
 See spa/README.md for the full list of tested games.
 
 ### TODO
-- Audio
+- Cleanup audio
+    - Audio should be running a bit faster than it is
 - Render thread
 - Frame capture DMA
 - Internal "hardware" BIOS

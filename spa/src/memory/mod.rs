@@ -160,12 +160,20 @@ impl<R: Renderer> MemoryBus<R> {
 
         let (timer_irq, timer_0, timer_1) = self.timers.clock(cycles);
         if timer_0 {
-            if self.audio.timer_0_tick() {
+            let (dma1, dma2) = self.audio.timer_0_tick();
+            if dma1 {
                 self.dma.on_sound_fifo_1();
+            }
+            if dma2 {
+                self.dma.on_sound_fifo_2();
             }
         }
         if timer_1 {
-            if self.audio.timer_1_tick() {
+            let (dma1, dma2) = self.audio.timer_1_tick();
+            if dma1 {
+                self.dma.on_sound_fifo_1();
+            }
+            if dma2 {
                 self.dma.on_sound_fifo_2();
             }
         }

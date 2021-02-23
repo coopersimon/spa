@@ -252,11 +252,15 @@ impl DMAChannel {
             0b11 => panic!("invalid src addr mode 3"),
             _ => unreachable!()
         };
-        self.current_dst_addr = match (self.control & Control::DST_ADDR_MODE).bits() >> 5 {
-            0b00 | 0b11 => self.current_dst_addr.wrapping_add(self.word_size),
-            0b01 => self.current_dst_addr.wrapping_sub(self.word_size),
-            0b10 => self.current_dst_addr,
-            _ => unreachable!()
+        self.current_dst_addr = if self.fifo_mode() {
+            self.current_dst_addr
+        } else {
+            match (self.control & Control::DST_ADDR_MODE).bits() >> 5 {
+                0b00 | 0b11 => self.current_dst_addr.wrapping_add(self.word_size),
+                0b01 => self.current_dst_addr.wrapping_sub(self.word_size),
+                0b10 => self.current_dst_addr,
+                _ => unreachable!()
+            }
         };
 
         self.current_count = self.current_count.wrapping_sub(1) & self.word_count_mask;
@@ -326,7 +330,7 @@ impl DMAChannel {
             };
             self.current_src_addr = self.src_addr;
             self.current_dst_addr = self.dst_addr;
-            //println!("Enable DMA! Count: {:X}  Src:{:X} Dst:{:X}", self.current_count, self.current_src_addr, self.current_dst_addr);
+            //println!("Enable DMA! Count: {:X} Src:{:X} Dst:{:X} + control: {:X}", self.current_count, self.current_src_addr, self.current_dst_addr, self.control.bits());
         }
         self.word_size = if self.transfer_32bit_word() {4} else {2};
     }

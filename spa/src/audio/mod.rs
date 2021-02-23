@@ -184,53 +184,43 @@ impl GBAAudio {
     /// Called when timer 0 overflows.
     /// 
     /// If true is returned, DMA1 should transfer more data into the buffer.
-    pub fn timer_0_tick(&mut self) -> bool {
-        let mut dma = false;
+    pub fn timer_0_tick(&mut self) -> (bool, bool) {
         if self.sound_on {
-            if !self.fifo_mixing.contains(FifoMixing::A_TIMER_SELECT) {
-                self.buffer_a = self.fifo_a[self.read_index_a] as i16;
-                self.read_index_a = (self.read_index_a + 1) % 32;
-                let bytes_remaining = (self.write_index_a - self.read_index_a) % 32;
-                if bytes_remaining < 16 {
-                    dma = true;
-                }
-            }
-            if !self.fifo_mixing.contains(FifoMixing::B_TIMER_SELECT) {
-                self.buffer_b = self.fifo_b[self.read_index_b] as i16;
-                self.read_index_b = (self.read_index_b + 1) % 32;
-                let bytes_remaining = (self.write_index_b - self.read_index_b) % 32;
-                if bytes_remaining < 16 {
-                    dma = true;
-                }
-            }
+            let dma1 = if !self.fifo_mixing.contains(FifoMixing::A_TIMER_SELECT) {
+                self.tick_fifo_a()
+            } else {
+                false
+            };
+            let dma2 = if !self.fifo_mixing.contains(FifoMixing::B_TIMER_SELECT) {
+                self.tick_fifo_b()
+            } else {
+                false
+            };
+            (dma1, dma2)
+        } else {
+            (false, false)
         }
-        dma
     }
 
     /// Called when timer 1 overflows.
     /// 
     /// If true is returned, DMA2 should transfer more data into the buffer.
-    pub fn timer_1_tick(&mut self) -> bool {
-        let mut dma = false;
+    pub fn timer_1_tick(&mut self) -> (bool, bool) {
         if self.sound_on {
-            if self.fifo_mixing.contains(FifoMixing::A_TIMER_SELECT) {
-                self.buffer_a = self.fifo_a[self.read_index_a] as i16;
-                self.read_index_a = (self.read_index_a + 1) % 32;
-                let bytes_remaining = (self.write_index_a - self.read_index_a) % 32;
-                if bytes_remaining < 16 {
-                    dma = true;
-                }
-            }
-            if self.fifo_mixing.contains(FifoMixing::B_TIMER_SELECT) {
-                self.buffer_b = self.fifo_b[self.read_index_b] as i16;
-                self.read_index_b = (self.read_index_b + 1) % 32;
-                let bytes_remaining = (self.write_index_b - self.read_index_b) % 32;
-                if bytes_remaining < 16 {
-                    dma = true;
-                }
-            }
+            let dma1 = if self.fifo_mixing.contains(FifoMixing::A_TIMER_SELECT) {
+                self.tick_fifo_a()
+            } else {
+                false
+            };
+            let dma2 = if self.fifo_mixing.contains(FifoMixing::B_TIMER_SELECT) {
+                self.tick_fifo_b()
+            } else {
+                false
+            };
+            (dma1, dma2)
+        } else {
+            (false, false)
         }
-        dma
     }
 }
 
@@ -400,7 +390,7 @@ impl GBAAudio {
     }
 
     fn mix_fifo_samples(&mut self) -> (i16, i16) {
-        /*let fifo_a = if self.master_vol.contains(MasterVolume::SOUND_A_VOL) {
+        let fifo_a = if self.master_vol.contains(MasterVolume::SOUND_A_VOL) {
             self.buffer_a << 2
         } else {
             self.buffer_a << 1
@@ -426,8 +416,7 @@ impl GBAAudio {
             right += fifo_b;
         }
 
-        (left, right)*/
-        (0, 0)
+        (left, right)
     }
 
     fn reset(&mut self) {
@@ -465,6 +454,26 @@ impl GBAAudio {
     fn write_fifo_b(&mut self, data: u8) {
         self.fifo_b[self.write_index_b] = data as i8;
         self.write_index_b = (self.write_index_b + 1) % 32;
+    }
+
+    /// Advance FIFO A.
+    /// 
+    /// Returns true if more samples are needed.
+    fn tick_fifo_a(&mut self) -> bool {
+        self.buffer_a = self.fifo_a[self.read_index_a] as i16;
+        self.read_index_a = (self.read_index_a + 1) % 32;
+        let bytes_remaining = (self.write_index_a - self.read_index_a) % 32;
+        bytes_remaining <= 16
+    }
+
+    /// Advance FIFO B.
+    /// 
+    /// Returns true if more samples are needed.
+    fn tick_fifo_b(&mut self) -> bool {
+        self.buffer_b = self.fifo_b[self.read_index_b] as i16;
+        self.read_index_b = (self.read_index_b + 1) % 32;
+        let bytes_remaining = (self.write_index_b - self.read_index_b) % 32;
+        bytes_remaining <= 16
     }
 
     /// Call every 4 GBA clocks.
