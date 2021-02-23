@@ -5,6 +5,8 @@ mod cart;
 mod bios;
 
 use arm::{Mem32, MemCycleType};
+use crossbeam_channel::{Receiver, unbounded};
+
 use std::path::Path;
 use crate::{
     common::bits::u8,
@@ -13,7 +15,7 @@ use crate::{
     joypad::{Joypad, Buttons},
     interrupt::InterruptControl,
     video::*,
-    audio::GBAAudio
+    audio::{GBAAudio, SamplePacket}
 };
 use dma::{DMA, DMAAddress};
 use cart::{GamePak, GamePakController};
@@ -83,6 +85,13 @@ impl<R: Renderer> MemoryBus<R> {
         self.video.render_size()
     }
 
+    pub fn enable_audio(&mut self) -> (Receiver<SamplePacket>, Receiver<f64>) {
+        let (sample_tx, sample_rx) = unbounded();
+        let (rate_tx, rate_rx) = unbounded();
+        self.audio.enable_audio(sample_tx, rate_tx);
+        (sample_rx, rate_rx)
+    }
+
     /// Do a DMA transfer if possible.
     /// Returns the number of cycles passed.
     /// 
@@ -142,6 +151,7 @@ impl<R: Renderer> MemoryBus<R> {
     /// Indicate to the memory bus that cycles have passed.
     /// The cycles passed into here should come from the CPU.
     pub fn clock(&mut self, cycles: usize) {
+        self.audio.clock(cycles);
         let (video_signal, video_irq) = self.video.clock(cycles);
         match video_signal {
             Signal::VBlank => self.dma.on_vblank(),
@@ -152,7 +162,6 @@ impl<R: Renderer> MemoryBus<R> {
             self.joypad.get_interrupt() |
             self.timers.clock(cycles)   |
             video_irq
-            // TODO: clock audio
         );
     }
 

@@ -10,6 +10,11 @@ edition = "2018"
 bitflags = "1.2"
 fixed = "1.6"
 regex = "1"
+crossbeam-channel = "0.5"
+
+[dependencies.dasp]
+version = "0.11"
+features = ["interpolate", "interpolate-sinc", "ring_buffer", "signal"]
 
 [dependencies.arm]
 git = "https://github.com/coopersimon/e-arm"

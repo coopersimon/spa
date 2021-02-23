@@ -12,6 +12,7 @@ use arm::{
 };
 use std::path::Path;
 use memory::MemoryBus;
+use audio::Resampler;
 
 pub enum Button {
     A,
@@ -71,8 +72,35 @@ impl GBA {
         self.cpu.ref_mem().render_size()
     }
 
+    /// Call this at the start to enable audio.
+    /// It creates a GBAAudioHandler that can be sent to the audio thread.
+    pub fn enable_audio(&mut self, sample_rate: f64) -> GBAAudioHandler {
+        let (sample_rx, rate_rx) = self.cpu.ref_mem_mut().enable_audio();
+
+        GBAAudioHandler {
+            resampler: Resampler::new(sample_rx, rate_rx, sample_rate),
+        }
+    }
+
     pub fn set_button(&mut self, button: Button, pressed: bool) {
         self.cpu.ref_mem_mut().set_button(button.into(), pressed);
+    }
+}
+
+/// Created by a GBA.
+pub struct GBAAudioHandler {
+    resampler:    Resampler,
+}
+
+impl GBAAudioHandler {
+    /// Fill the provided buffer with samples.
+    /// The format is PCM interleaved stereo.
+    pub fn get_audio_packet(&mut self, buffer: &mut [f32]) {
+        for (o_frame, i_frame) in buffer.chunks_exact_mut(2).zip(&mut self.resampler) {
+            for (o, i) in o_frame.iter_mut().zip(i_frame.iter()) {
+                *o = *i;
+            }
+        }
     }
 }
 

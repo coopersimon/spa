@@ -14,8 +14,11 @@ use winit::{
     window::WindowBuilder
 };
 
-use spa::*;
 use clap::{clap_app, crate_version};
+
+use cpal::traits::StreamTrait;
+
+use spa::*;
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
@@ -230,7 +233,9 @@ fn main() {
         let mut last_frame_time = chrono::Utc::now();
         let frame_time = chrono::Duration::nanoseconds(1_000_000_000 / 60);
     
-        // TODO: AUDIO
+        // AUDIO
+        let audio_stream = make_audio_stream(&mut gba);
+        audio_stream.play().expect("Couldn't start audio stream");
         
         event_loop.run(move |event, _, _| {
             match event {
@@ -333,4 +338,50 @@ fn main() {
 
         });
     }
+}
+
+fn make_audio_stream(gba: &mut GBA) -> cpal::Stream {
+    use cpal::traits::{
+        DeviceTrait,
+        HostTrait
+    };
+
+    let host = cpal::default_host();
+    let device = host.default_output_device().expect("no output device available.");
+
+    let config = pick_output_config(&device).with_max_sample_rate();
+    let sample_rate = config.sample_rate().0 as f64;
+    println!("Audio sample rate {}", sample_rate);
+    let mut audio_handler = gba.enable_audio(sample_rate);
+
+    device.build_output_stream(
+        &config.into(),
+        move |data: &mut [f32], _| {
+            audio_handler.get_audio_packet(data);
+        },
+        move |err| {
+            println!("Error occurred: {}", err);
+        }
+    ).unwrap()
+}
+
+fn pick_output_config(device: &cpal::Device) -> cpal::SupportedStreamConfigRange {
+    use cpal::traits::DeviceTrait;
+
+    const MIN: u32 = 32_000;
+
+    let supported_configs_range = device.supported_output_configs()
+        .expect("error while querying configs");
+
+    for config in supported_configs_range {
+        let cpal::SampleRate(v) = config.max_sample_rate();
+        if v >= MIN {
+            return config;
+        }
+    }
+
+    device.supported_output_configs()
+        .expect("error while querying formats")
+        .next()
+        .expect("No supported config")
 }
