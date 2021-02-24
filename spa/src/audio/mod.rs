@@ -66,7 +66,12 @@ bitflags! {
 }
 
 const SAMPLE_PACKET_SIZE: usize = 64;
-const INIT_SAMPLE_RATE: f64 = 32_768.0;
+// TODO: move these to consts?
+/// Base sample rate for audio.
+const REAL_SAMPLE_RATE: f64 = 32_768.0;
+const REAL_CLOCK_RATE: f64 = 16_777_216.0;
+const EMU_CLOCK_RATE: f64 = 16_853_760.0;
+const INIT_SAMPLE_RATE: f64 = REAL_SAMPLE_RATE / REAL_CLOCK_RATE * EMU_CLOCK_RATE;
 
 pub type SamplePacket = Box<[Stereo<f32>]>;
 
@@ -339,6 +344,79 @@ impl MemInterface8 for GBAAudio {
             _ => {}
         }
     }
+
+    /*fn write_word(&mut self, addr: u32, data: u32) {
+        match addr {
+
+            0x00 => {
+                let bytes = data.to_le_bytes();
+                self.square_1.set_sweep_reg(bytes[0]);
+            }
+            0x00 => 
+            0x02 => self.square_1.set_duty_length_reg(data),
+            0x03 => self.square_1.set_vol_envelope_reg(data),
+            0x04 => self.square_1.set_freq_lo_reg(data),
+            0x05 => self.square_1.set_freq_hi_reg(data),
+
+            0x08 => self.square_2.set_duty_length_reg(data),
+            0x09 => self.square_2.set_vol_envelope_reg(data),
+            0x0C => self.square_2.set_freq_lo_reg(data),
+            0x0D => self.square_2.set_freq_hi_reg(data),
+
+            0x10 => self.wave.set_playback_reg(data),
+            0x12 => self.wave.set_length_reg(data),
+            0x13 => self.wave.set_vol_reg(data),
+            0x14 => self.wave.set_freq_lo_reg(data),
+            0x15 => self.wave.set_freq_hi_reg(data),
+
+            0x18 => self.noise.set_length_reg(data),
+            0x19 => self.noise.set_vol_envelope_reg(data),
+            0x1C => self.noise.set_poly_counter_reg(data),
+            0x1D => self.noise.set_trigger_reg(data),
+
+            0x20 => self.gb_vol = data,
+            0x21 => self.gb_enable = ChannelEnables::from_bits_truncate(data),
+            0x22 => self.master_vol = MasterVolume::from_bits_truncate(data),
+            0x23 => {
+                self.fifo_mixing = FifoMixing::from_bits_truncate(data);
+                if self.fifo_mixing.contains(FifoMixing::A_RESET_FIFO) {
+                    for d in &mut self.fifo_a {
+                        *d = 0;
+                    }
+                    self.buffer_a = 0;
+                    self.write_index_a = 0;
+                    self.read_index_a = 0;
+                }
+                if self.fifo_mixing.contains(FifoMixing::B_RESET_FIFO) {
+                    for d in &mut self.fifo_b {
+                        *d = 0;
+                    }
+                    self.buffer_b = 0;
+                    self.write_index_b = 0;
+                    self.read_index_b = 0;
+                }
+            },
+            0x24 => {
+                let sound_on = PowerControl::from_bits_truncate(data);
+                self.sound_on = sound_on.contains(PowerControl::POWER);
+                if !self.sound_on {
+                    self.reset();
+                }
+            },
+            0x28 => self.soundbias = u16::set_lo(self.soundbias, data),
+            0x29 => {
+                let new_bias = u16::set_hi(self.soundbias, data);
+                self.set_sound_bias(new_bias);
+            },
+
+            0x30..=0x3F => self.wave.write_wave(addr - 0x30, data),
+
+            0x40..=0x43 => self.write_fifo_a(data),
+            0x44..=0x47 => self.write_fifo_b(data),
+
+            _ => {}
+        }
+    }*/
 }
 
 impl GBAAudio {
@@ -420,10 +498,14 @@ impl GBAAudio {
     }
 
     fn reset(&mut self) {
+        println!("Reset");
         self.square_1.reset();
         self.square_2.reset();
         self.wave.reset();
         self.noise.reset();
+
+        self.gb_vol = 0;
+        self.gb_enable = ChannelEnables::default();
 
         //self.volume_control = VolumeControl::default();
         //self.channel_enables = ChannelEnables::default();
@@ -463,7 +545,7 @@ impl GBAAudio {
         self.buffer_a = self.fifo_a[self.read_index_a] as i16;
         self.read_index_a = (self.read_index_a + 1) % 32;
         let bytes_remaining = (self.write_index_a - self.read_index_a) % 32;
-        bytes_remaining <= 16
+        bytes_remaining < 16
     }
 
     /// Advance FIFO B.
@@ -473,7 +555,7 @@ impl GBAAudio {
         self.buffer_b = self.fifo_b[self.read_index_b] as i16;
         self.read_index_b = (self.read_index_b + 1) % 32;
         let bytes_remaining = (self.write_index_b - self.read_index_b) % 32;
-        bytes_remaining <= 16
+        bytes_remaining < 16
     }
 
     /// Call every 4 GBA clocks.
@@ -527,5 +609,5 @@ const fn clamp(n: i16, low: i16, high: i16) -> i16 {
 
 fn to_output(sample: i16) -> f32 {
     let shifted = (sample >> 1) as f32;
-    (shifted / 255.5) - 1.0
+    (shifted / 256.0) - 1.0
 }
