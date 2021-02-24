@@ -319,9 +319,10 @@ impl MemInterface16 for DMAChannel {
 // Internal
 impl DMAChannel {
     fn set_control(&mut self, data: u16) {
+        let was_enabled = self.control.contains(Control::ENABLE);
         self.control = Control::from_bits_truncate(data);
         let enabled = self.control.contains(Control::ENABLE);
-        if enabled {
+        if enabled && !was_enabled {
             self.current_count = if self.fifo_mode() {
                 4
             } else {

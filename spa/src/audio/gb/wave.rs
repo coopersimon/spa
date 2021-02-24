@@ -2,13 +2,16 @@ use crate::common::bits::u8;
 use super::*;
 
 const MAX_LEN: u16 = 256;
-const WAVE_PATTERN_BANK_SIZE: usize = 16;
+const WAVE_PATTERN_BANK_BYTES: usize = 16;
+const WAVE_PATTERN_BANK_SIZE: usize = 32;
+const WAVE_PATTERN_FULL_SIZE: usize = 64;
 
 enum ShiftAmount {
     Mute,
     Full,
     Half,
-    Quarter
+    Quarter,
+    ThreeQuarter,
 }
 
 pub struct Wave {
@@ -62,8 +65,9 @@ impl Wave {
 
     pub fn set_playback_reg(&mut self, val: u8) {
         self.playback_reg = val;
+        self.enabled = u8::test_bit(val, 7);
         self.pattern_index = if u8::test_bit(val, 6) {
-            32
+            WAVE_PATTERN_BANK_SIZE
         } else {
             0
         };
@@ -95,7 +99,7 @@ impl Wave {
 
     pub fn write_wave(&mut self, addr: u32, val: u8) {
         if u8::test_bit(self.playback_reg, 6) {
-            self.wave_pattern[(addr as usize) + WAVE_PATTERN_BANK_SIZE] = val;
+            self.wave_pattern[(addr as usize) + WAVE_PATTERN_BANK_BYTES] = val;
         } else {
             self.wave_pattern[addr as usize] = val;
         }
@@ -103,7 +107,7 @@ impl Wave {
 
     pub fn read_wave(&self, addr: u32) -> u8 {
         if u8::test_bit(self.playback_reg, 6) {
-            self.wave_pattern[(addr as usize) + WAVE_PATTERN_BANK_SIZE]
+            self.wave_pattern[(addr as usize) + WAVE_PATTERN_BANK_BYTES]
         } else {
             self.wave_pattern[addr as usize]
         }
@@ -116,14 +120,14 @@ impl GBChannel for Wave {
         if self.freq_counter >= self.freq_modulo {
             self.freq_counter -= self.freq_modulo;
             if u8::test_bit(self.playback_reg, 5) {
-                self.pattern_index = (self.pattern_index + 1) % 64;
+                self.pattern_index = (self.pattern_index + 1) % WAVE_PATTERN_FULL_SIZE;
             } else {
                 let pattern_offset = if u8::test_bit(self.playback_reg, 6) {
-                    32
-                } else {
                     0
+                } else {
+                    WAVE_PATTERN_BANK_SIZE
                 };
-                let index = (self.pattern_index + 1) % 32;
+                let index = (self.pattern_index + 1) % WAVE_PATTERN_BANK_SIZE;
                 self.pattern_index = pattern_offset + index;
             }
         }
@@ -150,7 +154,11 @@ impl GBChannel for Wave {
     }
 
     fn reset(&mut self) {
-        self.pattern_index = 0;
+        self.pattern_index = if u8::test_bit(self.playback_reg, 6) {
+            0
+        } else {
+            WAVE_PATTERN_BANK_SIZE
+        };
         self.freq_lo_reg = 0;
         self.freq_hi_reg = 0;
 
@@ -163,14 +171,14 @@ impl GBChannel for Wave {
 
 impl Wave {
     fn trigger(&mut self) {
-        const SHIFT_MASK: u8 = u8::bits(5, 6);
+        const SHIFT_MASK: u8 = u8::bits(5, 7);
 
         self.shift_amount = match (self.vol_reg & SHIFT_MASK) >> 5 {
             0 => ShiftAmount::Mute,
             1 => ShiftAmount::Full,
             2 => ShiftAmount::Half,
             3 => ShiftAmount::Quarter,
-            _ => unreachable!()
+            _ => ShiftAmount::ThreeQuarter,
         };
 
         self.freq_counter = 0;
@@ -192,6 +200,10 @@ impl Wave {
             ShiftAmount::Full => i4_to_i8(raw_sample),
             ShiftAmount::Half => i4_to_i8(raw_sample) >> 1,
             ShiftAmount::Quarter => i4_to_i8(raw_sample) >> 2,
+            ShiftAmount::ThreeQuarter => {
+                let sample = i4_to_i8(raw_sample);
+                (sample >> 2) + (sample >> 1)
+            }
         }
     }
 }

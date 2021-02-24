@@ -7,6 +7,8 @@ use bitflags::bitflags;
 use crossbeam_channel::Sender;
 use dasp::frame::Stereo;
 
+use std::collections::VecDeque;
+
 use crate::common::{
     meminterface::MemInterface8,
     bits::u8,
@@ -91,14 +93,10 @@ pub struct GBAAudio {
     soundbias:      u16,
 
     // Fifo
-    fifo_a:         [i8; 32],
+    fifo_a:         VecDeque<i8>,
     buffer_a:       i16,
-    write_index_a:  usize,
-    read_index_a:   usize,
-    fifo_b:         [i8; 32],
+    fifo_b:         VecDeque<i8>,
     buffer_b:       i16,
-    write_index_b:  usize,
-    read_index_b:   usize,
 
     // Comms with audio thread
     sample_buffer:      Vec<Stereo<f32>>,
@@ -129,14 +127,10 @@ impl GBAAudio {
             sound_on:       false,
             soundbias:      0x200,
 
-            fifo_a:         [0; 32],
+            fifo_a:         VecDeque::new(),
             buffer_a:       0,
-            write_index_a:  0,
-            read_index_a:   0,
-            fifo_b:         [0; 32],
+            fifo_b:         VecDeque::new(),
             buffer_b:       0,
-            write_index_b:  0,
-            read_index_b:   0,
 
             sample_buffer:      Vec::new(),
             sample_sender:      None,
@@ -307,20 +301,12 @@ impl MemInterface8 for GBAAudio {
             0x23 => {
                 self.fifo_mixing = FifoMixing::from_bits_truncate(data);
                 if self.fifo_mixing.contains(FifoMixing::A_RESET_FIFO) {
-                    for d in &mut self.fifo_a {
-                        *d = 0;
-                    }
+                    self.fifo_a.clear();
                     self.buffer_a = 0;
-                    self.write_index_a = 0;
-                    self.read_index_a = 0;
                 }
                 if self.fifo_mixing.contains(FifoMixing::B_RESET_FIFO) {
-                    for d in &mut self.fifo_b {
-                        *d = 0;
-                    }
+                    self.fifo_b.clear();
                     self.buffer_b = 0;
-                    self.write_index_b = 0;
-                    self.read_index_b = 0;
                 }
             },
             0x24 => {
@@ -530,32 +516,26 @@ impl GBAAudio {
     }
 
     fn write_fifo_a(&mut self, data: u8) {
-        self.fifo_a[self.write_index_a] = data as i8;
-        self.write_index_a = (self.write_index_a + 1) % 32;
+        self.fifo_a.push_back(data as i8);
     }
     fn write_fifo_b(&mut self, data: u8) {
-        self.fifo_b[self.write_index_b] = data as i8;
-        self.write_index_b = (self.write_index_b + 1) % 32;
+        self.fifo_b.push_back(data as i8);
     }
 
     /// Advance FIFO A.
     /// 
     /// Returns true if more samples are needed.
     fn tick_fifo_a(&mut self) -> bool {
-        self.buffer_a = self.fifo_a[self.read_index_a] as i16;
-        self.read_index_a = (self.read_index_a + 1) % 32;
-        let bytes_remaining = (self.write_index_a - self.read_index_a) % 32;
-        bytes_remaining < 16
+        self.buffer_a = self.fifo_a.pop_front().unwrap_or(0) as i16;
+        self.fifo_a.len() < 16
     }
 
     /// Advance FIFO B.
     /// 
     /// Returns true if more samples are needed.
     fn tick_fifo_b(&mut self) -> bool {
-        self.buffer_b = self.fifo_b[self.read_index_b] as i16;
-        self.read_index_b = (self.read_index_b + 1) % 32;
-        let bytes_remaining = (self.write_index_b - self.read_index_b) % 32;
-        bytes_remaining < 16
+        self.buffer_b = self.fifo_b.pop_front().unwrap_or(0) as i16;
+        self.fifo_b.len() < 16
     }
 
     /// Call every 4 GBA clocks.
