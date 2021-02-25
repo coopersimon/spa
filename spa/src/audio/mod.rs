@@ -17,8 +17,6 @@ use crate::common::{
 use gb::*;
 pub use resampler::Resampler;
 
-const CLOCK_RATE: f64 = 16.0 * 1024.0 * 1024.0;
-
 bitflags! {
     #[derive(Default)]
     struct ChannelEnables: u8 {
@@ -69,11 +67,16 @@ bitflags! {
 
 const SAMPLE_PACKET_SIZE: usize = 64;
 // TODO: move these to consts?
+
 /// Base sample rate for audio.
-const REAL_SAMPLE_RATE: f64 = 32_768.0;
-const REAL_CLOCK_RATE: f64 = 16_777_216.0;
-const EMU_CLOCK_RATE: f64 = 16_853_760.0;
-const INIT_SAMPLE_RATE: f64 = REAL_SAMPLE_RATE / REAL_CLOCK_RATE * EMU_CLOCK_RATE;
+const BASE_SAMPLE_RATE: usize = 32_768;
+/// Cycles per second.
+const CLOCK_RATE: usize = 16_777_216;
+/// Emulated cycles per second.
+const REAL_CLOCK_RATE: f64 = 16_853_760.0;
+
+const REAL_SAMPLE_RATE_RATIO: f64 = REAL_CLOCK_RATE / (CLOCK_RATE as f64);
+const REAL_BASE_SAMPLE_RATE: f64 = (BASE_SAMPLE_RATE as f64) * REAL_SAMPLE_RATE_RATIO;
 
 pub type SamplePacket = Box<[Stereo<f32>]>;
 
@@ -103,9 +106,9 @@ pub struct GBAAudio {
     sample_sender:      Option<Sender<SamplePacket>>,
     rate_sender:        Option<Sender<f64>>,
 
-    sample_rate:        f64,
-    cycles_per_sample:  f64,
-    cycle_count:        f64,
+    sample_rate:        usize,
+    cycles_per_sample:  usize,
+    cycle_count:        usize,
 
     gb_cycle_count:     usize,
     frame_count:        usize,
@@ -136,9 +139,9 @@ impl GBAAudio {
             sample_sender:      None,
             rate_sender:        None,
 
-            sample_rate:        INIT_SAMPLE_RATE,
-            cycles_per_sample:  CLOCK_RATE / INIT_SAMPLE_RATE,
-            cycle_count:        0.0,
+            sample_rate:        BASE_SAMPLE_RATE,
+            cycles_per_sample:  CLOCK_RATE / BASE_SAMPLE_RATE,
+            cycle_count:        0,
 
             gb_cycle_count:     0,
             frame_count:        0,
@@ -162,7 +165,7 @@ impl GBAAudio {
             self.clock_channels();
         }
         
-        self.cycle_count += cycles as f64;
+        self.cycle_count += cycles;
         if self.cycle_count >= self.cycles_per_sample {
             self.cycle_count -= self.cycles_per_sample;
 
@@ -500,17 +503,18 @@ impl GBAAudio {
     fn set_sound_bias(&mut self, new_val: u16) {
         self.soundbias = new_val;
         let new_sample_rate = match (new_val >> 14) & 0b11 {
-            0b00 => INIT_SAMPLE_RATE,
-            0b01 => INIT_SAMPLE_RATE * 2.0,
-            0b10 => INIT_SAMPLE_RATE * 4.0,
-            0b11 => INIT_SAMPLE_RATE * 8.0,
+            0b00 => BASE_SAMPLE_RATE,
+            0b01 => BASE_SAMPLE_RATE * 2,
+            0b10 => BASE_SAMPLE_RATE * 4,
+            0b11 => BASE_SAMPLE_RATE * 8,
             _ => unreachable!()
         };
         if new_sample_rate != self.sample_rate {
             self.sample_rate = new_sample_rate;
             self.cycles_per_sample = CLOCK_RATE / self.sample_rate;
             if let Some(sender) = &self.rate_sender {
-                sender.send(new_sample_rate).unwrap();
+                let real_sample_rate = REAL_SAMPLE_RATE_RATIO * (new_sample_rate as f64);
+                sender.send(real_sample_rate).unwrap();
             }
         }
     }

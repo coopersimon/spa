@@ -22,7 +22,7 @@ impl Resampler {
     pub fn new(sample_recv: Receiver<SamplePacket>, source_rate_recv: Receiver<f64>, target_sample_rate: f64) -> Self {
         let sinc = Sinc::new(Fixed::from([Stereo::EQUILIBRIUM; 2]));
         Resampler {
-            converter:          Source::new(sample_recv).from_hz_to_hz(sinc, super::INIT_SAMPLE_RATE, target_sample_rate),
+            converter:          Source::new(sample_recv).from_hz_to_hz(sinc, super::REAL_BASE_SAMPLE_RATE, target_sample_rate),
             source_rate_recv:   source_rate_recv,
             target_rate:        target_sample_rate,
         }
