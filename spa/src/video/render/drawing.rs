@@ -102,12 +102,12 @@ impl SoftwareRenderer {
                     let x_i = I24F8::from_num(object_x as i32) - x_0;
                     let p_x = (params.pa * x_i) + (params.pb * y_i) + source_x_0;
                     let p_y = (params.pc * x_i) + (params.pd * y_i) + source_y_0;
-                    let index_x = p_x.to_num::<i32>() as u8;
-                    let index_y = p_y.to_num::<i32>() as u8;
-                    if index_x >= source_size.0 || index_y >= source_size.1 {
+                    let index_x = p_x.to_num::<i32>() as u16;
+                    let index_y = p_y.to_num::<i32>() as u16;
+                    if index_x >= (source_size.0 as u16) || index_y >= (source_size.1 as u16) {
                         continue;
                     }
-                    (index_x, index_y)
+                    (index_x as u8, index_y as u8)
                 } else {
                     let index_x = if object.h_flip() {width - object_x - 1} else {object_x} as u8;
                     let index_y = if object.v_flip() {height - object_y - 1} else {object_y} as u8;
