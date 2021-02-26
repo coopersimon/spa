@@ -12,7 +12,7 @@ use crate::common::{
 pub trait GBChannel {
     /// Clock the channel and recalculate the output if necessary.
     /// 
-    /// Call this with individual CPU cycles.
+    /// Call at 2^14 Hz.
     fn sample_clock(&mut self, cycles: usize);
 
     /// Call at 256Hz, to decrement the length counter.
@@ -24,7 +24,7 @@ pub trait GBChannel {
     /// Get the current output sample.
     fn get_sample(&self) -> i8;
 
-    /// Reset all internat timers and buffers.
+    /// Reset all internal timers and buffers.
     fn reset(&mut self);
 }
 

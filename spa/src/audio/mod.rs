@@ -184,45 +184,37 @@ impl GBAAudio {
     }
 
     /// Called when timer 0 overflows.
-    /// 
-    /// If true is returned, DMA1 should transfer more data into the buffer.
-    pub fn timer_0_tick(&mut self) -> (bool, bool) {
+    pub fn timer_0_tick(&mut self) {
         if self.sound_on {
-            let dma1 = if !self.fifo_mixing.contains(FifoMixing::A_TIMER_SELECT) {
-                self.tick_fifo_a()
-            } else {
-                false
-            };
-            let dma2 = if !self.fifo_mixing.contains(FifoMixing::B_TIMER_SELECT) {
-                self.tick_fifo_b()
-            } else {
-                false
-            };
-            (dma1, dma2)
-        } else {
-            (false, false)
+            if !self.fifo_mixing.contains(FifoMixing::A_TIMER_SELECT) {
+                self.tick_fifo_a();
+            }
+            if !self.fifo_mixing.contains(FifoMixing::B_TIMER_SELECT) {
+                self.tick_fifo_b();
+            }
         }
     }
 
     /// Called when timer 1 overflows.
-    /// 
-    /// If true is returned, DMA2 should transfer more data into the buffer.
-    pub fn timer_1_tick(&mut self) -> (bool, bool) {
+    pub fn timer_1_tick(&mut self) {
         if self.sound_on {
-            let dma1 = if self.fifo_mixing.contains(FifoMixing::A_TIMER_SELECT) {
-                self.tick_fifo_a()
-            } else {
-                false
-            };
-            let dma2 = if self.fifo_mixing.contains(FifoMixing::B_TIMER_SELECT) {
-                self.tick_fifo_b()
-            } else {
-                false
-            };
-            (dma1, dma2)
-        } else {
-            (false, false)
+            if self.fifo_mixing.contains(FifoMixing::A_TIMER_SELECT) {
+                self.tick_fifo_a();
+            }
+            if self.fifo_mixing.contains(FifoMixing::B_TIMER_SELECT) {
+                self.tick_fifo_b();
+            }
         }
+    }
+
+    /// Returns true if fifo A is empty and needs more samples via DMA 1
+    pub fn dma_1(&mut self) -> bool {
+        self.fifo_a.len() < 16
+    }
+
+    /// Returns true if fifo B is empty and needs more samples via DMA 2
+    pub fn dma_2(&mut self) -> bool {
+        self.fifo_b.len() < 16
     }
 }
 
@@ -304,10 +296,12 @@ impl MemInterface8 for GBAAudio {
             0x23 => {
                 self.fifo_mixing = FifoMixing::from_bits_truncate(data);
                 if self.fifo_mixing.contains(FifoMixing::A_RESET_FIFO) {
+                    println!("Clear a");
                     self.fifo_a.clear();
                     self.buffer_a = 0;
                 }
                 if self.fifo_mixing.contains(FifoMixing::B_RESET_FIFO) {
+                    println!("Clear b");
                     self.fifo_b.clear();
                     self.buffer_b = 0;
                 }
@@ -495,9 +489,6 @@ impl GBAAudio {
 
         self.gb_vol = 0;
         self.gb_enable = ChannelEnables::default();
-
-        //self.volume_control = VolumeControl::default();
-        //self.channel_enables = ChannelEnables::default();
     }
 
     fn set_sound_bias(&mut self, new_val: u16) {
@@ -521,25 +512,25 @@ impl GBAAudio {
 
     fn write_fifo_a(&mut self, data: u8) {
         self.fifo_a.push_back(data as i8);
+        if self.fifo_a.len() > 32 {
+            self.fifo_a.pop_front();
+        }
     }
     fn write_fifo_b(&mut self, data: u8) {
         self.fifo_b.push_back(data as i8);
+        if self.fifo_b.len() > 32 {
+            self.fifo_b.pop_front();
+        }
     }
 
     /// Advance FIFO A.
-    /// 
-    /// Returns true if more samples are needed.
-    fn tick_fifo_a(&mut self) -> bool {
+    fn tick_fifo_a(&mut self) {
         self.buffer_a = self.fifo_a.pop_front().unwrap_or(0) as i16;
-        self.fifo_a.len() < 16
     }
 
     /// Advance FIFO B.
-    /// 
-    /// Returns true if more samples are needed.
-    fn tick_fifo_b(&mut self) -> bool {
+    fn tick_fifo_b(&mut self) {
         self.buffer_b = self.fifo_b.pop_front().unwrap_or(0) as i16;
-        self.fifo_b.len() < 16
     }
 
     /// Call every 4 GBA clocks.

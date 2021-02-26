@@ -296,7 +296,7 @@ impl MemInterface16 for DMAChannel {
             0x0 => self.src_addr = u32::set_lo(self.src_addr, data & 0xFFFE),
             0x2 => self.src_addr = u32::set_hi(self.src_addr, data & 0x0FFF),
             0x4 => self.dst_addr = u32::set_lo(self.dst_addr, data & 0xFFFE),
-            0x6 => self.dst_addr = u32::set_hi(self.dst_addr, data & 0x07FF),
+            0x6 => self.dst_addr = u32::set_hi(self.dst_addr, data & 0x0FFF),
             0x8 => self.word_count = data & self.word_count_mask,
             0xA => self.set_control(data),
             _ => unreachable!()
@@ -344,7 +344,7 @@ impl DMAChannel {
             } else {
                 self.word_count
             };
-            if fifo_mode || (self.control & Control::DST_ADDR_MODE).bits() == u16::bits(5, 6) {
+            if (self.control & Control::DST_ADDR_MODE).bits() == u16::bits(5, 6) {
                 self.current_dst_addr = self.dst_addr;
             }
         } else {
