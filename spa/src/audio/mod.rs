@@ -1,13 +1,12 @@
 /// Audio for GBA
 
+mod fifo;
 mod gb;
 mod resampler;
 
 use bitflags::bitflags;
 use crossbeam_channel::Sender;
 use dasp::frame::Stereo;
-
-use std::collections::VecDeque;
 
 use crate::common::{
     meminterface::MemInterface8,
@@ -96,9 +95,9 @@ pub struct GBAAudio {
     soundbias:      u16,
 
     // Fifo
-    fifo_a:         VecDeque<i8>,
+    fifo_a:         fifo::FIFO,
     buffer_a:       i16,
-    fifo_b:         VecDeque<i8>,
+    fifo_b:         fifo::FIFO,
     buffer_b:       i16,
 
     // Comms with audio thread
@@ -130,9 +129,9 @@ impl GBAAudio {
             sound_on:       false,
             soundbias:      0x200,
 
-            fifo_a:         VecDeque::new(),
+            fifo_a:         fifo::FIFO::new(),
             buffer_a:       0,
-            fifo_b:         VecDeque::new(),
+            fifo_b:         fifo::FIFO::new(),
             buffer_b:       0,
 
             sample_buffer:      Vec::new(),
@@ -209,12 +208,12 @@ impl GBAAudio {
 
     /// Returns true if fifo A is empty and needs more samples via DMA 1
     pub fn dma_1(&mut self) -> bool {
-        self.fifo_a.len() < 16
+        self.fifo_a.len() <= 16
     }
 
     /// Returns true if fifo B is empty and needs more samples via DMA 2
     pub fn dma_2(&mut self) -> bool {
-        self.fifo_b.len() < 16
+        self.fifo_b.len() <= 16
     }
 }
 
@@ -511,26 +510,20 @@ impl GBAAudio {
     }
 
     fn write_fifo_a(&mut self, data: u8) {
-        self.fifo_a.push_back(data as i8);
-        if self.fifo_a.len() > 32 {
-            self.fifo_a.pop_front();
-        }
+        self.fifo_a.push(data as i8);
     }
     fn write_fifo_b(&mut self, data: u8) {
-        self.fifo_b.push_back(data as i8);
-        if self.fifo_b.len() > 32 {
-            self.fifo_b.pop_front();
-        }
+        self.fifo_b.push(data as i8);
     }
 
     /// Advance FIFO A.
     fn tick_fifo_a(&mut self) {
-        self.buffer_a = self.fifo_a.pop_front().unwrap_or(0) as i16;
+        self.buffer_a = self.fifo_a.pop() as i16;
     }
 
     /// Advance FIFO B.
     fn tick_fifo_b(&mut self) {
-        self.buffer_b = self.fifo_b.pop_front().unwrap_or(0) as i16;
+        self.buffer_b = self.fifo_b.pop() as i16;
     }
 
     /// Call every 4 GBA clocks.
