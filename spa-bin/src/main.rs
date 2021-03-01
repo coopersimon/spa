@@ -10,7 +10,7 @@ use winit::{
         ElementState,
         VirtualKeyCode,
     },
-    event_loop::EventLoop,
+    event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder
 };
 
@@ -37,6 +37,7 @@ fn main() {
         (about: "Gameboy Advance emulator.")
         (@arg ROM: "The path to the game ROM to use.")
         (@arg debug: -d "Enter debug mode.")
+        //(@arg mute: -m "Mute all audio.")
         (@arg save: -s +takes_value "Save file path.")
         (@arg biosrom: -r +takes_value "BIOS ROM path. Needed for certain games.")
     );
@@ -230,16 +231,73 @@ fn main() {
             alpha_to_coverage_enabled: false,
         });
 
-        let mut last_frame_time = chrono::Utc::now();
-        let frame_time = chrono::Duration::nanoseconds(1_000_000_000 / 60);
+        /*let mut last_frame_time = chrono::Utc::now();
+        let nanos = 1_000_000_000 / 60;
+        let frame_time = chrono::Duration::nanoseconds(nanos);*/
     
         // AUDIO
-        let audio_stream = make_audio_stream(&mut gba);
-        audio_stream.play().expect("Couldn't start audio stream");
+        //if !cmd_args.is_present("mute") {
+            let audio_stream = make_audio_stream(&mut gba);
+            audio_stream.play().expect("Couldn't start audio stream");
+        //}
         
-        event_loop.run(move |event, _, _| {
+        event_loop.run(move |event, _, control_flow| {
             match event {
-                Event::MainEventsCleared => window.request_redraw(),
+                Event::LoopDestroyed => debug::debug_mode(&mut gba),
+                Event::MainEventsCleared => {
+                    //let now = chrono::Utc::now();
+                    //let since_last = now.signed_duration_since(last_frame_time);
+                    //println!("Frame time: {}", since_last);
+                    //last_frame_time = now;
+
+                    let mut buf = device.create_buffer_mapped(&wgpu::BufferDescriptor {
+                        label: None,
+                        size: (render_size.0 * render_size.1 * 4) as u64,
+                        usage: wgpu::BufferUsage::COPY_SRC | wgpu::BufferUsage::MAP_WRITE
+                    });
+
+                    gba.frame(&mut buf.data);
+
+                    let tex_buffer = buf.finish();
+
+                    let frame = swapchain.get_next_texture().expect("Timeout when acquiring next swapchain tex.");
+                    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {label: None});
+
+                    encoder.copy_buffer_to_texture(
+                        wgpu::BufferCopyView {
+                            buffer: &tex_buffer,
+                            offset: 0,
+                            bytes_per_row: 4 * texture_extent.width,
+                            rows_per_image: 0
+                        },
+                        wgpu::TextureCopyView {
+                            texture: &texture,
+                            mip_level: 0,
+                            array_layer: 0,
+                            origin: wgpu::Origin3d::ZERO,
+                        },
+                        texture_extent
+                    );
+
+                    {
+                        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                                attachment: &frame.view,
+                                resolve_target: None,
+                                load_op: wgpu::LoadOp::Clear,
+                                store_op: wgpu::StoreOp::Store,
+                                clear_color: wgpu::Color::WHITE,
+                            }],
+                            depth_stencil_attachment: None,
+                        });
+                        rpass.set_pipeline(&render_pipeline);
+                        rpass.set_bind_group(0, &bind_group, &[]);
+                        rpass.set_vertex_buffer(0, &vertex_buf, 0, 0);
+                        rpass.draw(0..4, 0..1);
+                    }
+
+                    queue.submit(&[encoder.finish()]);
+                },
                 Event::WindowEvent {
                     window_id: _,
                     event: w,
@@ -257,7 +315,9 @@ fn main() {
                             ElementState::Released => false,
                         };
                         match k.virtual_keycode {
-                            Some(VirtualKeyCode::G)         => gba.set_button(Button::A, pressed),
+                            Some(VirtualKeyCode::Q)         => {
+                                *control_flow = ControlFlow::Exit;
+                            },
                             Some(VirtualKeyCode::X)         => gba.set_button(Button::A, pressed),
                             Some(VirtualKeyCode::Z)         => gba.set_button(Button::B, pressed),
                             Some(VirtualKeyCode::A)         => gba.set_button(Button::L, pressed),
@@ -278,64 +338,9 @@ fn main() {
                     },
                     _ => {}
                 },
-                Event::RedrawRequested(_) => {
-                    let now = chrono::Utc::now();
-                    if now.signed_duration_since(last_frame_time) >= frame_time {
-                        last_frame_time = now;
-
-                        let mut buf = device.create_buffer_mapped(&wgpu::BufferDescriptor {
-                            label: None,
-                            size: (render_size.0 * render_size.1 * 4) as u64,
-                            usage: wgpu::BufferUsage::COPY_SRC | wgpu::BufferUsage::MAP_WRITE
-                        });
-        
-                        gba.frame(&mut buf.data);
-        
-                        let tex_buffer = buf.finish();
-        
-                        let frame = swapchain.get_next_texture().expect("Timeout when acquiring next swapchain tex.");
-                        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {label: None});
-        
-                        encoder.copy_buffer_to_texture(
-                            wgpu::BufferCopyView {
-                                buffer: &tex_buffer,
-                                offset: 0,
-                                bytes_per_row: 4 * texture_extent.width,
-                                rows_per_image: 0
-                            },
-                            wgpu::TextureCopyView {
-                                texture: &texture,
-                                mip_level: 0,
-                                array_layer: 0,
-                                origin: wgpu::Origin3d::ZERO,
-                            },
-                            texture_extent
-                        );
-        
-                        {
-                            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                                    attachment: &frame.view,
-                                    resolve_target: None,
-                                    load_op: wgpu::LoadOp::Clear,
-                                    store_op: wgpu::StoreOp::Store,
-                                    clear_color: wgpu::Color::WHITE,
-                                }],
-                                depth_stencil_attachment: None,
-                            });
-                            rpass.set_pipeline(&render_pipeline);
-                            rpass.set_bind_group(0, &bind_group, &[]);
-                            rpass.set_vertex_buffer(0, &vertex_buf, 0, 0);
-                            rpass.draw(0..4, 0..1);
-                        }
-        
-                        queue.submit(&[encoder.finish()]);
-                    }
-                    
-                },
+                //Event::RedrawRequested(_) => {},
                 _ => {},
             }
-
         });
     }
 }
