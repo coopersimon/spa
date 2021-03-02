@@ -295,12 +295,10 @@ impl MemInterface8 for GBAAudio {
             0x23 => {
                 self.fifo_mixing = FifoMixing::from_bits_truncate(data);
                 if self.fifo_mixing.contains(FifoMixing::A_RESET_FIFO) {
-                    println!("Clear a");
                     self.fifo_a.clear();
                     self.buffer_a = 0;
                 }
                 if self.fifo_mixing.contains(FifoMixing::B_RESET_FIFO) {
-                    println!("Clear b");
                     self.fifo_b.clear();
                     self.buffer_b = 0;
                 }
@@ -480,7 +478,6 @@ impl GBAAudio {
     }
 
     fn reset(&mut self) {
-        println!("Reset");
         self.square_1.reset();
         self.square_2.reset();
         self.wave.reset();

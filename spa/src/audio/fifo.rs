@@ -55,7 +55,7 @@ impl FIFO {
     }
 }
 
-mod FIFOTest {
+mod fifotest {
     #[test]
     fn test_len() {
         let mut fifo = super::FIFO::new();
