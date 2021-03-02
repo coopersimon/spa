@@ -89,12 +89,13 @@ impl SoftwareRenderer {
                 if x >= (gba::H_RES as u16) {
                     continue;
                 }
-                if let Some(existing_pixel) = &target[x as usize] {
-                    if existing_pixel.priority <= priority {
-                        continue;
+                if !in_obj_window {
+                    if let Some(existing_pixel) = &target[x as usize] {
+                        if existing_pixel.priority <= priority {
+                            continue;
+                        }
                     }
                 }
-                // TODO: check if inside window.
 
                 // Find the pixel
                 let (index_x, index_y) = if let Some(affine_params_num) = affine {
