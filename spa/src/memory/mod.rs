@@ -106,6 +106,7 @@ impl<R: Renderer> MemoryBus<R> {
                 let access = if last_active != c {
                     last_active = c;
                     self.clock(2);
+                    cycle_count += 2;
                     arm::MemCycleType::N
                 } else {
                     arm::MemCycleType::S

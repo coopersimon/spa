@@ -5,7 +5,6 @@ A GameBoy Advance emulator written in rust. See "spa" for the crate, and "spa-bi
 Lots of games work! See spa/README.md for the full list of tested games.
 
 ### TODO
-- Audio FIFO - less crackling
 - Render thread.
 - Frame capture DMA
 - Internal "hardware" BIOS

@@ -330,7 +330,6 @@ impl DMAChannel {
             };
             self.current_src_addr = self.src_addr;
             self.current_dst_addr = self.dst_addr;
-            //println!("Enable DMA! Count: {:X} Src:{:X} Dst:{:X} + control: {:X}", self.current_count, self.current_src_addr, self.current_dst_addr, self.control.bits());
         }
         self.word_size = if self.transfer_32bit_word() {4} else {2};
     }

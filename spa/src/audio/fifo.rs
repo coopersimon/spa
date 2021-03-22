@@ -43,14 +43,19 @@ impl FIFO {
         }
     }
 
-    pub fn pop(&mut self) -> i8 {
+    /// Read the final value in the fifo.
+    pub fn sample(&self) -> i8 {
         if self.len == 0 {
             0
         } else {
-            let ret = self.buffer[self.read];
+            self.buffer[self.read]
+        }
+    }
+
+    pub fn pop(&mut self) {
+        if self.len > 0 {
             self.read = (self.read + 1) % FIFO_SIZE;
             self.len -= 1;
-            ret
         }
     }
 }

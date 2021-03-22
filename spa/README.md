@@ -43,7 +43,6 @@ Status of selected games:
 - Mosaic still not implemented.
 - Affine backgrounds still have issues.
 - There are some issues with unaligned memory.
-- Audio FIFO has some problems.
 - Square wave 1 frequency sweep seems to be incorrect.
 
 ## Odd things

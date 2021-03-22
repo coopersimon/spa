@@ -96,9 +96,7 @@ pub struct GBAAudio {
 
     // Fifo
     fifo_a:         fifo::FIFO,
-    buffer_a:       i16,
     fifo_b:         fifo::FIFO,
-    buffer_b:       i16,
 
     // Comms with audio thread
     sample_buffer:      Vec<Stereo<f32>>,
@@ -130,9 +128,7 @@ impl GBAAudio {
             soundbias:      0x200,
 
             fifo_a:         fifo::FIFO::new(),
-            buffer_a:       0,
             fifo_b:         fifo::FIFO::new(),
-            buffer_b:       0,
 
             sample_buffer:      Vec::new(),
             sample_sender:      None,
@@ -208,12 +204,12 @@ impl GBAAudio {
 
     /// Returns true if fifo A is empty and needs more samples via DMA 1
     pub fn dma_1(&mut self) -> bool {
-        self.fifo_a.len() <= 16
+        self.fifo_a.len() < 16
     }
 
     /// Returns true if fifo B is empty and needs more samples via DMA 2
     pub fn dma_2(&mut self) -> bool {
-        self.fifo_b.len() <= 16
+        self.fifo_b.len() < 16
     }
 }
 
@@ -296,11 +292,9 @@ impl MemInterface8 for GBAAudio {
                 self.fifo_mixing = FifoMixing::from_bits_truncate(data);
                 if self.fifo_mixing.contains(FifoMixing::A_RESET_FIFO) {
                     self.fifo_a.clear();
-                    self.buffer_a = 0;
                 }
                 if self.fifo_mixing.contains(FifoMixing::B_RESET_FIFO) {
                     self.fifo_b.clear();
-                    self.buffer_b = 0;
                 }
             },
             0x24 => {
@@ -449,15 +443,15 @@ impl GBAAudio {
 
     fn mix_fifo_samples(&mut self) -> (i16, i16) {
         let fifo_a = if self.master_vol.contains(MasterVolume::SOUND_A_VOL) {
-            self.buffer_a << 2
+            (self.fifo_a.sample() as i16) << 2
         } else {
-            self.buffer_a << 1
+            (self.fifo_a.sample() as i16) << 1
         };
 
         let fifo_b = if self.master_vol.contains(MasterVolume::SOUND_B_VOL) {
-            self.buffer_b << 2
+            (self.fifo_b.sample() as i16) << 2
         } else {
-            self.buffer_b << 1
+            (self.fifo_b.sample() as i16) << 1
         };
 
         let (mut left, mut right) = (0, 0);
@@ -515,12 +509,12 @@ impl GBAAudio {
 
     /// Advance FIFO A.
     fn tick_fifo_a(&mut self) {
-        self.buffer_a = self.fifo_a.pop() as i16;
+        self.fifo_a.pop();
     }
 
     /// Advance FIFO B.
     fn tick_fifo_b(&mut self) {
-        self.buffer_b = self.fifo_b.pop() as i16;
+        self.fifo_b.pop();
     }
 
     /// Call every 4 GBA clocks.
