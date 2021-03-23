@@ -293,10 +293,10 @@ impl MemInterface16 for DMAChannel {
     }
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0x0 => self.src_addr = u32::set_lo(self.src_addr, data & 0xFFFE),
-            0x2 => self.src_addr = u32::set_hi(self.src_addr, data & 0x0FFF),
-            0x4 => self.dst_addr = u32::set_lo(self.dst_addr, data & 0xFFFE),
-            0x6 => self.dst_addr = u32::set_hi(self.dst_addr, data & 0x0FFF),
+            0x0 => self.src_addr = u32::set_lo(self.src_addr, data),
+            0x2 => self.src_addr = u32::set_hi(self.src_addr, data),
+            0x4 => self.dst_addr = u32::set_lo(self.dst_addr, data),
+            0x6 => self.dst_addr = u32::set_hi(self.dst_addr, data),
             0x8 => self.word_count = data & self.word_count_mask,
             0xA => self.set_control(data),
             _ => unreachable!()
@@ -305,8 +305,8 @@ impl MemInterface16 for DMAChannel {
 
     fn write_word(&mut self, addr: u32, data: u32) {
         match addr {
-            0x0 => self.src_addr = data & 0x0FFF_FFFE,
-            0x4 => self.dst_addr = data & 0x0FFF_FFFE,
+            0x0 => self.src_addr = data,
+            0x4 => self.dst_addr = data,
             0x8 => {
                 self.word_count = u32::lo(data) & self.word_count_mask;
                 self.set_control(u32::hi(data));
@@ -328,10 +328,17 @@ impl DMAChannel {
             } else {
                 self.word_count
             };
-            self.current_src_addr = self.src_addr;
-            self.current_dst_addr = self.dst_addr;
+
+            if self.transfer_32bit_word() {
+                self.word_size = 4;
+                self.current_src_addr = self.src_addr & 0x0FFF_FFFC;
+                self.current_dst_addr = self.dst_addr & 0x0FFF_FFFC;
+            } else {
+                self.word_size = 2;
+                self.current_src_addr = self.src_addr & 0x0FFF_FFFE;
+                self.current_dst_addr = self.dst_addr & 0x0FFF_FFFE;
+            }
         }
-        self.word_size = if self.transfer_32bit_word() {4} else {2};
     }
 
     /// Call on completion of DMA transfer.
