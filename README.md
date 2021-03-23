@@ -8,5 +8,4 @@ Lots of games work! See spa/README.md for the full list of tested games.
 - Render thread.
 - Frame capture DMA
 - Internal "hardware" BIOS
-- Video mosaic.
 - Deal with rampant unaligned memory accesses.

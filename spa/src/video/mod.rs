@@ -144,7 +144,9 @@ impl<R: Renderer> GBAVideo<R> {
             },
             EnterVBlank => {
                 self.state = VBlank;
+                self.v_count += 1;
                 self.mem.registers.set_v_blank(true);
+                self.mem.registers.inc_v_count();
                 self.renderer.finish_frame();
                 (Signal::VBlank, self.mem.registers.v_blank_irq())
             }

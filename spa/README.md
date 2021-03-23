@@ -40,7 +40,6 @@ Status of selected games:
 - Sonic Advance: Loads up and shows some scrolling backgrounds and doesn't respond. Audio plays OK
 
 ## Known Bugs
-- Mosaic still not implemented.
 - Affine backgrounds still have issues.
 - There are some issues with unaligned memory.
 - Square wave 1 frequency sweep seems to be incorrect.

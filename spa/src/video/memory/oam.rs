@@ -230,4 +230,8 @@ impl ObjAttrs {
         const OBJ_WINDOW: u16 = 2 << 10;
         (self.attrs_0 & ObjAttr0::OBJ_MODE).bits() == OBJ_WINDOW
     }
+
+    pub fn is_mosaic(&self) -> bool {
+        self.attrs_0.contains(ObjAttr0::MOSAIC)
+    }
 }

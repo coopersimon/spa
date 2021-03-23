@@ -367,7 +367,6 @@ impl VideoRegisters {
                 tile_map_addr:  self.bg0_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg0_control.tile_data_block() * 16 * 1024,
                 use_8bpp:       self.bg0_control.use_8_bpp(),
-                mosaic:         self.bg0_control.is_mosaic(),
                 scroll_x:       self.bg0_x_offset,
                 scroll_y:       self.bg0_y_offset,
                 layout:         self.bg0_control.layout(),
@@ -384,7 +383,8 @@ impl VideoRegisters {
                     self.colour_special.contains(ColourSpecialControl::BG0_TARGET_1) && self.use_blend_layer_1(),
                     self.colour_special.contains(ColourSpecialControl::BG0_TARGET_2)
                 ),
-                type_data: BackgroundTypeData::Tiled(tiled_data)
+                mosaic:     self.bg0_control.is_mosaic(),
+                type_data:  BackgroundTypeData::Tiled(tiled_data)
             })
         } else {
             None
@@ -397,7 +397,6 @@ impl VideoRegisters {
                 tile_map_addr:  self.bg1_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg1_control.tile_data_block() * 16 * 1024,
                 use_8bpp:       self.bg1_control.use_8_bpp(),
-                mosaic:         self.bg1_control.is_mosaic(),
                 scroll_x:       self.bg1_x_offset,
                 scroll_y:       self.bg1_y_offset,
                 layout:         self.bg1_control.layout(),
@@ -414,7 +413,8 @@ impl VideoRegisters {
                     self.colour_special.contains(ColourSpecialControl::BG1_TARGET_1) && self.use_blend_layer_1(),
                     self.colour_special.contains(ColourSpecialControl::BG1_TARGET_2)
                 ),
-                type_data: BackgroundTypeData::Tiled(tiled_data)
+                mosaic:     self.bg1_control.is_mosaic(),
+                type_data:  BackgroundTypeData::Tiled(tiled_data)
             })
         } else {
             None
@@ -427,7 +427,6 @@ impl VideoRegisters {
                 tile_map_addr:  self.bg2_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg2_control.tile_data_block() * 16 * 1024,
                 use_8bpp:       self.bg2_control.use_8_bpp(),
-                mosaic:         self.bg2_control.is_mosaic(),
                 scroll_x:       self.bg2_x_offset,
                 scroll_y:       self.bg2_y_offset,
                 layout:         self.bg2_control.layout(),
@@ -444,7 +443,8 @@ impl VideoRegisters {
                     self.colour_special.contains(ColourSpecialControl::BG2_TARGET_1) && self.use_blend_layer_1(),
                     self.colour_special.contains(ColourSpecialControl::BG2_TARGET_2)
                 ),
-                type_data: BackgroundTypeData::Tiled(tiled_data)
+                mosaic:     self.bg2_control.is_mosaic(),
+                type_data:  BackgroundTypeData::Tiled(tiled_data)
             })
         } else {
             None
@@ -457,7 +457,6 @@ impl VideoRegisters {
                 tile_map_addr:  self.bg3_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg3_control.tile_data_block() * 16 * 1024,
                 use_8bpp:       self.bg3_control.use_8_bpp(),
-                mosaic:         self.bg3_control.is_mosaic(),
                 scroll_x:       self.bg3_x_offset,
                 scroll_y:       self.bg3_y_offset,
                 layout:         self.bg3_control.layout(),
@@ -474,7 +473,8 @@ impl VideoRegisters {
                     self.colour_special.contains(ColourSpecialControl::BG3_TARGET_1) && self.use_blend_layer_1(),
                     self.colour_special.contains(ColourSpecialControl::BG3_TARGET_2)
                 ),
-                type_data: BackgroundTypeData::Tiled(tiled_data)
+                mosaic:     self.bg3_control.is_mosaic(),
+                type_data:  BackgroundTypeData::Tiled(tiled_data)
             })
         } else {
             None
@@ -486,7 +486,6 @@ impl VideoRegisters {
             let affine_data = AffineBackgroundData {
                 tile_map_addr:  self.bg2_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg2_control.tile_data_block() * 16 * 1024,
-                mosaic:         self.bg2_control.is_mosaic(),
                 bg_ref_point_x: self.bg2_internal_x,
                 bg_ref_point_y: self.bg2_internal_y,
                 matrix_a:       self.bg2_internal_a,
@@ -508,7 +507,8 @@ impl VideoRegisters {
                     self.colour_special.contains(ColourSpecialControl::BG2_TARGET_1) && self.use_blend_layer_1(),
                     self.colour_special.contains(ColourSpecialControl::BG2_TARGET_2)
                 ),
-                type_data: BackgroundTypeData::Affine(affine_data)
+                mosaic:     self.bg2_control.is_mosaic(),
+                type_data:  BackgroundTypeData::Affine(affine_data)
             })
         } else {
             None
@@ -520,7 +520,6 @@ impl VideoRegisters {
             let affine_data = AffineBackgroundData {
                 tile_map_addr:  self.bg3_control.tile_map_block() * 2 * 1024,
                 tile_data_addr: self.bg3_control.tile_data_block() * 16 * 1024,
-                mosaic:         self.bg3_control.is_mosaic(),
                 bg_ref_point_x: self.bg3_internal_x,
                 bg_ref_point_y: self.bg3_internal_y,
                 matrix_a:       self.bg3_internal_a,
@@ -542,7 +541,8 @@ impl VideoRegisters {
                     self.colour_special.contains(ColourSpecialControl::BG3_TARGET_1) && self.use_blend_layer_1(),
                     self.colour_special.contains(ColourSpecialControl::BG3_TARGET_2)
                 ),
-                type_data: BackgroundTypeData::Affine(affine_data)
+                mosaic:     self.bg3_control.is_mosaic(),
+                type_data:  BackgroundTypeData::Affine(affine_data)
             })
         } else {
             None
@@ -554,7 +554,6 @@ impl VideoRegisters {
             let bitmap_data = BitmapBackgroundData {
                 data_addr:  offset,
                 use_15bpp:  use_15bpp,
-                mosaic:     self.bg2_control.is_mosaic(),
                 small:      small,
             };
             Some(BackgroundData {
@@ -569,7 +568,8 @@ impl VideoRegisters {
                     self.colour_special.contains(ColourSpecialControl::BG2_TARGET_1) && self.use_blend_layer_1(),
                     self.colour_special.contains(ColourSpecialControl::BG2_TARGET_2)
                 ),
-                type_data: BackgroundTypeData::Bitmap(bitmap_data)
+                mosaic:     self.bg2_control.is_mosaic(),
+                type_data:  BackgroundTypeData::Bitmap(bitmap_data)
             })
         } else {
             None
@@ -657,6 +657,25 @@ impl VideoRegisters {
     pub fn get_brightness_coeff(&self) -> u16 {
         let evy = (self.brightness & 0x1F) as u16;
         std::cmp::min(0x10, evy)
+    }
+
+    // Mosaic
+    pub fn bg_mosaic_x(&self) -> u8 {
+        let mosaic = (self.mosaic & 0xF) as u8;
+        mosaic + 1
+    }
+    pub fn bg_mosaic_y(&self) -> u8 {
+        let mosaic = ((self.mosaic >> 4) & 0xF) as u8;
+        mosaic + 1
+    }
+
+    pub fn obj_mosaic_x(&self) -> u8 {
+        let mosaic = ((self.mosaic >> 8) & 0xF) as u8;
+        mosaic + 1
+    }
+    pub fn obj_mosaic_y(&self) -> u8 {
+        let mosaic = ((self.mosaic >> 12) & 0xF) as u8;
+        mosaic + 1
     }
 }
 

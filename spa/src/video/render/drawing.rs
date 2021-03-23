@@ -54,6 +54,8 @@ impl SoftwareRenderer {
     fn draw_obj_line(&self, mem: &VideoMemory, target: &mut [Option<ObjectPixel>], obj_window: &mut [bool], y: u8) {
         const OBJECT_VRAM_BASE: u32 = VRAM_TILE_BLOCK * 4;
         let use_1d_tile_mapping = mem.registers.obj_1d_tile_mapping();
+        let mosaic_x = mem.registers.obj_mosaic_x();
+        let mosaic_y = mem.registers.obj_mosaic_y();
 
         for object in mem.oam.ref_objects() {
             if !object.is_enabled() {
@@ -112,6 +114,11 @@ impl SoftwareRenderer {
                 } else {
                     let index_x = if object.h_flip() {width - object_x - 1} else {object_x} as u8;
                     let index_y = if object.v_flip() {height - object_y - 1} else {object_y} as u8;
+                    (index_x, index_y)
+                };
+                let (index_x, index_y) = if object.is_mosaic() {
+                    (index_x - (index_x % mosaic_x), index_y - (index_y % mosaic_y))
+                } else {
                     (index_x, index_y)
                 };
                 let tile_x = (index_x / 8) as u32;
@@ -365,7 +372,11 @@ impl SoftwareRenderer {
         if !self.window_pixel(&mem.registers, bg.window_mask, obj_window, x, y) {
             return None;
         }
-        // TODO: mosaic
+        let (x, y) = if bg.mosaic {
+            (x - x % mem.registers.bg_mosaic_x(), y - y % mem.registers.bg_mosaic_y())
+        } else {
+            (x, y)
+        };
         match &bg.type_data {
             BackgroundTypeData::Tiled(t) => {
                 let scrolled_x = (x as u32).wrapping_add(t.scroll_x as u32);

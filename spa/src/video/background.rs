@@ -15,6 +15,7 @@ pub struct BackgroundData {
     pub priority:       u8,
     pub window_mask:    WindowMask,
     pub blend_mask:     BlendMask,
+    pub mosaic:         bool,
     pub type_data:      BackgroundTypeData,
 }
 
@@ -78,7 +79,6 @@ pub struct TiledBackgroundData {
     pub tile_map_addr:  u32,
     pub tile_data_addr: u32,
     pub use_8bpp:       bool,
-    pub mosaic:         bool,
 
     pub scroll_x:   u16,
     pub scroll_y:   u16,
@@ -90,7 +90,6 @@ pub struct TiledBackgroundData {
 pub struct AffineBackgroundData {
     pub tile_map_addr:  u32,
     pub tile_data_addr: u32,
-    pub mosaic:         bool,
 
     pub bg_ref_point_x: I24F8,
     pub bg_ref_point_y: I24F8,
@@ -107,6 +106,5 @@ pub struct AffineBackgroundData {
 pub struct BitmapBackgroundData {
     pub data_addr:      u32,
     pub use_15bpp:      bool,
-    pub mosaic:         bool,
     pub small:          bool,
 }
