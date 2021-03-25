@@ -3,6 +3,9 @@ use std::convert::TryInto;
 use bitflags::bitflags;
 use crate::common::bits::{u8, u16};
 
+const VRAM_SIZE: u32 = 96 * 1024;
+const OBJ_VRAM_SIZE: u32 = 32 * 1024;
+
 bitflags! {
     #[derive(Default)]
     /// Tile map attributes.
@@ -40,7 +43,7 @@ pub struct VRAM {
 impl VRAM {
     pub fn new() -> Self {
         Self {
-            data: vec![0; 96 * 1024]
+            data: vec![0; VRAM_SIZE as usize]
         }
     }
 
@@ -113,13 +116,21 @@ impl VRAM {
 // Memory interface
 impl VRAM {
     pub fn read_halfword(&self, addr: u32) -> u16 {
-        let start = addr as usize;
+        let start = if addr < VRAM_SIZE {
+            addr
+        } else {
+            addr - OBJ_VRAM_SIZE
+        } as usize;
         let end = start + 2;
         let data: [u8; 2] = (self.data[start..end]).try_into().unwrap();
         u16::from_le_bytes(data)
     }
     pub fn write_halfword(&mut self, addr: u32, data: u16) {
-        let start = addr as usize;
+        let start = if addr < VRAM_SIZE {
+            addr
+        } else {
+            addr - OBJ_VRAM_SIZE
+        } as usize;
         let end = start + 2;
         for (dest, byte) in self.data[start..end].iter_mut().zip(&data.to_le_bytes()) {
             *dest = *byte;

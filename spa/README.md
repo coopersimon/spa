@@ -10,12 +10,12 @@ Status of selected games:
 - Doom: Looks good.
 - Doom II: Loads up ok. Gameplay looks a bit weird. Might be that frame isn't overwritten with blank data?
 - Final Fantasy Dawn of Souls:
-    - FFI: Setup is OK, intro goes OK for a bit then tries to write to VRAM addr 0x0607_4000
+    - FFI: Setup is OK, intro is OK, however when crystals are shown (switch to affine BG?) it writes to VRAM mirror. The overworld looks strange. Everything else seems ok
 - Final Fantasy IV: Intro and title look good, when game begins scrolling background looks odd (individual tiles aren't scrolling)
 - Final Fantasy V: Looks good.
 - Final Fantasy VI: Looks good, title screen palette is wrong.
 - Final Fantasy Tactics Advance: Looks good.
-- Four Swords: Looks mostly OK, LTTP tries to read invalid VRAM addr 0x0750_000A during intro.
+- Four Swords: Looks OK.
 - Golden Sun: Looks mostly OK, sprites flicker constantly however.
 - Harry Potter 2: Looks good
 - Incredibles: Looks good
@@ -23,7 +23,7 @@ Status of selected games:
 - Mario Kart Super Circuit: Title, intro, selection looks good. Affine bg in gameplay looks wrong.
 - Mother 1+2: Loads up ok. Cart select looks good.
     - Mother 1: Looks good.
-    - Mother 2: Title, character naming, and intro works. Demo crashes trying to read invalid VRAM addr 0x05DC_E0B4
+    - Mother 2: Title, character naming, and intro works.
 - Mother 3: Works ok.
 - Pokemon Emerald: Loads up OK. RTC not implemented yet.
 - Pokemon FireRed: Loads up OK. RTC not implemented yet.
@@ -37,7 +37,8 @@ Status of selected games:
 - F-Zero Maximum Velocity: Title and setup works ok, actual game backgrounds perspective is off.
 - Pokemon Ruby: Looks good.
 - Fire Emblem: Looks good.
-- Sonic Advance: Loads up and shows some scrolling backgrounds and doesn't respond. Audio plays OK
+- Sonic Advance: Loads up and shows some scrolling backgrounds and doesn't respond. Audio plays OK (apparently a link cable issue)
+- Wario Land 4: Looks OK.
 
 ## Known Bugs
 - Affine backgrounds still have issues.

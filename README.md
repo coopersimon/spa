@@ -5,7 +5,8 @@ A GameBoy Advance emulator written in rust. See "spa" for the crate, and "spa-bi
 Lots of games work! See spa/README.md for the full list of tested games.
 
 ### TODO
-- Render thread.
+- Render thread / GPU renderer.
 - Frame capture DMA
 - Internal "hardware" BIOS
-- Deal with rampant unaligned memory accesses.
+- Link cable support of some kind
+- Real-time clock support

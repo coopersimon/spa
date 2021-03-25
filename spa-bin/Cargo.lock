@@ -93,7 +93,6 @@ dependencies = [
 [[package]]
 name = "arm"
 version = "0.2.0"
-source = "git+https://github.com/coopersimon/e-arm#859e36a046aa23c7da2712609302612b7c381c0f"
 dependencies = [
  "bitflags",
  "num-traits",

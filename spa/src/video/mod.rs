@@ -87,9 +87,9 @@ impl<R: Renderer> MemInterface16 for GBAVideo<R> {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
             0x00..=0x57 => self.mem.registers.read_halfword(addr),
-            0x0500_0000..=0x0500_03FF => self.mem.palette.read_halfword(addr - 0x0500_0000),
-            0x0600_0000..=0x0601_7FFF => self.mem.vram.read_halfword(addr - 0x0600_0000),
-            0x0700_0000..=0x0700_03FF => self.mem.oam.read_halfword(addr - 0x0700_0000),
+            0x0500_0000..=0x05FF_FFFF => self.mem.palette.read_halfword(addr & 0x3FF),
+            0x0600_0000..=0x06FF_FFFF => self.mem.vram.read_halfword(addr & 0x1_FFFF),
+            0x0700_0000..=0x07FF_FFFF => self.mem.oam.read_halfword(addr & 0x3FF),
             _ => panic!(format!("reading invalid video address {:X}", addr))
         }
     }
@@ -97,9 +97,9 @@ impl<R: Renderer> MemInterface16 for GBAVideo<R> {
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
             0x00..=0x57 => self.mem.registers.write_halfword(addr, data),
-            0x0500_0000..=0x0500_03FF => self.mem.palette.write_halfword(addr - 0x0500_0000, data),
-            0x0600_0000..=0x0601_7FFF => self.mem.vram.write_halfword(addr - 0x0600_0000, data),
-            0x0700_0000..=0x0700_03FF => self.mem.oam.write_halfword(addr - 0x0700_0000, data),
+            0x0500_0000..=0x05FF_FFFF => self.mem.palette.write_halfword(addr & 0x3FF, data),
+            0x0600_0000..=0x06FF_FFFF => self.mem.vram.write_halfword(addr & 0x1_FFFF, data),
+            0x0700_0000..=0x07FF_FFFF => self.mem.oam.write_halfword(addr & 0x3FF, data),
             _ => panic!(format!("writing invalid video address {:X}", addr))
         }
     }
