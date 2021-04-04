@@ -3,6 +3,7 @@ mod wram;
 mod dma;
 mod cart;
 mod bios;
+mod swi;
 
 use arm::{Mem32, MemCycleType};
 use crossbeam_channel::{Receiver, unbounded};
@@ -20,6 +21,7 @@ use crate::{
 use dma::{DMA, DMAAddress};
 use cart::{GamePak, GamePakController};
 pub use wram::WRAM;
+pub use swi::emulated_swi;
 
 /// Game Boy Advance memory bus
 pub struct MemoryBus<R: Renderer> {

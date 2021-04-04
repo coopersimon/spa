@@ -128,10 +128,17 @@ impl MemInterface16 for GamePak {
 // Internal: ROM access
 impl GamePak {
     fn read_u16(&self, addr: u32) -> u16 {
-        let start = addr as usize;
-        let end = start + 2;
-        let data = (self.rom[start..end]).try_into().unwrap();
-        u16::from_le_bytes(data)
+        if addr & 1 == 0 {
+            let start = addr as usize;
+            let end = start + 2;
+            let data = (self.rom[start..end]).try_into().unwrap();
+            u16::from_le_bytes(data)
+        } else {
+            let start = (addr - 1) as usize;
+            let end = start + 2;
+            let data = (self.rom[start..end]).try_into().unwrap();
+            u16::from_le_bytes(data).rotate_right(8)
+        }
     }
 
     fn read_u32(&self, addr: u32) -> u32 {

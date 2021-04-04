@@ -43,3 +43,15 @@ pub mod u16 {
         (val & bit(n)) != 0
     }
 }
+
+pub mod u32 {
+    /// Set the nth bit.
+    pub const fn bit(n: usize) -> u32 {
+        1 << n
+    }
+
+    /// Check if the nth bit is set.
+    pub const fn test_bit(val: u32, n: usize) -> bool {
+        (val & bit(n)) != 0
+    }
+}

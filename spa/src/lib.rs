@@ -36,8 +36,21 @@ pub struct GBA {
 impl GBA {
     pub fn new(rom_path: &Path, save_path: Option<&Path>, bios_path: Option<&Path>) -> Self {
         let bus = MemoryBus::new(rom_path, save_path, bios_path).unwrap();
+        let cpu = if bios_path == None {
+            let mut cpu = ARM7TDMI::new(bus, std::collections::HashMap::new(), Some(memory::emulated_swi));
+            cpu.do_branch(0x0800_0000);
+            cpu.write_cpsr(arm::CPSR::SVC);
+            cpu.write_reg(13, 0x0300_7FE0);
+            cpu.write_cpsr(arm::CPSR::IRQ);
+            cpu.write_reg(13, 0x0300_7FA0);
+            cpu.write_cpsr(arm::CPSR::SYS);
+            cpu.write_reg(13, 0x0300_7F00);
+            cpu
+        } else {
+            ARM7TDMI::new(bus, std::collections::HashMap::new(), None)
+        };
         Self {
-            cpu: ARM7TDMI::new(bus, std::collections::HashMap::new(), None),
+            cpu: cpu,
 
             cycle_count: 0,
         }
@@ -135,7 +148,7 @@ impl GBA {
     }
 
     /// Step the device by one CPU cycle.
-    pub fn step(&mut self) {
+    pub fn step(&mut self) -> usize {
         let step_cycles = if !self.cpu.ref_mem().is_halted() {
             self.cpu.step()
         } else {
@@ -143,10 +156,11 @@ impl GBA {
         };
         let mem = self.cpu.ref_mem_mut();
         mem.clock(step_cycles);
-        mem.do_dma();
+        let dma_cycles = mem.do_dma();
         if mem.check_irq() {
             mem.unhalt();
             self.cpu.interrupt();
         }
+        step_cycles + dma_cycles
     }
 }
