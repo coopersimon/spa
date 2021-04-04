@@ -7,6 +7,7 @@ pub fn debug_mode(gba: &mut GBA) {
 
     let mut breaks = std::collections::BTreeSet::new();
     let mut stack_trace = Vec::new();
+    let mut cycles = 0;
     loop {
         let mut input = String::new();
         match std::io::stdin().read_line(&mut input) {
@@ -41,7 +42,7 @@ pub fn debug_mode(gba: &mut GBA) {
                         println!("Break at ${:08X}", loc);
                         break;
                     } else {
-                        step_and_trace(gba, &mut stack_trace, false);
+                        cycles += step_and_trace(gba, &mut stack_trace, false);
                     }
                 }
             } else if input.starts_with("s:") {
@@ -49,14 +50,14 @@ pub fn debug_mode(gba: &mut GBA) {
                 match usize::from_str_radix(&input[2..].trim(), 10) {
                     Ok(num) => {
                         for _ in 0..num {
-                            step_and_trace(gba, &mut stack_trace, true);
+                            cycles += step_and_trace(gba, &mut stack_trace, true);
                         }
                     },
                     Err(e) => println!("Invalid number of steps: {}", e),
                 }
             } else if input.starts_with("s") {
                 // Step
-                step_and_trace(gba, &mut stack_trace, true);
+                cycles += step_and_trace(gba, &mut stack_trace, true);
             } else if input.starts_with("p:") {
                 // Print cpu or mem state
                 print(&input[2..].trim(), gba);
@@ -69,8 +70,10 @@ pub fn debug_mode(gba: &mut GBA) {
                     .collect::<Vec<_>>()
                     .join("\n");
                 println!("{}", trace);
+            } else if input.starts_with("n") {
+                println!("Cycles: {}", cycles);
+                cycles = 0;
             } else if input.starts_with("h") {
-                // Help
                 help();
             } else if input.starts_with("q") {
                 break;
@@ -162,7 +165,7 @@ fn help() {
 }
 
 // Step the CPU, and add the PC to the stack trace if it calls.
-fn step_and_trace(gba: &mut GBA, _stack_trace: &mut Vec<u32>, print: bool) {
+fn step_and_trace(gba: &mut GBA, _stack_trace: &mut Vec<u32>, print: bool) -> usize {
     let state = gba.get_state();
     let instr = state.pipeline;
     if let Some(_executing) = &instr[2] {
@@ -177,5 +180,5 @@ fn step_and_trace(gba: &mut GBA, _stack_trace: &mut Vec<u32>, print: bool) {
         }).collect::<Vec<_>>().join(" => "));
     }
 
-    gba.step();
+    gba.step()
 }
