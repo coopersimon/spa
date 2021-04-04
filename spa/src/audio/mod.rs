@@ -556,6 +556,7 @@ impl GBAAudio {
     }
 }
 
+#[inline]
 const fn clamp(n: i16, low: i16, high: i16) -> i16 {
     if n < low {
         low
@@ -566,6 +567,7 @@ const fn clamp(n: i16, low: i16, high: i16) -> i16 {
     }
 }
 
+#[inline]
 fn to_output(sample: i16) -> f32 {
     let shifted = (sample >> 1) as f32;
     (shifted / 256.0) - 1.0

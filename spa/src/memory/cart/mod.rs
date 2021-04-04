@@ -80,7 +80,7 @@ impl MemInterface16 for GamePak {
             0x0B00_0000..=0x0BFF_FFFF if self.eeprom => self.ram.write_byte(addr, data),
             0x0D00_0000..=0x0DFF_FFFF if self.eeprom => self.ram.write_byte(addr, data),
             0x0E00_0000..=0x0EFF_FFFF => self.ram.write_byte(addr & 0xFFFF, data),
-            0x0800_0000..=0x0DFF_FFFF => panic!(format!("Trying to write to ROM 0x{:X}", addr)),
+            0x0800_0000..=0x0DFF_FFFF => panic!("Trying to write to ROM 0x{:X}", addr),
             _ => unreachable!()
         }
     }
@@ -105,7 +105,7 @@ impl MemInterface16 for GamePak {
             0x0B00_0000..=0x0BFF_FFFF if self.eeprom => self.ram.write_halfword(addr, data),
             0x0D00_0000..=0x0DFF_FFFF if self.eeprom => self.ram.write_halfword(addr, data),
             0x0E00_0000..=0x0EFF_FFFF => self.ram.write_halfword(addr & 0xFFFF, data),
-            0x0800_0000..=0x0DFF_FFFF => panic!(format!("Trying to write to ROM 0x{:X}", addr)),
+            0x0800_0000..=0x0DFF_FFFF => panic!("Trying to write to ROM 0x{:X}", addr),
             _ => unreachable!()
         }
     }

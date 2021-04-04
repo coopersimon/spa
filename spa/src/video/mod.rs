@@ -90,7 +90,7 @@ impl<R: Renderer> MemInterface16 for GBAVideo<R> {
             0x0500_0000..=0x05FF_FFFF => self.mem.palette.read_halfword(addr & 0x3FF),
             0x0600_0000..=0x06FF_FFFF => self.mem.vram.read_halfword(addr & 0x1_FFFF),
             0x0700_0000..=0x07FF_FFFF => self.mem.oam.read_halfword(addr & 0x3FF),
-            _ => panic!(format!("reading invalid video address {:X}", addr))
+            _ => panic!("reading invalid video address {:X}", addr)
         }
     }
 
@@ -100,7 +100,7 @@ impl<R: Renderer> MemInterface16 for GBAVideo<R> {
             0x0500_0000..=0x05FF_FFFF => self.mem.palette.write_halfword(addr & 0x3FF, data),
             0x0600_0000..=0x06FF_FFFF => self.mem.vram.write_halfword(addr & 0x1_FFFF, data),
             0x0700_0000..=0x07FF_FFFF => self.mem.oam.write_halfword(addr & 0x3FF, data),
-            _ => panic!(format!("writing invalid video address {:X}", addr))
+            _ => panic!("writing invalid video address {:X}", addr)
         }
     }
 }

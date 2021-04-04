@@ -83,7 +83,7 @@ fn make_from_existing(mut file: File) -> Result<(Box<dyn SaveRAM>, bool)> {
         FLASH_128_CODE => Ok((Box::new(FLASH::new_from_file(file, FLASH_128_SIZE)?), false)),
         EEPROM_512_CODE => Ok((Box::new(EEPROM::new_from_file(file, EEPROMSize::B512)?), true)),
         EEPROM_8K_CODE => Ok((Box::new(EEPROM::new_from_file(file, EEPROMSize::K8)?), true)),
-        c => panic!(format!("Unknown save code {}", c))
+        c => panic!("Unknown save code {}", c)
     }
 }
 

@@ -179,7 +179,7 @@ impl MemInterface8 for EEPROM {
                 self.mode = Null(0);
                 1
             },
-            Write(n) => panic!(format!("Writing with an unknown address: {}", n)),
+            Write(n) => panic!("Writing with an unknown address: {}", n),
             PrepRead(READ_STREAM_512_LEN) => {
                 self.set_size_512();
                 let addr = (self.write_buffer >> 1) as usize;
