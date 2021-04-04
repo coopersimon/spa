@@ -37,7 +37,7 @@ impl GBA {
     pub fn new(rom_path: &Path, save_path: Option<&Path>, bios_path: Option<&Path>) -> Self {
         let bus = MemoryBus::new(rom_path, save_path, bios_path).unwrap();
         Self {
-            cpu: ARM7TDMI::new(bus, std::collections::HashMap::new()),
+            cpu: ARM7TDMI::new(bus, std::collections::HashMap::new(), None),
 
             cycle_count: 0,
         }
