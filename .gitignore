@@ -3,3 +3,4 @@ target/
 /spa-bin/roms
 /spa-bin/saves
 *.bin
+.vscode
