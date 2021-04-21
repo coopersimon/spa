@@ -17,8 +17,8 @@ version = "0.11"
 features = ["interpolate", "interpolate-sinc", "ring_buffer", "signal"]
 
 [dependencies.arm]
-git = "https://github.com/coopersimon/e-arm"
-#path = "../../arm"
+#git = "https://github.com/coopersimon/e-arm"
+path = "../../arm"
 
 [features]
 debug = []

@@ -3,11 +3,11 @@ mod wram;
 mod dma;
 mod cart;
 mod bios;
+pub mod framecomms;
 
 use arm::{Mem32, MemCycleType};
 use crossbeam_channel::{Receiver, unbounded};
 
-use std::path::Path;
 use crate::{
     common::bits::u8,
     common::meminterface::{MemInterface8, MemInterface16},
@@ -20,6 +20,7 @@ use crate::{
 use dma::{DMA, DMAAddress};
 use cart::{GamePak, GamePakController};
 pub use wram::WRAM;
+use framecomms::FrameSender;
 
 /// Game Boy Advance memory bus
 pub struct MemoryBus<R: Renderer> {
@@ -41,10 +42,12 @@ pub struct MemoryBus<R: Renderer> {
 
     dma:                DMA,
     interrupt_control:  InterruptControl,
+
+    frame_sender:       FrameSender,
 }
 
 impl<R: Renderer> MemoryBus<R> {
-    pub fn new(rom_path: &Path, save_path: Option<&Path>, bios_path: Option<&Path>) -> std::io::Result<Self> {
+    pub fn new(rom_path: String, save_path: Option<String>, bios_path: Option<String>, frame_sender: FrameSender) -> std::io::Result<Self> {
         let bios = bios::BIOS::new(bios_path)?;
         let game_pak = cart::GamePak::new(rom_path, save_path)?;
         Ok(Self {
@@ -57,7 +60,7 @@ impl<R: Renderer> MemoryBus<R> {
             game_pak:           game_pak,
             game_pak_control:   GamePakController::new(),
 
-            video:              GBAVideo::new(R::new()),
+            video:              GBAVideo::new(R::new(frame_sender.get_frame_buffer())),
 
             audio:              GBAAudio::new(),
 
@@ -66,10 +69,12 @@ impl<R: Renderer> MemoryBus<R> {
 
             dma:                DMA::new(),
             interrupt_control:  InterruptControl::new(),
+
+            frame_sender:       frame_sender,
         })
     }
 
-    pub fn is_halted(&self) -> bool {
+    /*pub fn is_halted(&self) -> bool {
         self.internal.halt
     }
 
@@ -83,7 +88,7 @@ impl<R: Renderer> MemoryBus<R> {
 
     pub fn render_size(&self) -> (usize, usize) {
         self.video.render_size()
-    }
+    }*/
 
     pub fn enable_audio(&mut self) -> (Receiver<SamplePacket>, Receiver<f64>) {
         let (sample_tx, sample_rx) = unbounded();
@@ -92,21 +97,34 @@ impl<R: Renderer> MemoryBus<R> {
         (sample_rx, rate_rx)
     }
 
+    pub fn set_button(&mut self, buttons: Buttons, pressed: bool) {
+        self.joypad.set_button(buttons, pressed);
+    }
+
+    /*pub fn flush_save(&mut self) {
+        self.game_pak.flush_save();
+    }*/
+}
+
+// Internal
+impl<R: Renderer> MemoryBus<R> {
+
     /// Do a DMA transfer if possible.
-    /// Returns the number of cycles passed.
     /// 
     /// This function clocks the memory bus internally.
     /// It will continue until the transfer is done.
-    pub fn do_dma(&mut self) -> usize {
-        let mut cycle_count = 0;
+    fn do_dma(&mut self) {
+        //let mut cycle_count = 0;
         let mut last_active = 4;
         loop {
             if let Some(c) = self.dma.get_active() {
                 // Check if DMA channel has changed since last transfer.
                 let access = if last_active != c {
                     last_active = c;
-                    self.clock(2);
-                    cycle_count += 2;
+                    if self.do_clock(2) {
+                        self.frame_end();
+                    }
+                    //cycle_count += 2;
                     arm::MemCycleType::N
                 } else {
                     arm::MemCycleType::S
@@ -141,23 +159,32 @@ impl<R: Renderer> MemoryBus<R> {
                         cycles
                     }
                 };
-                self.clock(cycles);
-                cycle_count += cycles;
+                if self.do_clock(cycles) {
+                    self.frame_end();
+                }
+                //cycle_count += cycles;
             } else {
-                break cycle_count;
+                break;
             }
         }
     }
 
-    /// Indicate to the memory bus that cycles have passed.
-    /// The cycles passed into here should come from the CPU.
-    pub fn clock(&mut self, cycles: usize) {
+    /// Indicate to all of the devices on the memory bus that cycles have passed.
+    /// 
+    /// Returns true if VBlank occurred, and therefore the frame is ready to be presented.
+    fn do_clock(&mut self, cycles: usize) -> bool {
         let (video_signal, video_irq) = self.video.clock(cycles);
-        match video_signal {
-            Signal::VBlank => self.dma.on_vblank(),
-            Signal::HBlank => self.dma.on_hblank(),
-            Signal::None => {},
-        }
+        let vblank = match video_signal {
+            Signal::VBlank => {
+                self.dma.on_vblank();
+                true
+            },
+            Signal::HBlank => {
+                self.dma.on_hblank();
+                false
+            },
+            Signal::None => false,
+        };
 
         let (timer_irq, timer_0, timer_1) = self.timers.clock(cycles);
         if timer_0 {
@@ -179,24 +206,53 @@ impl<R: Renderer> MemoryBus<R> {
             timer_irq |
             video_irq
         );
+
+        vblank
     }
 
-    pub fn check_irq(&self) -> bool {
+    fn check_irq(&self) -> bool {
         self.interrupt_control.irq()
     }
 
-    pub fn set_button(&mut self, buttons: Buttons, pressed: bool) {
-        self.joypad.set_button(buttons, pressed);
-    }
-
-    /// Write the save file to memory if dirty.
-    pub fn flush_save(&mut self) {
+    /// Called when vblank occurs. Halts emulation until the next frame.
+    fn frame_end(&mut self) {
         self.game_pak.flush_save();
+
+        let buttons = self.frame_sender.sync_frame();
+        self.joypad.set_all_buttons(buttons);
     }
 }
 
 impl<R: Renderer> Mem32 for MemoryBus<R> {
     type Addr = u32;
+
+    fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
+        if self.do_clock(cycles) {
+            self.frame_end();
+        }
+        self.do_dma();
+
+        // Check if CPU is halted.
+        if self.internal.halt {
+            loop {
+                if self.do_clock(1) {
+                    self.frame_end();
+                }
+                self.do_dma();
+                if self.check_irq() {
+                    self.internal.halt = false;
+                    return Some(arm::ExternalException::IRQ);
+                }
+            }
+        }
+
+        if self.check_irq() {
+            self.internal.halt = false;
+            Some(arm::ExternalException::IRQ)
+        } else {
+            None
+        }
+    }
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
         match addr {

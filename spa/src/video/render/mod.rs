@@ -3,11 +3,16 @@
 mod drawing;
 mod colour;
 
+use std::sync::{
+    Arc, Mutex
+};
 use crate::constants::*;
+
+pub type RenderTarget = Arc<Mutex<Box<[u8]>>>;
 
 /// Renderer trait. The renderer should implement this.
 pub trait Renderer {
-    fn new() -> Self;
+    fn new(target: RenderTarget) -> Self;
 
     /// Render a single line.
     fn render_line(&mut self, mem: &mut super::VideoMemory, line: u8);
@@ -15,23 +20,21 @@ pub trait Renderer {
     fn start_frame(&mut self);
     /// Complete rendering the frame.
     fn finish_frame(&mut self);
-    /// Copy the frame data into the buffer provided.
-    fn get_frame_data(&self, buffer: &mut [u8]);
     /// Get the size of the render target in pixels.
-    fn render_size(&self) -> (usize, usize);
+    fn render_size() -> (usize, usize);
 }
 
 pub struct ProceduralRenderer {
     renderer:   drawing::SoftwareRenderer,
 
-    target:     Vec<u8>
+    target:     RenderTarget
 }
 
 impl Renderer for ProceduralRenderer {
-    fn new() -> Self {
+    fn new(target: RenderTarget) -> Self {
         Self {
             renderer:   drawing::SoftwareRenderer::new(),
-            target:     vec![0; gba::H_RES * gba::V_RES * 4],
+            target:     target,
         }
     }
 
@@ -39,7 +42,8 @@ impl Renderer for ProceduralRenderer {
         self.renderer.setup_caches(mem);
         let start_offset = (line as usize) * (gba::H_RES * 4);
         let end_offset = start_offset + (gba::H_RES * 4);
-        self.renderer.draw_line(mem, &mut self.target[start_offset..end_offset], line);
+        let mut target = self.target.lock().unwrap();
+        self.renderer.draw_line(mem, &mut target[start_offset..end_offset], line);
     }
 
     fn start_frame(&mut self) {
@@ -50,11 +54,7 @@ impl Renderer for ProceduralRenderer {
         //println!("Finish frame");
     }
 
-    fn get_frame_data(&self, buffer: &mut [u8]) {
-        buffer.copy_from_slice(&self.target);
-    }
-
-    fn render_size(&self) -> (usize, usize) {
+    fn render_size() -> (usize, usize) {
         (gba::H_RES, gba::V_RES)
     }
 }
@@ -62,21 +62,22 @@ impl Renderer for ProceduralRenderer {
 pub struct DebugTileRenderer {
     renderer:   drawing::SoftwareRenderer,
 
-    target:     Vec<u8>
+    target:     RenderTarget
 }
 
 impl Renderer for DebugTileRenderer {
-    fn new() -> Self {
+    fn new(target: RenderTarget) -> Self {
         Self {
             renderer:   drawing::SoftwareRenderer::new(),
-            target:     vec![0; 256 * 384 * 4],
+            target:     target,
         }
     }
 
     fn render_line(&mut self, mem: &mut super::VideoMemory, line: u8) {
         self.renderer.setup_caches(mem);
         if line == 0 {
-            self.renderer.draw_8bpp_tiles(mem, &mut self.target);
+            let mut target = self.target.lock().unwrap();
+            self.renderer.draw_8bpp_tiles(mem, &mut target);
         }
     }
 
@@ -88,11 +89,7 @@ impl Renderer for DebugTileRenderer {
         //println!("Finish frame");
     }
 
-    fn get_frame_data(&self, buffer: &mut [u8]) {
-        buffer.copy_from_slice(&self.target);
-    }
-
-    fn render_size(&self) -> (usize, usize) {
+    fn render_size() -> (usize, usize) {
         (256, 384)
     }
 }

@@ -1,5 +1,5 @@
 
-mod debug;
+//mod debug;
 
 use winit::{
     dpi::{
@@ -45,19 +45,19 @@ fn main() {
     let cmd_args = app.get_matches();
 
     let rom_path = match cmd_args.value_of("ROM") {
-        Some(c) => std::path::Path::new(c),
+        Some(c) => c.to_string(),
         None => panic!("Usage: spa [ROM name]. Run with --help for more options."),
     };
 
-    let save_path = cmd_args.value_of("save").map(|s| std::path::Path::new(s));
-    let bios_path = cmd_args.value_of("biosrom").map(|s| std::path::Path::new(s));
+    let save_path = cmd_args.value_of("save").map(|s| s.to_string());
+    let bios_path = cmd_args.value_of("biosrom").map(|s| s.to_string());
 
-    let mut gba = GBA::new(&rom_path, save_path, bios_path);
+    let mut gba = GBA::new(rom_path, save_path, bios_path);
     let render_size = gba.render_size();
 
     if cmd_args.is_present("debug") {
         //#[cfg(feature = "debug")]
-        debug::debug_mode(&mut gba);
+        //debug::debug_mode(&mut gba);
     } else {
         let event_loop = EventLoop::new();
         let window = WindowBuilder::new()
@@ -243,7 +243,7 @@ fn main() {
         
         event_loop.run(move |event, _, control_flow| {
             match event {
-                Event::LoopDestroyed => debug::debug_mode(&mut gba),
+                Event::LoopDestroyed => (),//debug::debug_mode(&mut gba),
                 Event::MainEventsCleared => {
                     //let now = chrono::Utc::now();
                     //let since_last = now.signed_duration_since(last_frame_time);
@@ -357,7 +357,7 @@ fn make_audio_stream(gba: &mut GBA) -> cpal::Stream {
     let config = pick_output_config(&device).with_max_sample_rate();
     let sample_rate = config.sample_rate().0 as f64;
     println!("Audio sample rate {}", sample_rate);
-    let mut audio_handler = gba.enable_audio(sample_rate);
+    let mut audio_handler = gba.enable_audio(sample_rate).unwrap();
 
     device.build_output_stream(
         &config.into(),
