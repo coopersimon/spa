@@ -35,8 +35,6 @@ pub enum Button {
 type RendererType = crate::video::ProceduralRenderer;
 
 pub struct GBA {
-    //cpu: ARM7TDMI<MemoryBus<RendererType>>,
-
     frame_receiver: FrameRequester,
 
     audio_channels: Option<(Receiver<SamplePacket>, Receiver<f64>)>,
@@ -56,10 +54,7 @@ impl GBA {
                 cpu.step();
             }
         });
-        // TODO: start CPU
         Self {
-            //cpu: cpu,
-
             frame_receiver: frame_receiver,
             audio_channels: Some(audio_channels),
 
@@ -72,27 +67,6 @@ impl GBA {
     /// This should be called at 60fps.
     /// The frame is in the format R8G8B8A8.
     pub fn frame(&mut self, frame: &mut [u8]) {
-        /*while self.cycle_count < constants::gba::FRAME_CYCLES {
-            let step_cycles = if !self.cpu.ref_mem().is_halted() {
-                self.cpu.step()
-            } else {
-                1
-            };
-            let mem = self.cpu.ref_mem_mut();
-            mem.clock(step_cycles);
-            let dma_cycles = mem.do_dma();
-            if mem.check_irq() {
-                mem.unhalt();
-                self.cpu.interrupt();
-            }
-            self.cycle_count += step_cycles + dma_cycles;
-        }
-        self.cycle_count -= constants::gba::FRAME_CYCLES;
-        self.cpu.ref_mem().get_frame_data(frame);
-        self.cpu.ref_mem_mut().flush_save();*/
-        
-        // Signal to CPU thread to continue
-        // Wait for frame to complete
         self.frame_receiver.get_frame(frame, self.buttons_pressed);
     }
 
@@ -113,7 +87,6 @@ impl GBA {
     }
 
     pub fn set_button(&mut self, button: Button, pressed: bool) {
-        //self.cpu.ref_mem_mut().set_button(button.into(), pressed);
         self.buttons_pressed.set(button.into(), !pressed);
     }
 }

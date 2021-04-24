@@ -58,9 +58,9 @@ impl Joypad {
         }
     }
 
-    pub fn set_button(&mut self, buttons: Buttons, pressed: bool) {
+    /*pub fn set_button(&mut self, buttons: Buttons, pressed: bool) {
         self.buttons_pressed.set(buttons, !pressed);
-    }
+    }*/
     
     pub fn set_all_buttons(&mut self, buttons: Buttons) {
         self.buttons_pressed = buttons;

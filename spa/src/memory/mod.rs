@@ -12,7 +12,7 @@ use crate::{
     common::bits::u8,
     common::meminterface::{MemInterface8, MemInterface16},
     timers::Timers,
-    joypad::{Joypad, Buttons},
+    joypad::{Joypad},
     interrupt::InterruptControl,
     video::*,
     audio::{GBAAudio, SamplePacket}
@@ -74,22 +74,6 @@ impl<R: Renderer> MemoryBus<R> {
         })
     }
 
-    /*pub fn is_halted(&self) -> bool {
-        self.internal.halt
-    }
-
-    pub fn unhalt(&mut self) {
-        self.internal.halt = false;
-    }
-
-    pub fn get_frame_data(&self, buffer: &mut [u8]) {
-        self.video.get_frame_data(buffer);
-    }
-
-    pub fn render_size(&self) -> (usize, usize) {
-        self.video.render_size()
-    }*/
-
     pub fn enable_audio(&mut self) -> (Receiver<SamplePacket>, Receiver<f64>) {
         let (sample_tx, sample_rx) = unbounded();
         let (rate_tx, rate_rx) = unbounded();
@@ -97,12 +81,8 @@ impl<R: Renderer> MemoryBus<R> {
         (sample_rx, rate_rx)
     }
 
-    pub fn set_button(&mut self, buttons: Buttons, pressed: bool) {
+    /*pub fn set_button(&mut self, buttons: Buttons, pressed: bool) {
         self.joypad.set_button(buttons, pressed);
-    }
-
-    /*pub fn flush_save(&mut self) {
-        self.game_pak.flush_save();
     }*/
 }
 
