@@ -10,7 +10,7 @@ mod audio;
 use arm::{
     ARM7TDMI, ARMCore
 };
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, unbounded};
 use memory::{
     framecomms::{new_frame_comms, FrameRequester},
     MemoryBus
@@ -36,7 +36,6 @@ type RendererType = crate::video::ProceduralRenderer;
 
 pub struct GBA {
     frame_receiver: FrameRequester,
-
     audio_channels: Option<(Receiver<SamplePacket>, Receiver<f64>)>,
 
     buttons_pressed: Buttons,
@@ -46,14 +45,20 @@ impl GBA {
     pub fn new(rom_path: String, save_path: Option<String>, bios_path: Option<String>) -> Self {
         let (render_width, render_height) = RendererType::render_size();
         let (frame_sender, frame_receiver) = new_frame_comms(render_width * render_height * 4);
-        let bus = MemoryBus::<RendererType>::new(rom_path, save_path, bios_path, frame_sender).unwrap();
-        let mut cpu = ARM7TDMI::new(bus, std::collections::HashMap::new(), None);
-        let audio_channels = cpu.ref_mem_mut().enable_audio();
+        // The below is a bit dumb but it avoids sending the CPU (which introduces a ton of problems).
+        // We have to extract the audio receivers from the CPU and get them in the main thread to use
+        //   for the audio handler.
+        let (channel_sender, channel_receiver) = unbounded();
         std::thread::spawn(move || {
+            let bus = MemoryBus::<RendererType>::new(rom_path, save_path, bios_path, frame_sender).unwrap();
+            let mut cpu = ARM7TDMI::new(bus, std::collections::HashMap::new(), None);
+            let audio_channels = cpu.ref_mem_mut().enable_audio();
+            channel_sender.send(audio_channels).unwrap();
             loop {
                 cpu.step();
             }
         });
+        let audio_channels = channel_receiver.recv().unwrap();
         Self {
             frame_receiver: frame_receiver,
             audio_channels: Some(audio_channels),
