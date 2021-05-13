@@ -49,7 +49,7 @@ impl GBA {
         // We have to extract the audio receivers from the CPU and get them in the main thread to use
         //   for the audio handler.
         let (channel_sender, channel_receiver) = unbounded();
-        std::thread::spawn(move || {
+        std::thread::Builder::new().name("CPU".to_string()).spawn(move || {
             let bus = MemoryBus::<RendererType>::new(rom_path, save_path, bios_path, frame_sender).unwrap();
             let mut cpu = ARM7TDMI::new(bus, std::collections::HashMap::new(), None);
             let audio_channels = cpu.ref_mem_mut().enable_audio();
@@ -57,7 +57,7 @@ impl GBA {
             loop {
                 cpu.step();
             }
-        });
+        }).unwrap();
         let audio_channels = channel_receiver.recv().unwrap();
         Self {
             frame_receiver: frame_receiver,
