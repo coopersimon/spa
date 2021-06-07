@@ -305,8 +305,8 @@ impl SoftwareRenderer {
         // Gather the backgrounds.
         let bg_data = mem.registers.bg_data_for_mode();
 
-        let mut obj_line = [None; gba::H_RES];
-        let mut obj_window = [false; gba::H_RES];
+        let mut obj_line = vec![None; gba::H_RES];
+        let mut obj_window = vec![false; gba::H_RES];
         if mem.registers.is_obj_enabled() {
             self.draw_obj_line(mem, &mut obj_line, &mut obj_window, line);
         }
