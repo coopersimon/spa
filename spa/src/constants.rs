@@ -32,7 +32,7 @@ pub mod gba {
     /// Time before H-Blank, after drawing finishes.
     pub const POST_H_DRAW_CYCLES: usize = 46;
     /// Total time before H-Blank.
-    pub const PRE_H_BLANK_CYCLES: usize = H_DRAW_CYCLES + POST_H_DRAW_CYCLES;
+    pub const H_CYCLES: usize = H_DRAW_CYCLES + POST_H_DRAW_CYCLES;
     /// Time during H-Blank.
     pub const H_BLANK_CYCLES: usize = (H_BLANK_RES * DOT_TIME) - POST_H_DRAW_CYCLES;
     /// Max V-Count before V-blank

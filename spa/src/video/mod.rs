@@ -55,8 +55,7 @@ impl<R: Renderer> GBAVideo<R> {
 
         match self.state {
             Init                                                => self.transition_state(StartFrame, 0),
-            Drawing if self.cycle_count >= H_DRAW_CYCLES        => self.transition_state(EndDrawing, H_DRAW_CYCLES),
-            PreHBlank if self.cycle_count >= POST_H_DRAW_CYCLES => self.transition_state(EnterHBlank, POST_H_DRAW_CYCLES),
+            Drawing if self.cycle_count >= H_CYCLES             => self.transition_state(EnterHBlank, H_CYCLES),
             HBlank if self.cycle_count >= H_BLANK_CYCLES => if self.v_count < V_MAX {
                 self.transition_state(BeginDrawing, H_BLANK_CYCLES)
             } else {
@@ -67,7 +66,7 @@ impl<R: Renderer> GBAVideo<R> {
             } else {
                 self.transition_state(StartFrame, H_BLANK_CYCLES)
             },
-            VBlank if self.cycle_count >= PRE_H_BLANK_CYCLES    => self.transition_state(EnterVHBlank, PRE_H_BLANK_CYCLES),
+            VBlank if self.cycle_count >= H_CYCLES              => self.transition_state(EnterVHBlank, H_CYCLES),
             _                                                   => (Signal::None, Interrupts::default()),
         }
     }
@@ -123,12 +122,6 @@ impl<R: Renderer> GBAVideo<R> {
                 self.renderer.render_line(&mut self.mem, self.v_count);
                 (Signal::None, self.mem.registers.v_count_irq())
             },
-            EndDrawing => {
-                self.state = PreHBlank;
-                // TODO: wait to finish drawing?
-                // TODO: do we need this state?
-                (Signal::None, Interrupts::default())
-            },
             EnterHBlank => {
                 self.state = HBlank;
                 self.mem.registers.set_h_blank(true);
@@ -161,7 +154,6 @@ impl<R: Renderer> GBAVideo<R> {
 enum VideoState {
     Init,       // Initial state.
     Drawing,    // Drawing a line.
-    PreHBlank,  // Finished drawing, H-blank hasn't triggered yet.
     HBlank,     // Horizontal blanking period.
     VBlank,     // Vertical blanking period.
     VHBlank,    // Horizontal blanking period during v-blank.
@@ -170,7 +162,6 @@ enum VideoState {
 enum Transition {
     StartFrame,     // Exit V-blank and start drawing a new frame
     BeginDrawing,   // Start drawing a line
-    EndDrawing,     // End drawing a line (before H-blank)
     EnterHBlank,    // Enter H-blank
     EnterVBlank,    // Enter V-blank
     EnterVHBlank,   // Enter H-blank while in V-blank
