@@ -47,10 +47,10 @@ pub struct MemoryBus<R: Renderer> {
 }
 
 impl<R: Renderer> MemoryBus<R> {
-    pub fn new(rom_path: String, save_path: Option<String>, bios_path: Option<String>, frame_sender: FrameSender) -> std::io::Result<Self> {
+    pub fn new(rom_path: String, save_path: Option<String>, bios_path: Option<String>, frame_sender: FrameSender) -> std::io::Result<Box<Self>> {
         let bios = bios::BIOS::new(bios_path)?;
         let game_pak = cart::GamePak::new(rom_path, save_path)?;
-        Ok(Self {
+        Ok(Box::new(Self {
             bios:       bios,
             internal:   Internal::new(),
 
@@ -71,7 +71,7 @@ impl<R: Renderer> MemoryBus<R> {
             interrupt_control:  InterruptControl::new(),
 
             frame_sender:       frame_sender,
-        })
+        }))
     }
 
     pub fn enable_audio(&mut self) -> (Receiver<SamplePacket>, Receiver<f64>) {
