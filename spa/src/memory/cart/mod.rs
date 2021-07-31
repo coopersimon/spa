@@ -7,7 +7,6 @@ use std::{
     io::{
         Result, Read
     },
-    path::Path,
     fs::File,
     convert::TryInto
 };
@@ -22,14 +21,14 @@ use ram::*;
 /// The ROM and RAM inside a game pak (cartridge).
 pub struct GamePak {
     rom:    Vec<u8>,
-    ram:    Box<dyn SaveRAM>,
+    ram:    Box<dyn SaveRAM + Send>,
     /// ROM is larger than 16MB
     large:  bool,
     eeprom: bool,
 }
 
 impl GamePak {
-    pub fn new(rom_path: &Path, save_path: Option<&Path>) -> Result<Self> {
+    pub fn new(rom_path: String, save_path: Option<String>) -> Result<Self> {
         let mut rom_file = File::open(rom_path)?;
         let mut buffer = Vec::new();
         rom_file.read_to_end(&mut buffer)?;
@@ -53,6 +52,7 @@ impl GamePak {
         })
     }
 
+    /// Write the save to the save file.
     pub fn flush_save(&mut self) {
         self.ram.flush();
     }

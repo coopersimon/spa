@@ -5,7 +5,6 @@ mod flash;
 mod eeprom;
 
 use std::{
-    path::Path,
     io::{
         Result,
         Read,
@@ -39,11 +38,11 @@ const FLASH_128_SIZE: usize = 128 * 1024;
 /// If no save_path is provided, the save data will be lost on shutdown!
 /// 
 /// If the boolean returned is true, then the RAM is EEPROM and must be addressed accordingly.
-pub fn make_save_ram(rom: &[u8], save_path: Option<&Path>) -> (Box<dyn SaveRAM>, bool) {
+pub fn make_save_ram(rom: &[u8], save_path: Option<String>) -> (Box<dyn SaveRAM + Send>, bool) {
 
     // See if save file exists.
     let file = if let Some(path) = save_path {
-        if let Ok(file) = OpenOptions::new().read(true).write(true).open(path) {
+        if let Ok(file) = OpenOptions::new().read(true).write(true).open(&path) {
             match make_from_existing(file) {
                 Ok(save_ram) => return save_ram,
                 Err(e) => println!("Can't use existing file: {}", e)
@@ -72,7 +71,7 @@ pub fn make_save_ram(rom: &[u8], save_path: Option<&Path>) -> (Box<dyn SaveRAM>,
     }
 }
 
-fn make_from_existing(mut file: File) -> Result<(Box<dyn SaveRAM>, bool)> {
+fn make_from_existing(mut file: File) -> Result<(Box<dyn SaveRAM + Send>, bool)> {
     let mut buf = vec![0; 4];
     file.read_exact(&mut buf)?;
     let s = String::from_utf8(buf).unwrap();

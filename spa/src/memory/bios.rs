@@ -4,7 +4,6 @@ use std::{
     io::{
         Result, Read
     },
-    path::Path,
     fs::File,
     convert::TryInto
 };
@@ -18,7 +17,7 @@ pub struct BIOS {
 }
 
 impl BIOS {
-    pub fn new(bios_path: Option<&Path>) -> Result<Self> {
+    pub fn new(bios_path: Option<String>) -> Result<Self> {
         let data = if let Some(path) = bios_path {
             let mut cart_file = File::open(path)?;
             let mut buffer = Vec::new();
