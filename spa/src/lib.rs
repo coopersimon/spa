@@ -51,7 +51,9 @@ impl GBA {
         let (channel_sender, channel_receiver) = unbounded();
         std::thread::Builder::new().name("CPU".to_string()).spawn(move || {
             let bus = MemoryBus::<RendererType>::new(rom_path, save_path, bios_path, frame_sender).unwrap();
-            let mut cpu = ARM7TDMI::new(bus, std::collections::HashMap::new(), None);
+            let mut cpu = ARM7TDMI::new(bus)
+                //.enable_jit_in_ranges(vec![0..0x4000, 0x0800_0000..0x0E00_0000])
+                .build();
             let audio_channels = cpu.ref_mem_mut().enable_audio();
             channel_sender.send(audio_channels).unwrap();
             loop {
