@@ -37,7 +37,7 @@ fn main() {
         (about: "Gameboy Advance emulator.")
         (@arg ROM: "The path to the game ROM to use.")
         (@arg debug: -d "Enter debug mode.")
-        //(@arg mute: -m "Mute all audio.")
+        (@arg mute: -m "Mute all audio.")
         (@arg save: -s +takes_value "Save file path.")
         (@arg biosrom: -r +takes_value "BIOS ROM path. Needed for certain games.")
     );
@@ -236,10 +236,10 @@ fn main() {
         let frame_time = chrono::Duration::nanoseconds(nanos);*/
     
         // AUDIO
-        //if !cmd_args.is_present("mute") {
+        if !cmd_args.is_present("mute") {
             let audio_stream = make_audio_stream(&mut gba);
             audio_stream.play().expect("Couldn't start audio stream");
-        //}
+        }
         
         event_loop.run(move |event, _, control_flow| {
             match event {

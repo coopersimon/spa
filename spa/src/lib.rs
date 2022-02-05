@@ -54,7 +54,7 @@ impl GBA {
             let mut cpu = ARM7TDMI::new(bus)
                 //.enable_jit_in_ranges(vec![0..0x4000, 0x0800_0000..0x0E00_0000])
                 .build();
-            let audio_channels = cpu.ref_mem_mut().enable_audio();
+            let audio_channels = cpu.mut_mem().enable_audio();
             channel_sender.send(audio_channels).unwrap();
             loop {
                 cpu.step();
