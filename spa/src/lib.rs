@@ -127,14 +127,14 @@ impl GBA {
     /// Make a new debuggable GBA.
     pub fn new_debug(rom_path: String, save_path: Option<String>, bios_path: Option<String>) -> DebugInterface {
         use memory::framecomms::debug::new_debug_frame_comms;
-        
+
         let (render_width, render_height) = RendererType::render_size();
         let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4);
         let (debug_interface, debug_wrapper) = debug::DebugInterface::new(frame_receiver);
 
         std::thread::Builder::new().name("CPU".to_string()).spawn(move || {
             let bus = MemoryBus::<RendererType>::new(rom_path, save_path, bios_path, frame_sender).unwrap();
-            let mut cpu = ARM7TDMI::new(bus)
+            let cpu = ARM7TDMI::new(bus)
                 .build();
             debug_wrapper.run_debug(cpu);
         }).unwrap();

@@ -29,7 +29,7 @@ pub trait GBChannel {
 }
 
 #[derive(Clone, Copy)]
-pub enum SquareDuty {
+enum SquareDuty {
     Lo,
     Hi
 }
@@ -38,13 +38,13 @@ const DUTY_1: [SquareDuty; 8] = [SquareDuty::Hi, SquareDuty::Lo, SquareDuty::Lo,
 const DUTY_2: [SquareDuty; 8] = [SquareDuty::Hi, SquareDuty::Lo, SquareDuty::Lo, SquareDuty::Lo, SquareDuty::Lo, SquareDuty::Hi, SquareDuty::Hi, SquareDuty::Hi];
 const DUTY_3: [SquareDuty; 8] = [SquareDuty::Lo, SquareDuty::Hi, SquareDuty::Hi, SquareDuty::Hi, SquareDuty::Hi, SquareDuty::Hi, SquareDuty::Hi, SquareDuty::Lo];
 
-pub struct DutyCycleCounter {
+struct DutyCycleCounter {
     pattern:    &'static [SquareDuty; 8],
     index:      usize
 }
 
 impl DutyCycleCounter {
-    pub fn new(duty: u8) -> Self {
+    fn new(duty: u8) -> Self {
         Self {
             pattern: match duty & 0x3 {
                 0 => &DUTY_0,
@@ -57,31 +57,33 @@ impl DutyCycleCounter {
         }
     }
 
-    pub fn step(&mut self) {
+    fn step(&mut self) {
         self.index = (self.index + 1) % 8;
     }
 
-    pub fn read(&self) -> SquareDuty {
+    fn read(&self) -> SquareDuty {
         self.pattern[self.index]
     }
 }
 
-pub const MAX_VOL: u8 = 15;
-pub const MIN_VOL: u8 = 0;
+const MAX_VOL: u8 = 15;
+const MIN_VOL: u8 = 0;
 
-pub fn get_freq_modulo(hi_reg: u8, lo_reg: u8) -> usize {
+fn get_freq_modulo(hi_reg: u8, lo_reg: u8) -> usize {
     const HI_FREQ_MASK: u8 = u8::bits(0, 2);
     let hi = hi_reg & HI_FREQ_MASK;
     u16::make(hi, lo_reg) as usize
 }
 
 // Convert from 4-bit unsigned samples to 7-bit unsigned.
-pub const fn u4_to_i8(amplitude: u8) -> i8 {
+#[inline]
+const fn u4_to_i8(amplitude: u8) -> i8 {
     ((amplitude << 3) | (amplitude >> 1)) as i8
 }
 
 // Convert from 4-bit signed samples to 8-bit signed.
-pub const fn i4_to_i8(amplitude: u8) -> i8 {
+#[inline]
+const fn i4_to_i8(amplitude: u8) -> i8 {
     let signed = (amplitude as i8) - 8;
     let hi = signed << 4;
     let lo = (signed & 7) << 1;

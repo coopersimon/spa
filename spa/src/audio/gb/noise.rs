@@ -61,6 +61,7 @@ impl Noise {
     }
 
     pub fn set_trigger_reg(&mut self, val: u8) {
+        self.trigger_reg = val;
         // And trigger event...
         if u8::test_bit(val, 7) {
             self.trigger();

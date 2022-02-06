@@ -2,8 +2,7 @@
 
 use super::{
     RendererType,
-    MemoryBus,
-    GBA
+    MemoryBus
 };
 use crate::memory::framecomms::debug::DebugFrameReq;
 use arm::{

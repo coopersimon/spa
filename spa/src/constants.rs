@@ -12,7 +12,8 @@ pub mod gba {
     pub const H_BLANK_RES: usize = 68;
     /// Visible vertical resolution.
     pub const V_RES: usize = 160;
-    // Number of dots spent in V-blank.
+    /// Number of dots spent in V-blank.
+    #[cfg(feature = "debug")]
     pub const V_BLANK_RES: usize = 68;
 
     /// Width of bitmap in mode 5.
@@ -23,6 +24,7 @@ pub mod gba {
     pub const SMALL_BITMAP_TOP: u8 = ((V_RES as u8) - SMALL_BITMAP_HEIGHT) / 2;
 
     /// Cycles needed for a whole frame.
+    #[cfg(feature = "debug")]
     pub const FRAME_CYCLES: usize = DOT_TIME * (H_RES + H_BLANK_RES) * (V_RES + V_BLANK_RES);
 
     // Video state timing:

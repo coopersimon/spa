@@ -39,6 +39,8 @@ Status of selected games:
 - Fire Emblem: Looks good.
 - Sonic Advance: Loads up and shows some scrolling backgrounds and doesn't respond. Audio plays OK (apparently a link cable issue)
 - Wario Land 4: Looks OK.
+- Mario and Luigi Superstar Saga: Mostly OK, GB sounds sometimes don't stop when they should.
+- Scooby Doo: Black screen.
 
 ## Known Bugs
 - Affine backgrounds still have issues.

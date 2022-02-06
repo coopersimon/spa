@@ -238,8 +238,8 @@ fn main() {
     let frame_time = chrono::Duration::nanoseconds(nanos);*/
 
     // AUDIO
+    let audio_stream = make_audio_stream(&mut gba);
     if !cmd_args.is_present("mute") {
-        let audio_stream = make_audio_stream(&mut gba);
         audio_stream.play().expect("Couldn't start audio stream");
     }
     
