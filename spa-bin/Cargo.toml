@@ -19,7 +19,7 @@ cpal = "0.13"
 #git = "https://github.com/"
 #tag = "0.1.0"
 path = "../spa"
-#features = ["debug"]
+features = ["debug"]
 
 #[profile.release]
 #lto = "fat"

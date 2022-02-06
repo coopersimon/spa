@@ -1,7 +1,7 @@
 
-use spa::GBA;
+use spa::DebugInterface;
 
-pub fn debug_mode(gba: &mut GBA) {
+pub fn debug_mode(mut debug_interface: DebugInterface) {
     println!("Debug mode.");
     println!("Enter 'h' for help.");
 
@@ -35,13 +35,13 @@ pub fn debug_mode(gba: &mut GBA) {
             } else if input.starts_with("r") {
                 // Run
                 loop {
-                    let state = gba.get_state();
+                    let state = debug_interface.get_state();
                     let loc = state.regs[15];
                     if breaks.contains(&loc) {
                         println!("Break at ${:08X}", loc);
                         break;
                     } else {
-                        step_and_trace(gba, &mut stack_trace, false);
+                        step_and_trace(&mut debug_interface, &mut stack_trace, false);
                     }
                 }
             } else if input.starts_with("s:") {
@@ -49,20 +49,20 @@ pub fn debug_mode(gba: &mut GBA) {
                 match usize::from_str_radix(&input[2..].trim(), 10) {
                     Ok(num) => {
                         for _ in 0..num {
-                            step_and_trace(gba, &mut stack_trace, true);
+                            step_and_trace(&mut debug_interface, &mut stack_trace, true);
                         }
                     },
                     Err(e) => println!("Invalid number of steps: {}", e),
                 }
             } else if input.starts_with("s") {
                 // Step
-                step_and_trace(gba, &mut stack_trace, true);
+                step_and_trace(&mut debug_interface, &mut stack_trace, true);
             } else if input.starts_with("p:") {
                 // Print cpu or mem state
-                print(&input[2..].trim(), gba);
+                print(&input[2..].trim(), &mut debug_interface);
             } else if input.starts_with("p") {
                 // Print state
-                print_all(gba);
+                print_all(&mut debug_interface);
             } else if input.starts_with("t") {
                 let trace = stack_trace.iter()
                     .map(|n| format!("${:08X}", n))
@@ -80,10 +80,10 @@ pub fn debug_mode(gba: &mut GBA) {
     }
 }
 
-fn print(s: &str, gba: &mut GBA) {
+fn print(s: &str, debug_interface: &mut DebugInterface) {
     if let Some(reg) = s.strip_prefix("r") {
         match usize::from_str_radix(reg, 10) {
-            Ok(num) => println!("r{}: ${:08X}", num, gba.get_state().regs[num]),
+            Ok(num) => println!("r{}: ${:08X}", num, debug_interface.get_state().regs[num]),
             Err(e) => println!("Invalid p tag: {}", e),
         }
     } else if let Some(bytes) = s.strip_prefix("b") {
@@ -93,7 +93,7 @@ fn print(s: &str, gba: &mut GBA) {
                 Ok(start) => match u32::from_str_radix(&s[(x+1)..], 16) {
                     Ok(end) => {
                         println!("${:08X} - ${:08X}:", start, end);
-                        let mems = (start..end).map(|n| format!("{:02X}", gba.get_byte_at(n)))
+                        let mems = (start..end).map(|n| format!("{:02X}", debug_interface.get_byte(n)))
                             .collect::<Vec<_>>()
                             .join(" ");
                         println!("{}", mems);
@@ -104,7 +104,7 @@ fn print(s: &str, gba: &mut GBA) {
             }
         } else {    // Single location
             match u32::from_str_radix(bytes, 16) {
-                Ok(num) => println!("${:08X}: ${:02X}", num, gba.get_byte_at(num)),
+                Ok(num) => println!("${:08X}: ${:02X}", num, debug_interface.get_byte(num)),
                 Err(e) => println!("Invalid p tag: {}", e),
             }
         }
@@ -115,7 +115,7 @@ fn print(s: &str, gba: &mut GBA) {
                 Ok(start) => match u32::from_str_radix(&s[(x+1)..], 16) {
                     Ok(end) => {
                         println!("${:08X} - ${:08X}:", start, end);
-                        let mems = (start..end).map(|n| format!("{:08X}", gba.get_word_at(n)))
+                        let mems = (start..end).map(|n| format!("{:08X}", debug_interface.get_word(n)))
                             .collect::<Vec<_>>()
                             .join(" ");
                         println!("{}", mems);
@@ -126,20 +126,20 @@ fn print(s: &str, gba: &mut GBA) {
             }
         } else {    // Single location
             match u32::from_str_radix(words, 16) {
-                Ok(num) => println!("${:08X}: ${:08X}", num, gba.get_word_at(num)),
+                Ok(num) => println!("${:08X}: ${:08X}", num, debug_interface.get_word(num)),
                 Err(e) => println!("Invalid p tag: {}", e),
             }
         }
     } else {
         match s {
-            "cpsr" => println!("cpsr: ${:032b}", gba.get_state().flags),
+            "cpsr" => println!("cpsr: ${:032b}", debug_interface.get_state().flags),
             _ => println!("unrecognised printable")
         }
     }
 }
 
-fn print_all(gba: &mut GBA) {
-    let state = gba.get_state();
+fn print_all(debug_interface: &mut DebugInterface) {
+    let state = debug_interface.get_state();
     println!(" 0: {:08X} {:08X} {:08X} {:08X}", state.regs[0], state.regs[1], state.regs[2], state.regs[3]);
     println!(" 4: {:08X} {:08X} {:08X} {:08X}", state.regs[4], state.regs[5], state.regs[6], state.regs[7]);
     println!(" 8: {:08X} {:08X} {:08X} {:08X}", state.regs[8], state.regs[9], state.regs[10], state.regs[11]);
@@ -162,8 +162,8 @@ fn help() {
 }
 
 // Step the CPU, and add the PC to the stack trace if it calls.
-fn step_and_trace(gba: &mut GBA, _stack_trace: &mut Vec<u32>, print: bool) {
-    let state = gba.get_state();
+fn step_and_trace(debug_interface: &mut DebugInterface, _stack_trace: &mut Vec<u32>, print: bool) {
+    let state = debug_interface.get_state();
     let instr = state.pipeline;
     if let Some(_executing) = &instr[2] {
         
@@ -177,5 +177,5 @@ fn step_and_trace(gba: &mut GBA, _stack_trace: &mut Vec<u32>, print: bool) {
         }).collect::<Vec<_>>().join(" => "));
     }
 
-    gba.step();
+    debug_interface.step();
 }
