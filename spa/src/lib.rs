@@ -19,6 +19,11 @@ use audio::{Resampler, SamplePacket};
 use video::Renderer;
 use joypad::Buttons;
 
+#[cfg(feature = "debug")]
+mod debug;
+#[cfg(feature = "debug")]
+pub use debug::DebugInterface;
+
 pub enum Button {
     A,
     B,
@@ -33,6 +38,7 @@ pub enum Button {
 }
 
 type RendererType = crate::video::ProceduralRenderer;
+pub type FrameBuffer = Box<[u8]>;
 
 pub struct GBA {
     frame_receiver: FrameRequester,
@@ -116,50 +122,23 @@ impl GBAAudioHandler {
 }
 
 // Debug
-//#[cfg(feature = "debug")]
-/*impl GBA {
-    /// Capture the state of the internal registers.
-    pub fn get_state(&mut self) -> arm::CPUState {
-        use arm::Debugger;
-        self.cpu.inspect_state()
-    }
+#[cfg(feature = "debug")]
+impl GBA {
+    /// Make a new debuggable GBA.
+    pub fn new_debug(rom_path: String, save_path: Option<String>, bios_path: Option<String>) -> DebugInterface {
+        use memory::framecomms::debug::new_debug_frame_comms;
+        
+        let (render_width, render_height) = RendererType::render_size();
+        let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4);
+        let (debug_interface, debug_wrapper) = debug::DebugInterface::new(frame_receiver);
 
-    /// Read a word from memory.
-    pub fn get_word_at(&mut self, addr: u32) -> u32 {
-        use arm::{Mem32, MemCycleType};
-        let (data, _) = self.cpu.ref_mem_mut().load_word(MemCycleType::N, addr);
-        data
-    }
+        std::thread::Builder::new().name("CPU".to_string()).spawn(move || {
+            let bus = MemoryBus::<RendererType>::new(rom_path, save_path, bios_path, frame_sender).unwrap();
+            let mut cpu = ARM7TDMI::new(bus)
+                .build();
+            debug_wrapper.run_debug(cpu);
+        }).unwrap();
 
-    /// Read a halfword from memory.
-    pub fn get_halfword_at(&mut self, addr: u32) -> u16 {
-        use arm::{Mem32, MemCycleType};
-        let (data, _) = self.cpu.ref_mem_mut().load_halfword(MemCycleType::N, addr);
-        data
+        debug_interface
     }
-
-    /// Read a byte from memory.
-    pub fn get_byte_at(&mut self, addr: u32) -> u8 {
-        use arm::{Mem32, MemCycleType};
-        let (data, _) = self.cpu.ref_mem_mut().load_byte(MemCycleType::N, addr);
-        data
-    }
-
-    /// Step the device by one CPU cycle.
-    pub fn step(&mut self) {
-        /*let step_cycles = if !self.cpu.ref_mem().is_halted() {
-            self.cpu.step()
-        } else {
-            1
-        };
-        let mem = self.cpu.ref_mem_mut();
-        mem.clock(step_cycles);
-        mem.do_dma();
-        if mem.check_irq() {
-            mem.unhalt();
-            self.cpu.interrupt();
-        }*/
-    }
-}*/
-
-pub type FrameBuffer = Box<[u8]>;
+}

@@ -18,6 +18,40 @@ pub fn new_frame_comms(frame_size: usize) -> (FrameSender, FrameRequester) {
     )
 }
 
+#[cfg(feature = "debug")]
+pub mod debug {
+    use super::*;
+    pub fn new_debug_frame_comms(frame_size: usize) -> (FrameSender, DebugFrameReq) {
+        let buffer = vec![0; frame_size];
+        let frame_buffer = Arc::new(Mutex::new(buffer.into_boxed_slice()));
+        let (sync_tx, sync_rx) = bounded(1);
+        let (data_tx, data_rx) = bounded(1);
+        (
+            FrameSender{frame_buffer: frame_buffer, tx: data_tx, rx: sync_rx},
+            DebugFrameReq{tx: sync_tx, rx: data_rx}
+        )
+    }
+    
+    pub struct DebugFrameReq {
+        tx: Sender<Buttons>,
+        rx: Receiver<()>
+    }
+    
+    impl DebugFrameReq {
+        /// Check if CPU thread has told us processing for the frame is complete.
+        /// 
+        /// Then force it to continue if so.
+        pub fn check_and_continue(&mut self) {
+            // Wait for CPU thread to let us know its processing is complete.
+            match self.rx.try_recv() {
+                // Let CPU thread know processing can continue.
+                Ok(_) => self.tx.send(Buttons::from_bits_truncate(0xFFFF)).expect("couldn't send to cpu thread"),
+                Err(_) => {},
+            }
+        }
+    }    
+}
+
 pub struct FrameRequester {
     frame_buffer:   Arc<Mutex<FrameBuffer>>,
 
