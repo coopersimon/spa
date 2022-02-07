@@ -225,14 +225,16 @@ impl SoftwareRenderer {
     /// The x and y values provided should be mosaiced already.
     /// 
     /// If 0 is returned, the pixel is transparent.
-    fn affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &VRAM, screen_x: u8, screen_y: u8) -> Option<Colour> {
+    fn affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &VRAM, screen_x: u8, _screen_y: u8) -> Option<Colour> {
         // Transform from screen space to BG space.
+        // Displacement points x0 and y0 are incremented by matrix points B and D respectively
+        // after each scanline, simulating (B * y_i) + x_0 and (D * y_i) + x_0
         let x_0 = bg.bg_ref_point_x;
         let y_0 = bg.bg_ref_point_y;
         let x_i = I24F8::from_num(screen_x as i32);
-        let y_i = I24F8::from_num(screen_y as i32);
-        let x_out = (bg.matrix_a * x_i) + (bg.matrix_b * y_i) + x_0;
-        let y_out = (bg.matrix_c * x_i) + (bg.matrix_d * y_i) + y_0;
+        //let y_i = I24F8::from_num(screen_y as i32);
+        let x_out = (bg.matrix_a * x_i) + x_0;
+        let y_out = (bg.matrix_c * x_i) + y_0;
 
         let bg_x = if bg.wrap {
             (x_out.to_num::<i32>() as u32) & (bg.size - 1)
@@ -253,15 +255,13 @@ impl SoftwareRenderer {
             bg_y
         };
 
-        //println!("dx: {},{} mat: {},{},{},{} in: {},{} out: {},{}", x_0, y_0, bg.matrix_a, bg.matrix_b, bg.matrix_c, bg.matrix_d, screen_x, screen_y, x_out, y_out);
-
         // Find tile attrs in bg map
         let map_x = bg_x / TILE_SIZE;
         let map_y = bg_y / TILE_SIZE;
-        let map_size = bg.size / TILE_SIZE;
+        let map_width = bg.size / TILE_SIZE;
 
         // The address of the tile attributes.
-        let tile_map_addr = bg.tile_map_addr + map_x + map_y * map_size;
+        let tile_map_addr = bg.tile_map_addr + map_x + (map_y * map_width);
         let tile_num = vram.affine_map_tile_num(tile_map_addr);
         
         let tile_x = (bg_x % TILE_SIZE) as u8;

@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 bitflags = "1.2"
-fixed = "1.6"
+fixed = "1.12"
 regex = "1"
 crossbeam-channel = "0.5"
 

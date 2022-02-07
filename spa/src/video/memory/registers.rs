@@ -255,10 +255,10 @@ impl VideoRegisters {
     pub fn inc_v_count(&mut self) {
         self.vcount += 1;
         self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.vcount == bytes::u16::hi(self.lcd_status.bits()));
-        //self.bg2_internal_x += self.bg2_internal_b;
-        //self.bg2_internal_y += self.bg2_internal_d;
-        //self.bg3_internal_x += self.bg3_internal_b;
-        //self.bg3_internal_y += self.bg3_internal_d;
+        self.bg2_internal_x += self.bg2_internal_b;
+        self.bg2_internal_y += self.bg2_internal_d;
+        self.bg3_internal_x += self.bg3_internal_b;
+        self.bg3_internal_y += self.bg3_internal_d;
     }
 
     /// Reset v-count to zero.
@@ -856,7 +856,8 @@ impl VideoRegisters {
     }
 }
 
-fn sign_extend_12bit(val: u16) -> u16 {
+#[inline]
+const fn sign_extend_12bit(val: u16) -> u16 {
     if u16::test_bit(val, 11) {
         val | 0xF000
     } else {

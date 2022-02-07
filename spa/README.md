@@ -10,17 +10,17 @@ Status of selected games:
 - Doom: Looks good.
 - Doom II: Loads up ok. Gameplay looks a bit weird. Might be that frame isn't overwritten with blank data?
 - Final Fantasy Dawn of Souls:
-    - FFI: Setup is OK, intro is OK, however when crystals are shown (switch to affine BG?) it writes to VRAM mirror. The overworld looks strange. Everything else seems ok
-- Final Fantasy IV: Intro and title look good, when game begins scrolling background looks odd (individual tiles aren't scrolling)
+    - FFI: Setup is OK, intro seems OK. The overworld looks strange. Everything else seems ok
+- Final Fantasy IV: Looks good.
 - Final Fantasy V: Looks good.
 - Final Fantasy VI: Looks good, title screen palette is wrong.
 - Final Fantasy Tactics Advance: Looks good.
 - Four Swords: Looks OK.
-- Golden Sun: Looks mostly OK, sprites flicker constantly however.
+- Golden Sun: Looks mostly OK.
 - Harry Potter 2: Looks good
 - Incredibles: Looks good
 - LEGO Star Wars: Looks good
-- Mario Kart Super Circuit: Title, intro, selection looks good. Affine bg in gameplay looks wrong.
+- Mario Kart Super Circuit: Title, intro, selection looks good.
 - Mother 1+2: Loads up ok. Cart select looks good.
     - Mother 1: Looks good.
     - Mother 2: Title, character naming, and intro works.
@@ -32,9 +32,9 @@ Status of selected games:
 - Super Mario Bros 3 (Advance 4): Looks good
 - Super Mario World: Looks ok. Colours seem very washed out (green swap?)
 - The Minish Cap: Looks good.
-- Yoshi's Island: Intro looks good. Title screen affine background looks wrong. Works OK.
+- Yoshi's Island: Looks and sounds good.
 - Advance Wars: Looks good.
-- F-Zero Maximum Velocity: Title and setup works ok, actual game backgrounds perspective is off.
+- F-Zero Maximum Velocity: Looks good.
 - Pokemon Ruby: Looks good.
 - Fire Emblem: Looks good.
 - Sonic Advance: Loads up and shows some scrolling backgrounds and doesn't respond. Audio plays OK (apparently a link cable issue)
@@ -43,8 +43,7 @@ Status of selected games:
 - Scooby Doo: Black screen.
 
 ## Known Bugs
-- Affine backgrounds still have issues.
-- Square wave 1 frequency sweep seems to be incorrect.
+- GB audio freq clock is incorrect.
 
 ## Odd things
 - DMA seems to use unaligned addresses in both metroids. It also seems to be very much intentional
