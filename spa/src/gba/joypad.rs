@@ -5,7 +5,7 @@ use crate::common::{
     bits::u16,
     meminterface::MemInterface16,
 };
-use crate::interrupt::Interrupts;
+use crate::gba::interrupt::Interrupts;
 
 bitflags!{
     #[derive(Default)]
@@ -23,9 +23,9 @@ bitflags!{
     }
 }
 
-impl From<crate::Button> for Buttons {
-    fn from(b: crate::Button) -> Buttons {
-        use crate::Button::*;
+impl From<crate::gba::Button> for Buttons {
+    fn from(b: crate::gba::Button) -> Buttons {
+        use crate::gba::Button::*;
         match b {
             A       => Buttons::A,
             B       => Buttons::B,

@@ -1,5 +1,5 @@
 
-use spa::DebugInterface;
+use spa::gba::DebugInterface;
 
 pub fn debug_mode(mut debug_interface: DebugInterface) {
     println!("Debug mode.");

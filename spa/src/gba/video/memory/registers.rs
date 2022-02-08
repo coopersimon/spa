@@ -9,7 +9,7 @@ use crate::common::{
     bytes,
     meminterface::MemInterface16
 };
-use crate::interrupt::Interrupts;
+use crate::gba::interrupt::Interrupts;
 use super::super::background::*;
 
 bitflags! {
@@ -255,6 +255,8 @@ impl VideoRegisters {
     pub fn inc_v_count(&mut self) {
         self.vcount += 1;
         self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.vcount == bytes::u16::hi(self.lcd_status.bits()));
+        // Increment internal x & y affine transform offset points.
+        // This is important for HDMA-based "mode 7" effects with affine backgrounds.
         self.bg2_internal_x += self.bg2_internal_b;
         self.bg2_internal_y += self.bg2_internal_d;
         self.bg3_internal_x += self.bg3_internal_b;

@@ -1,7 +1,7 @@
 /// Software rendering.
 
 use fixed::types::I24F8;
-use crate::constants::gba;
+use crate::gba::constants::*;
 use super::{
     colour::*,
     super::memory::*,
@@ -88,7 +88,7 @@ impl SoftwareRenderer {
 
             for object_x in 0..width {
                 let x = left.wrapping_add(object_x);
-                if x >= (gba::H_RES as u16) {
+                if x >= (H_RES as u16) {
                     continue;
                 }
                 if !in_obj_window {
@@ -278,9 +278,9 @@ impl SoftwareRenderer {
     /// Draw a bitmap pixel.
     fn bitmap_bg_pixel(&self, bg: &BitmapBackgroundData, vram: &VRAM, bg_x: u8, bg_y: u8) -> Option<Colour> {
         if bg.small {
-            let bitmap_x = bg_x.wrapping_sub(gba::SMALL_BITMAP_LEFT);
-            let bitmap_y = bg_y.wrapping_sub(gba::SMALL_BITMAP_TOP);
-            if bitmap_x >= gba::SMALL_BITMAP_WIDTH || bitmap_y >= gba::SMALL_BITMAP_HEIGHT {
+            let bitmap_x = bg_x.wrapping_sub(SMALL_BITMAP_LEFT);
+            let bitmap_y = bg_y.wrapping_sub(SMALL_BITMAP_TOP);
+            if bitmap_x >= SMALL_BITMAP_WIDTH || bitmap_y >= SMALL_BITMAP_HEIGHT {
                 return None;
             }
             let colour = vram.small_bitmap_texel_15bpp(bg.data_addr, bitmap_x, bitmap_y);
@@ -305,12 +305,12 @@ impl SoftwareRenderer {
         // Gather the backgrounds.
         let bg_data = mem.registers.bg_data_for_mode();
 
-        let mut obj_line = vec![None; gba::H_RES];
-        let mut obj_window = vec![false; gba::H_RES];
+        let mut obj_line = vec![None; H_RES];
+        let mut obj_window = vec![false; H_RES];
         if mem.registers.is_obj_enabled() {
             self.draw_obj_line(mem, &mut obj_line, &mut obj_window, line);
         }
-        for x in 0..gba::H_RES {
+        for x in 0..H_RES {
             let dest = x * 4;
             // Prio 0
             let colour = self.eval_pixel(mem, obj_line[x], obj_window[x], &bg_data, x as u8, line);

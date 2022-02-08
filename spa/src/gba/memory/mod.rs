@@ -9,13 +9,17 @@ use arm::{Mem32, MemCycleType};
 use crossbeam_channel::{Receiver, unbounded};
 
 use crate::{
-    common::bits::u8,
-    common::meminterface::{MemInterface8, MemInterface16},
-    timers::Timers,
-    joypad::{Joypad},
-    interrupt::InterruptControl,
-    video::*,
-    audio::{GBAAudio, SamplePacket}
+    common::{
+        bits::u8,
+        meminterface::{MemInterface8, MemInterface16}
+    },
+    gba::{
+        timers::Timers,
+        joypad::Joypad,
+        interrupt::InterruptControl,
+        video::*,
+        audio::{GBAAudio, SamplePacket}
+    }
 };
 use dma::{DMA, DMAAddress};
 use cart::{GamePak, GamePakController};

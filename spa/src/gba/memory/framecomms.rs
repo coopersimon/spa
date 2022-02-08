@@ -5,7 +5,7 @@ use std::{
     sync::Mutex,
 };
 use crate::FrameBuffer;
-use crate::joypad::Buttons;
+use crate::gba::joypad::Buttons;
 
 pub fn new_frame_comms(frame_size: usize) -> (FrameSender, FrameRequester) {
     let buffer = vec![0; frame_size];

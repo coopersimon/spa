@@ -5,7 +5,7 @@ use crate::common::{
     bits::u8,
     bytes::{u16, u32}
 };
-use crate::interrupt::Interrupts;
+use crate::gba::interrupt::Interrupts;
 
 bitflags!{
     #[derive(Default)]

@@ -7,7 +7,7 @@ use crate::common::{
     bytes::u32,
     meminterface::MemInterface16
 };
-use crate::interrupt::Interrupts;
+use crate::gba::interrupt::Interrupts;
 
 bitflags!{
     #[derive(Default)]

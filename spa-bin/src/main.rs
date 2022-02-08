@@ -18,7 +18,7 @@ use clap::{clap_app, crate_version};
 
 use cpal::traits::StreamTrait;
 
-use spa::*;
+use spa::gba::*;
 
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]

@@ -2,9 +2,9 @@
 
 use super::{
     RendererType,
-    MemoryBus
+    MemoryBus,
+    memory::framecomms::debug::DebugFrameReq
 };
-use crate::memory::framecomms::debug::DebugFrameReq;
 use arm::{
     ARM7TDMI,
     CPUState,

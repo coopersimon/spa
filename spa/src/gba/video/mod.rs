@@ -5,8 +5,10 @@ mod memory;
 mod render;
 
 use crate::common::meminterface::MemInterface16;
-use crate::constants::gba::*;
-use crate::interrupt::Interrupts;
+use crate::gba::{
+    constants::*,
+    interrupt::Interrupts
+};
 use memory::VideoMemory;
 pub use render::*;
 

@@ -3,7 +3,7 @@
 mod timer;
 
 use crate::common::bytes::u32;
-use crate::interrupt::Interrupts;
+use crate::gba::interrupt::Interrupts;
 use timer::Timer;
 
 pub struct Timers {

@@ -6,7 +6,7 @@ mod colour;
 use std::sync::{
     Arc, Mutex
 };
-use crate::constants::*;
+use crate::gba::constants::*;
 
 pub type RenderTarget = Arc<Mutex<Box<[u8]>>>;
 
@@ -40,8 +40,8 @@ impl Renderer for ProceduralRenderer {
 
     fn render_line(&mut self, mem: &mut super::VideoMemory, line: u8) {
         self.renderer.setup_caches(mem);
-        let start_offset = (line as usize) * (gba::H_RES * 4);
-        let end_offset = start_offset + (gba::H_RES * 4);
+        let start_offset = (line as usize) * (H_RES * 4);
+        let end_offset = start_offset + (H_RES * 4);
         let mut target = self.target.lock().unwrap();
         self.renderer.draw_line(mem, &mut target[start_offset..end_offset], line);
     }
@@ -55,7 +55,7 @@ impl Renderer for ProceduralRenderer {
     }
 
     fn render_size() -> (usize, usize) {
-        (gba::H_RES, gba::V_RES)
+        (H_RES, V_RES)
     }
 }
 
