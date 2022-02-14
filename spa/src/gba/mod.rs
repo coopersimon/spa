@@ -12,7 +12,8 @@ use arm::{
 use crossbeam_channel::{Receiver, unbounded};
 use memory::{
     framecomms::{new_frame_comms, FrameRequester},
-    MemoryBus
+    MemoryBus,
+    emulated_swi
 };
 use audio::{Resampler, SamplePacket};
 use video::Renderer;
@@ -54,10 +55,9 @@ impl GBA {
         //   for the audio handler.
         let (channel_sender, channel_receiver) = unbounded();
         std::thread::Builder::new().name("CPU".to_string()).spawn(move || {
+            let no_bios = bios_path.is_none();
             let bus = MemoryBus::<RendererType>::new(rom_path, save_path, bios_path, frame_sender).unwrap();
-            let mut cpu = ARM7TDMI::new(bus)
-                //.enable_jit_in_ranges(vec![0..0x4000, 0x0800_0000..0x0E00_0000])
-                .build();
+            let mut cpu = new_cpu(bus, no_bios, false);
             let audio_channels = cpu.mut_mem().enable_audio();
             channel_sender.send(audio_channels).unwrap();
             loop {
@@ -131,12 +131,33 @@ impl GBA {
         let (debug_interface, debug_wrapper) = debug::DebugInterface::new(frame_receiver);
 
         std::thread::Builder::new().name("CPU".to_string()).spawn(move || {
+            let no_bios = bios_path.is_none();
             let bus = MemoryBus::<RendererType>::new(rom_path, save_path, bios_path, frame_sender).unwrap();
-            let cpu = ARM7TDMI::new(bus)
-                .build();
+            let cpu = new_cpu(bus, no_bios, false);
             debug_wrapper.run_debug(cpu);
         }).unwrap();
 
         debug_interface
+    }
+}
+
+fn new_cpu(mem_bus: Box<MemoryBus<RendererType>>, no_bios: bool, use_jit: bool) -> ARM7TDMI<MemoryBus<RendererType>> {
+    let mut cpu_builder = ARM7TDMI::new(mem_bus);
+    if use_jit {
+        cpu_builder = cpu_builder.enable_jit_in_ranges(vec![0..0x4000, 0x0800_0000..0x0E00_0000]);
+    }
+    if no_bios {
+        // Setup stack pointers.
+        let mut cpu = cpu_builder.set_swi_hook(emulated_swi).build();
+        cpu.do_branch(0x0800_0000);
+        cpu.write_cpsr(arm::CPSR::SVC);
+        cpu.write_reg(13, 0x0300_7FE0);
+        cpu.write_cpsr(arm::CPSR::IRQ);
+        cpu.write_reg(13, 0x0300_7FA0);
+        cpu.write_cpsr(arm::CPSR::SYS);
+        cpu.write_reg(13, 0x0300_7F00);
+        cpu
+    } else {
+        cpu_builder.build()
     }
 }
