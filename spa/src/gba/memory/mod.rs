@@ -1,5 +1,4 @@
 /// Memory bus
-mod wram;
 mod dma;
 mod cart;
 mod bios;
@@ -11,7 +10,8 @@ use crossbeam_channel::{Receiver, unbounded};
 use crate::{
     common::{
         bits::u8,
-        meminterface::{MemInterface8, MemInterface16}
+        meminterface::{MemInterface8, MemInterface16},
+        wram::WRAM
     },
     gba::{
         timers::Timers,
@@ -23,7 +23,6 @@ use crate::{
 };
 use dma::{DMA, DMAAddress};
 use cart::{GamePak, GamePakController};
-pub use wram::WRAM;
 use framecomms::FrameSender;
 
 /// Game Boy Advance memory bus
