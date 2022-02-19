@@ -5,7 +5,10 @@
 mod test;
 
 //use super::MemoryBus;
-use arm::Mem32;
+use arm::{
+    Mem32,
+    MemCycleType
+};
 use crate::gba::{
     interrupt::Interrupts
 };
@@ -20,6 +23,15 @@ pub fn emulated_swi(comment: u32, mem: &mut impl Mem32<Addr = u32>, regs: &[u32;
     match function {
         0x01 => {
             register_ram_reset(mem, regs[0]);
+            [regs[0], regs[1], regs[3]]
+        },
+        // Halt
+        0x02 => {
+            halt(mem);
+            [regs[0], regs[1], regs[3]]
+        },
+        0x03 => {
+            stop(mem);
             [regs[0], regs[1], regs[3]]
         },
         0x04 => {
@@ -59,19 +71,58 @@ pub fn emulated_swi(comment: u32, mem: &mut impl Mem32<Addr = u32>, regs: &[u32;
     }
 }
 
+/*** RESET ***/
 fn register_ram_reset(mem: &mut impl Mem32<Addr = u32>, to_reset: u32) {
     println!("Register RAM reset: {:X}", to_reset);
 }
 
+/*** HALT ***/
+
+fn halt(mem: &mut impl Mem32<Addr = u32>) {
+    let cycles = mem.store_byte(MemCycleType::N, 0x0400_0301, 0);
+    mem.clock(cycles + 57);
+}
+
+fn stop(mem: &mut impl Mem32<Addr = u32>) {
+    let cycles = mem.store_byte(MemCycleType::N, 0x0400_0301, 0x80);
+    mem.clock(cycles + 57);
+}
+
 fn intr_wait(mem: &mut impl Mem32<Addr = u32>, check_old_flags: u32, int_flags: u32) {
-    /*let interrupts = Interrupts::from_bits_truncate(int_flags as u16);
+    // Set master interrupt flag.
+    let cycles = mem.store_halfword(MemCycleType::N, 0x0400_0208, 1);
+    mem.clock(cycles);
+
+    let interrupts = Interrupts::from_bits_truncate(int_flags as u16);
+
+    // Clear interrupt mem region. (?)
+    //mem.store_halfword(MemCycleType::N, 0x03FF_FFF8, interrupts.bits());
+    
     if check_old_flags == 0 {
-        if self.interrupt_control.interrupt_req.intersects(interrupts) {
-            return 0;
+        // If interrupt is already requested, return immediately.
+        let (i_data, _) = mem.load_halfword(MemCycleType::N, 0x0400_0202);
+        let old_interrupts = Interrupts::from_bits_truncate(i_data);
+        if old_interrupts.intersects(interrupts) {
+            return;
         }
     }
 
-    self.interrupt_control.interrupt_master = true;*/
+    let mut interrupts_set = Interrupts::default();
+    while !interrupts_set.intersects(interrupts) {
+        // Halt
+        let cycles = mem.store_byte(MemCycleType::N, 0x0400_0301, 0);
+        mem.clock(cycles);
+        // Check interrupts
+        let (i_data, _) = mem.load_halfword(MemCycleType::N, 0x0400_0202);
+        interrupts_set = Interrupts::from_bits_truncate(i_data);
+    }
+
+    // Clear bits that were set in interrupt mem region.
+    // TODO: this would work better if this happened after interrupt handler has run
+    let (i_data, _) = mem.load_halfword(MemCycleType::N, 0x03FF_FFF8);
+    let mut interrupt_mem = Interrupts::from_bits_truncate(i_data);
+    interrupt_mem.remove(interrupts_set & interrupts);
+    mem.store_halfword(MemCycleType::N, 0x03FF_FFF8, interrupt_mem.bits());
 }
 
 /*** MATHS ***/

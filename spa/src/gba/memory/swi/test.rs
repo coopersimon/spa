@@ -2,7 +2,10 @@ use arm::{
     Mem32, MemCycleType, ARM7TDMI, ARMCore
 };
 
-use crate::common::meminterface::MemInterface8;
+use crate::common::{
+    bytes::u16,
+    meminterface::MemInterface8
+};
 use super::super::bios::BIOS;
 use super::emulated_swi;
 
@@ -12,7 +15,11 @@ pub struct TestMem {
     ram: Vec<u8>,
     bios: BIOS,
 
-    cycle_count: usize
+    halted: bool,
+    bios_i_flags: u16,  // 0x0300_7FF8
+    real_i_flags: u16,  // 0x0400_0202
+
+    cycle_count: usize,
 }
 
 impl TestMem {
@@ -21,21 +28,46 @@ impl TestMem {
             ram: vec![0; TEST_RAM_SIZE as usize],
             bios: BIOS::new(bios_path).unwrap(),
 
-            cycle_count: 0
+            halted: false,
+            bios_i_flags: 3,    // VBLANK | HBLANK
+            real_i_flags: 0,
+
+            cycle_count: 0,
         })
     }
 }
 
 impl MemInterface8 for TestMem {
     fn read_byte(&mut self, addr: u32) -> u8 {
-        if addr >= TEST_RAM_SIZE {
+        if addr == 0x03FF_FFF8 {
+            u16::lo(self.bios_i_flags)
+        } else if addr == 0x03FF_FFF9 {
+            u16::hi(self.bios_i_flags)
+        } else if addr == 0x0400_0202 {
+            u16::lo(self.real_i_flags)
+        } else if addr == 0x0400_0203 {
+            u16::hi(self.real_i_flags)
+        } else if addr >= TEST_RAM_SIZE {
             self.ram[(addr % TEST_RAM_SIZE) as usize]
         } else {
             self.bios.read_byte(addr)
         }
     }
     fn write_byte(&mut self, addr: u32, data: u8) {
-        self.ram[(addr % TEST_RAM_SIZE) as usize] = data
+        if addr == 0x0400_0301 {
+            // halt addr
+            self.halted = true;
+        } else if addr == 0x03FF_FFF8 {
+            self.bios_i_flags = u16::set_lo(self.bios_i_flags, data);
+        } else if addr == 0x03FF_FFF9 {
+            self.bios_i_flags = u16::set_hi(self.bios_i_flags, data);
+        } else if addr == 0x0400_0202 {
+            self.real_i_flags = u16::set_lo(self.real_i_flags, data);
+        } else if addr == 0x0400_0203 {
+            self.real_i_flags = u16::set_hi(self.real_i_flags, data);
+        } else {
+            self.ram[(addr % TEST_RAM_SIZE) as usize] = data;
+        }
     }
 }
 
@@ -68,7 +100,16 @@ impl Mem32 for TestMem {
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
         self.cycle_count += cycles;
-        None
+        if self.halted {
+            // set vblank + hblank
+            self.real_i_flags = 3;
+            self.halted = false;
+        }
+        if self.real_i_flags != 0 {
+            Some(arm::ExternalException::IRQ)
+        } else {
+            None
+        }
     }
 }
 
@@ -98,12 +139,12 @@ fn run_real_bios(regs: &[u32; 4], swi_call: u8) -> (usize, [u32; 3]) {
 
     let mut cycle_count = 0;
     while cpu.read_reg(15) != 0x0800_0004 {
-        /*let pc = cpu.read_reg(15);
+        let pc = cpu.read_reg(15);
         if cpu.read_cpsr().contains(arm::CPSR::T) {
             println!("pc: {:X} ({})", pc, arm::armv4::decode_thumb(cpu.mut_mem().load_halfword(MemCycleType::S, pc).0));
         } else {
             println!("pc: {:X} ({})", pc, arm::armv4::decode_arm(cpu.mut_mem().load_word(MemCycleType::S, pc).0));
-        }*/
+        }
         cycle_count += cpu.step();
     }
 
@@ -198,6 +239,42 @@ fn compare_mem(regs: &[u32; 4], mem_write_addr: u32, mem_set: &[u8], mem_out_add
         .fold(true, |acc, (a, b)| acc && (a == b));
 
     (compare_mem, real_cycles == emu_cycles)
+}
+
+#[test]
+fn test_halt() {
+    let data = vec![
+        [0, 0, 0, 0]
+    ];
+
+    for regs in data.iter() {
+        let (reg_outs, cycles) = compare(regs, 0x02, 0);
+        assert_eq!(reg_outs, true);
+    }
+}
+
+#[test]
+fn test_stop() {
+    let data = vec![
+        [0, 0, 0, 0]
+    ];
+
+    for regs in data.iter() {
+        let (reg_outs, cycles) = compare(regs, 0x03, 0);
+        assert_eq!(reg_outs, true);
+    }
+}
+
+#[test]
+fn test_intrwait() {
+    let data = vec![
+        [0, 1, 0, 0]
+    ];
+
+    for regs in data.iter() {
+        let (mem_out, cycles) = compare_mem(regs, 0, &vec![0, 0], 0x03FF_FFF8, 0x04);
+        assert_eq!(mem_out, true);
+    }
 }
 
 #[test]
