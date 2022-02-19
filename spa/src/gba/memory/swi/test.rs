@@ -331,3 +331,37 @@ fn test_cpuset_halfword_set() {
         assert_eq!(cycles, true);
     }
 }
+
+#[test]
+fn test_cpufastset_copy() {
+    let data = vec![
+        [0x0300_0100, 0x0300_0200, 0x0000_0020, 0],
+        [0x0300_0100, 0x0300_0200, 0x0000_0040, 0],
+        [0x0300_0100, 0x0300_0200, 0x0000_0080, 0],
+    ];
+    
+    let mem = (0..0x100).map(|i| i as u8).collect::<Vec<_>>();
+
+    for regs in data.iter() {
+        let (mem_out, cycles) = compare_mem(regs, 0x0300_0100, &mem, 0x0300_0200, 0x0C);
+        assert_eq!(mem_out, true);
+        assert_eq!(cycles, true);
+    }
+}
+
+#[test]
+fn test_cpufastset_set() {
+    let data = vec![
+        [0x0300_0100, 0x0300_0200, 0x0100_0020, 0],
+        [0x0300_0100, 0x0300_0200, 0x0100_0040, 0],
+        [0x0300_0100, 0x0300_0200, 0x0100_0080, 0],
+    ];
+    
+    let mem = (1..0x101).map(|i| i as u8).collect::<Vec<_>>();
+
+    for regs in data.iter() {
+        let (mem_out, cycles) = compare_mem(regs, 0x0300_0100, &mem, 0x0300_0200, 0x0C);
+        assert_eq!(mem_out, true);
+        assert_eq!(cycles, true);
+    }
+}

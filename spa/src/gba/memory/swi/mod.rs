@@ -192,11 +192,11 @@ fn cpu_fast_set(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_add
     let mut count = len_mode & 0x1F_FFF8;
     let fixed_src = u32::test_bit(len_mode, 24);
 
-    let mut total_cycles = 0;   // TODO: base?
+    mem.clock(95);
 
     if fixed_src {
         let (data, read_cycles) = mem.load_word(arm::MemCycleType::N, src_addr);
-        total_cycles += read_cycles;
+        mem.clock(read_cycles + 9);
         while count != 0 {
             // 8 words transferred at a time.
             let mut cycle_type = arm::MemCycleType::N;
@@ -204,9 +204,10 @@ fn cpu_fast_set(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_add
                 let write_cycles = mem.store_word(cycle_type, dst_addr, data);
                 dst_addr += 4;
                 count -= 1;
-                total_cycles += write_cycles;
+                mem.clock(write_cycles);
                 cycle_type = arm::MemCycleType::S;
             }
+            mem.clock(6);
         }
     } else {
         while count != 0 {
@@ -218,7 +219,7 @@ fn cpu_fast_set(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_add
                 src_addr += 4;
                 dst_addr += 4;
                 count -= 1;
-                total_cycles += read_cycles + write_cycles;
+                mem.clock(read_cycles + write_cycles + 1);
                 cycle_type = arm::MemCycleType::S;
             }
         }
