@@ -151,7 +151,7 @@ fn cpu_set(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_addr: u3
                 let write_cycles = mem.store_word(arm::MemCycleType::N, dst_addr, data);
                 dst_addr += 4;
                 count -= 1;
-                mem.clock(write_cycles);
+                mem.clock(write_cycles + 7);
             }
         } else {
             while count != 0 {
@@ -164,6 +164,7 @@ fn cpu_set(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_addr: u3
             }
         }
     } else {
+        mem.clock(2);
         if fixed_src {
             let (data, read_cycles) = mem.load_halfword(arm::MemCycleType::N, src_addr);
             mem.clock(read_cycles);
@@ -171,7 +172,7 @@ fn cpu_set(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_addr: u3
                 let write_cycles = mem.store_halfword(arm::MemCycleType::N, dst_addr, data);
                 dst_addr += 2;
                 count -= 1;
-                mem.clock(write_cycles);
+                mem.clock(write_cycles + 7);
             }
         } else {
             while count != 0 {

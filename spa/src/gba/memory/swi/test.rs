@@ -141,12 +141,12 @@ fn run_real_bios_mem(regs: &[u32; 4], mem_write_addr: u32, mem_set: &[u8], mem_o
 
     let mut cycle_count = 0;
     while cpu.read_reg(15) != 0x0800_0004 {
-        /*let pc = cpu.read_reg(15);
-        if cpu.read_cpsr().contains(arm::CPSR::T) {
-            println!("pc: {:X} ({})", pc, arm::armv4::decode_thumb(cpu.mut_mem().load_halfword(MemCycleType::S, pc).0));
-        } else {
-            println!("pc: {:X} ({})", pc, arm::armv4::decode_arm(cpu.mut_mem().load_word(MemCycleType::S, pc).0));
-        }*/
+        //let pc = cpu.read_reg(15);
+        //if cpu.read_cpsr().contains(arm::CPSR::T) {
+        //    println!("pc: {:X} ({})", pc, arm::armv4::decode_thumb(cpu.mut_mem().load_halfword(MemCycleType::S, pc).0));
+        //} else {
+        //    println!("pc: {:X} ({})", pc, arm::armv4::decode_arm(cpu.mut_mem().load_word(MemCycleType::S, pc).0));
+        //}
         cycle_count += cpu.step();
     }
 
@@ -266,7 +266,7 @@ fn test_arctan2() {
 }
 
 #[test]
-fn test_cpuset() {
+fn test_cpuset_word_copy() {
     let data = vec![
         [0x0300_0100, 0x0300_0200, 0x0400_0020, 0],
         [0x0300_0100, 0x0300_0200, 0x0400_0040, 0],
@@ -278,5 +278,56 @@ fn test_cpuset() {
     for regs in data.iter() {
         let (mem_out, cycles) = compare_mem(regs, 0x0300_0100, &mem, 0x0300_0200, 0x0B);
         assert_eq!(mem_out, true);
+        assert_eq!(cycles, true);
+    }
+}
+
+#[test]
+fn test_cpuset_word_set() {
+    let data = vec![
+        [0x0300_0100, 0x0300_0200, 0x0500_0020, 0],
+        [0x0300_0100, 0x0300_0200, 0x0500_0040, 0],
+    ];
+    
+    let mem = (1..0x101).map(|i| i as u8).collect::<Vec<_>>();
+
+    for regs in data.iter() {
+        let (mem_out, cycles) = compare_mem(regs, 0x0300_0100, &mem, 0x0300_0200, 0x0B);
+        assert_eq!(mem_out, true);
+        assert_eq!(cycles, true);
+    }
+}
+
+#[test]
+fn test_cpuset_halfword_copy() {
+    let data = vec![
+        [0x0300_0100, 0x0300_0200, 0x0000_0010, 0],
+        [0x0300_0100, 0x0300_0200, 0x0000_0020, 0],
+        [0x0300_0100, 0x0300_0200, 0x0000_0040, 0],
+    ];
+    
+    let mem = (0..0x100).map(|i| i as u8).collect::<Vec<_>>();
+
+    for regs in data.iter() {
+        let (mem_out, cycles) = compare_mem(regs, 0x0300_0100, &mem, 0x0300_0200, 0x0B);
+        assert_eq!(mem_out, true);
+        assert_eq!(cycles, true);
+    }
+}
+
+#[test]
+fn test_cpuset_halfword_set() {
+    let data = vec![
+        [0x0300_0100, 0x0300_0200, 0x0100_0010, 0],
+        [0x0300_0100, 0x0300_0200, 0x0100_0020, 0],
+        [0x0300_0100, 0x0300_0200, 0x0100_0040, 0],
+    ];
+    
+    let mem = (1..0x101).map(|i| i as u8).collect::<Vec<_>>();
+
+    for regs in data.iter() {
+        let (mem_out, cycles) = compare_mem(regs, 0x0300_0100, &mem, 0x0300_0200, 0x0B);
+        assert_eq!(mem_out, true);
+        assert_eq!(cycles, true);
     }
 }
