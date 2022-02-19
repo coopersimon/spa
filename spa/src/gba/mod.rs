@@ -156,6 +156,7 @@ fn new_cpu(mem_bus: Box<MemoryBus<RendererType>>, no_bios: bool, use_jit: bool) 
         cpu.write_reg(13, 0x0300_7FA0);
         cpu.write_cpsr(arm::CPSR::SYS);
         cpu.write_reg(13, 0x0300_7F00);
+        cpu.write_cpsr(arm::CPSR::USR);
         cpu
     } else {
         cpu_builder.build()
