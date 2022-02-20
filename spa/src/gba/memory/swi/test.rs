@@ -191,12 +191,12 @@ fn run_real_bios_mem(regs: &[u32; 4], mem_write_addr: u32, mem_set: &[u8], mem_o
 
     let mut cycle_count = 0;
     while cpu.read_reg(15) != 0x0800_0004 {
-        let pc = cpu.read_reg(15);
-        if cpu.read_cpsr().contains(arm::CPSR::T) {
-            println!("pc: {:X} ({})", pc, arm::armv4::decode_thumb(cpu.mut_mem().load_halfword(MemCycleType::S, pc).0));
-        } else {
-            println!("pc: {:X} ({})", pc, arm::armv4::decode_arm(cpu.mut_mem().load_word(MemCycleType::S, pc).0));
-        }
+        //let pc = cpu.read_reg(15);
+        //if cpu.read_cpsr().contains(arm::CPSR::T) {
+        //    println!("pc: {:X} ({})", pc, arm::armv4::decode_thumb(cpu.mut_mem().load_halfword(MemCycleType::S, pc).0));
+        //} else {
+        //    println!("pc: {:X} ({})", pc, arm::armv4::decode_arm(cpu.mut_mem().load_word(MemCycleType::S, pc).0));
+        //}
         cycle_count += cpu.step();
     }
 
@@ -462,5 +462,21 @@ fn test_cpufastset_set() {
         let (mem_out, cycles) = compare_mem(regs, 0x0300_0100, &mem, 0x0300_0200, 0x0C);
         assert_eq!(mem_out, true);
         assert_eq!(cycles, true);
+    }
+}
+
+#[test]
+fn test_bit_unpack() {
+    let data = vec![
+        [0x0300_0100, 0x0300_0200, 0x0300_00F8, 0],
+    ];
+    
+    let mut mem = vec![0x10, 0x00, 0x1, 0x4, 0, 0, 0, 0];
+    mem.extend((0..0x10).map(|i| i as u8));
+
+    for regs in data.iter() {
+        let (mem_out, _cycles) = compare_mem(regs, 0x0300_00F8, &mem, 0x0300_0200, 0x10);
+        assert_eq!(mem_out, true);
+        //assert_eq!(cycles, true);
     }
 }
