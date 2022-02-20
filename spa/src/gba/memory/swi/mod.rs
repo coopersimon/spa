@@ -38,19 +38,26 @@ pub fn emulated_swi(comment: u32, mem: &mut impl Mem32<Addr = u32>, regs: &[u32;
             intr_wait(mem, regs[0], regs[1]);
             [regs[0], regs[1], regs[3]]
         },
+        0x05 => {
+            vblank_intr_wait(mem);
+            [regs[0], regs[1], regs[3]]
+        },
         // Maths
         0x06 => {
+            mem.clock(100);
             divide(regs[0], regs[1])
         },
         0x07 => {
-            // TODO: 3 cycles slower
+            mem.clock(103);
             divide(regs[1], regs[0])
         },   
         0x08 => {
+            mem.clock(100);
             let res = sqrt(regs[0]);
             [res, 0, 0]
         },
         0x09 => {
+            mem.clock(100);
             let res = arctan(regs[0]);
             [res, 0, 0]
         },
@@ -123,6 +130,10 @@ fn intr_wait(mem: &mut impl Mem32<Addr = u32>, check_old_flags: u32, int_flags: 
     let mut interrupt_mem = Interrupts::from_bits_truncate(i_data);
     interrupt_mem.remove(interrupts_set & interrupts);
     mem.store_halfword(MemCycleType::N, 0x03FF_FFF8, interrupt_mem.bits());
+}
+
+fn vblank_intr_wait(mem: &mut impl Mem32<Addr = u32>) {
+    intr_wait(mem, 1, 1);
 }
 
 /*** MATHS ***/

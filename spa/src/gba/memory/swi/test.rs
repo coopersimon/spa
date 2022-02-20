@@ -43,6 +43,14 @@ impl MemInterface8 for TestMem {
             u16::lo(self.bios_i_flags)
         } else if addr == 0x03FF_FFF9 {
             u16::hi(self.bios_i_flags)
+        } else if addr == 0x03FF_FFFC {
+            0x08
+        } else if addr == 0x03FF_FFFD {
+            0x00
+        } else if addr == 0x03FF_FFFE {
+            0x00
+        } else if addr == 0x03FF_FFFF {
+            0x08
         } else if addr == 0x0400_0202 {
             u16::lo(self.real_i_flags)
         } else if addr == 0x0400_0203 {
@@ -105,11 +113,11 @@ impl Mem32 for TestMem {
             self.real_i_flags = 3;
             self.halted = false;
         }
-        if self.real_i_flags != 0 {
-            Some(arm::ExternalException::IRQ)
-        } else {
+        //if self.real_i_flags != 0 {
+        //    Some(arm::ExternalException::IRQ)
+        //} else {
             None
-        }
+        //}
     }
 }
 
@@ -139,12 +147,12 @@ fn run_real_bios(regs: &[u32; 4], swi_call: u8) -> (usize, [u32; 3]) {
 
     let mut cycle_count = 0;
     while cpu.read_reg(15) != 0x0800_0004 {
-        let pc = cpu.read_reg(15);
-        if cpu.read_cpsr().contains(arm::CPSR::T) {
-            println!("pc: {:X} ({})", pc, arm::armv4::decode_thumb(cpu.mut_mem().load_halfword(MemCycleType::S, pc).0));
-        } else {
-            println!("pc: {:X} ({})", pc, arm::armv4::decode_arm(cpu.mut_mem().load_word(MemCycleType::S, pc).0));
-        }
+        //let pc = cpu.read_reg(15);
+        //if cpu.read_cpsr().contains(arm::CPSR::T) {
+        //    println!("pc: {:X} ({})", pc, arm::armv4::decode_thumb(cpu.mut_mem().load_halfword(MemCycleType::S, pc).0));
+        //} else {
+        //    println!("pc: {:X} ({})", pc, arm::armv4::decode_arm(cpu.mut_mem().load_word(MemCycleType::S, pc).0));
+        //}
         cycle_count += cpu.step();
     }
 
@@ -172,6 +180,7 @@ fn run_real_bios_mem(regs: &[u32; 4], mem_write_addr: u32, mem_set: &[u8], mem_o
     // SWI
     let swi_instr = 0xEF00_0000 | ((swi_call as u32) << 16);
     cpu.mut_mem().store_word(MemCycleType::N, 0x0800_0000, swi_instr);
+    cpu.mut_mem().store_word(MemCycleType::N, 0x0800_0008, 0xE1A0_F00E);    // Interrupt handler: MOV R15, R14
     for (reg, val) in regs.iter().enumerate() {
         cpu.write_reg(reg, *val);
     }
@@ -182,12 +191,12 @@ fn run_real_bios_mem(regs: &[u32; 4], mem_write_addr: u32, mem_set: &[u8], mem_o
 
     let mut cycle_count = 0;
     while cpu.read_reg(15) != 0x0800_0004 {
-        //let pc = cpu.read_reg(15);
-        //if cpu.read_cpsr().contains(arm::CPSR::T) {
-        //    println!("pc: {:X} ({})", pc, arm::armv4::decode_thumb(cpu.mut_mem().load_halfword(MemCycleType::S, pc).0));
-        //} else {
-        //    println!("pc: {:X} ({})", pc, arm::armv4::decode_arm(cpu.mut_mem().load_word(MemCycleType::S, pc).0));
-        //}
+        let pc = cpu.read_reg(15);
+        if cpu.read_cpsr().contains(arm::CPSR::T) {
+            println!("pc: {:X} ({})", pc, arm::armv4::decode_thumb(cpu.mut_mem().load_halfword(MemCycleType::S, pc).0));
+        } else {
+            println!("pc: {:X} ({})", pc, arm::armv4::decode_arm(cpu.mut_mem().load_word(MemCycleType::S, pc).0));
+        }
         cycle_count += cpu.step();
     }
 
@@ -268,11 +277,24 @@ fn test_stop() {
 #[test]
 fn test_intrwait() {
     let data = vec![
-        [0, 1, 0, 0]
+        //[0, 1, 0, 0],
+        [1, 1, 0, 0]    // effectively vblank_intrwait
     ];
 
     for regs in data.iter() {
         let (mem_out, cycles) = compare_mem(regs, 0, &vec![0, 0], 0x03FF_FFF8, 0x04);
+        assert_eq!(mem_out, true);
+    }
+}
+
+#[test]
+fn test_vblank_wait() {
+    let data = vec![
+        [0, 0, 0, 0]
+    ];
+
+    for regs in data.iter() {
+        let (mem_out, cycles) = compare_mem(regs, 0, &vec![0, 0], 0x03FF_FFF8, 0x05);
         assert_eq!(mem_out, true);
     }
 }
