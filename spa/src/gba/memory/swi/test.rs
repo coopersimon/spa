@@ -496,3 +496,54 @@ fn test_lz77_byte() {
         //assert_eq!(cycles, true);
     }
 }
+
+#[test]
+fn test_bg_affine_set() {
+    let regs = [0x0300_0100, 0x0300_0120, 1, 0];
+    
+    let mut data = vec![
+        vec![
+            0, 0, 0, 0, // BG X0
+            0, 0, 0, 0, // BG Y0
+            0, 0,       // Scr X0
+            0, 0,       // Scr Y0
+            0, 2,       // Scale X
+            0, 2,       // Scale Y
+            0, 0,       // Angle
+        ],
+        vec![
+            0, 0, 0, 0, // BG X0
+            0, 0, 0, 0, // BG Y0
+            120, 0,       // Scr X0
+            80, 0,       // Scr Y0
+            0, 1,       // Scale X
+            0, 1,       // Scale Y
+            0, 0,       // Angle
+        ],
+        vec![
+            0, 0, 0, 0, // BG X0
+            0, 0, 0, 0, // BG Y0
+            120, 0,       // Scr X0
+            80, 0,       // Scr Y0
+            0, 1,       // Scale X
+            0, 1,       // Scale Y
+            0, 45,       // Angle
+        ],
+        vec![
+            0, 100, 0, 0, // BG X0
+            0, 36, 0, 0, // BG Y0
+            120, 0,       // Scr X0
+            80, 0,       // Scr Y0
+            128, 1,       // Scale X
+            64, 1,       // Scale Y
+            0, 126,       // Angle
+        ],
+    ];
+
+    for mem in data.iter_mut() {
+        mem.extend((0..0x20).map(|i| i as u8));
+        let (mem_out, _cycles) = compare_mem(&regs, 0x0300_0100, &mem, 0x0300_0100, 0x0E);
+        assert_eq!(mem_out, true);
+        //assert_eq!(cycles, true);
+    }
+}

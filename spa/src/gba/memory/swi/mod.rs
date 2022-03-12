@@ -75,6 +75,11 @@ pub fn emulated_swi(comment: u32, mem: &mut impl Mem32<Addr = u32>, regs: &[u32;
             cpu_fast_set(mem, regs[0], regs[1], regs[2]);
             [regs[0], regs[1], regs[3]]
         },
+        // Affine set
+        0x0E => {
+            bg_affine_set(mem, regs[0], regs[1], regs[2]);
+            [regs[0], regs[1], regs[3]]
+        },
         // Decompression
         0x10 => {
             bit_unpack(mem, regs[0], regs[1], regs[2]);
@@ -301,6 +306,56 @@ fn cpu_fast_set(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_add
                 cycle_type = arm::MemCycleType::S;
             }
         }
+    }
+}
+
+/*** AFFINE SET ***/
+fn bg_affine_set(mem: &mut impl Mem32<Addr = u32>, src_addr: u32, dst_addr: u32, count: u32) {
+    const ANGLE_TRANSFORM: f32 = std::f32::consts::TAU / (0x10000 as f32);
+    for i in 0..count {
+        let src_addr = src_addr + (i * 20); // Not sure about the offset here
+        let dst_addr = dst_addr + (i * 16);
+
+        // Load input data.
+        let (bg_center_x, c0) = mem.load_word(MemCycleType::N, src_addr);
+        let (bg_center_y, c1) = mem.load_word(MemCycleType::N, src_addr + 4);
+        let (scr_center_x, c2) = mem.load_halfword(MemCycleType::N, src_addr + 8);
+        let (scr_center_y, c3) = mem.load_halfword(MemCycleType::N, src_addr + 10);
+        let (scale_x, c4) = mem.load_halfword(MemCycleType::N, src_addr + 12);
+        let (scale_y, c5) = mem.load_halfword(MemCycleType::N, src_addr + 14);
+        let (angle, c6) = mem.load_halfword(MemCycleType::N, src_addr + 16);
+        mem.clock(c0 + c1 + c2 + c3 + c4 + c5 + c6);
+    
+        let f_angle = (angle as f32) * ANGLE_TRANSFORM;
+        let f_sin_a = f32::sin(f_angle);
+        let f_cos_a = f32::cos(f_angle);
+        let sin_a = (f_sin_a * 256.0) as i32;
+        let cos_a = (f_cos_a * 256.0) as i32;
+    
+        // Calculate matrix.
+        let scale_x = (scale_x as i16) as i32;
+        let scale_y = (scale_y as i16) as i32;
+        let a = (cos_a * scale_x) >> 8;
+        let b = (sin_a * -scale_x) >> 8;
+        let c = (sin_a * scale_y) >> 8;
+        let d = (cos_a * scale_y) >> 8;
+    
+        // Calculate X0, Y0
+        let screen_x = (scr_center_x as i16) as i32;
+        let screen_y = (scr_center_y as i16) as i32;
+        let x0 = (bg_center_x as i32) - (a * screen_x + b * screen_y);
+        let y0 = (bg_center_y as i32) - (c * screen_x + d * screen_y);
+
+        mem.clock(142);
+    
+        // Store output data.
+        let c0 = mem.store_halfword(MemCycleType::N, dst_addr, a as u16);
+        let c1 = mem.store_halfword(MemCycleType::N, dst_addr + 2, b as u16);
+        let c2 = mem.store_halfword(MemCycleType::N, dst_addr + 4, c as u16);
+        let c3 = mem.store_halfword(MemCycleType::N, dst_addr + 6, d as u16);
+        let c4 = mem.store_word(MemCycleType::N, dst_addr + 8, x0 as u32);
+        let c5 = mem.store_word(MemCycleType::N, dst_addr + 12, y0 as u32);
+        mem.clock(c0 + c1 + c2 + c3 + c4 + c5);
     }
 }
 
