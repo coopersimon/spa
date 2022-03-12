@@ -99,6 +99,14 @@ pub fn emulated_swi(comment: u32, mem: &mut impl Mem32<Addr = u32>, regs: &[u32;
             //lz77_uncomp_halfword(mem, regs[0], regs[1]);
             [regs[0], regs[1], regs[3]]
         },
+        0x14 => {
+            rl_uncomp_byte(mem, regs[0], regs[1]);
+            [regs[0], regs[1], regs[3]]
+        },
+        0x15 => {
+            rl_uncomp_halfword(mem, regs[0], regs[1]);
+            [regs[0], regs[1], regs[3]]
+        },
         _ => panic!("unsupported SWI 0x{:X}. This ROM requires the BIOS", function),
     }
 }
@@ -564,6 +572,109 @@ fn lz77_uncomp_halfword(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut
             if dst_addr >= end {
                 break 'outer;
             }
+        }
+    }
+}
+
+fn rl_uncomp_byte(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_addr: u32) {
+    let (header, cycles) = mem.load_word(MemCycleType::N, src_addr);
+    mem.clock(cycles);
+    src_addr += 4;
+
+    let len = header >> 8;
+    let end = dst_addr + len;
+    'outer: loop {
+        // Process block.
+        let (flags, cycles) = mem.load_byte(MemCycleType::N, src_addr);
+        mem.clock(cycles);
+        src_addr += 1;
+
+        if bits::u8::test_bit(flags, 7) {
+            // Compressed
+            let data_len = (flags & 0x7F) + 3;
+            let (data, load_cycles) = mem.load_byte(MemCycleType::N, src_addr);
+            src_addr += 1;
+            mem.clock(load_cycles);
+
+            for _ in 0..data_len {
+                let store_cycles = mem.store_byte(MemCycleType::N, dst_addr, data);
+                dst_addr += 1;
+                mem.clock(store_cycles);
+            }
+        } else {
+            // Uncompressed
+            let data_len = (flags & 0x7F) + 1;
+
+            for _ in 0..data_len {
+                let (data, load_cycles) = mem.load_byte(MemCycleType::N, src_addr);
+                src_addr += 1;
+                let store_cycles = mem.store_byte(MemCycleType::N, dst_addr, data);
+                dst_addr += 1;
+                mem.clock(load_cycles + store_cycles);
+            }
+        }
+
+        if dst_addr >= end {
+            break 'outer;
+        }
+    }
+}
+
+fn rl_uncomp_halfword(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_addr: u32) {
+    let (header, cycles) = mem.load_word(MemCycleType::N, src_addr);
+    mem.clock(cycles);
+    src_addr += 4;
+
+    let len = header >> 8;
+    let end = dst_addr + len;
+    let mut to_write = None;
+    'outer: loop {
+        // Process block.
+        let (flags, cycles) = mem.load_byte(MemCycleType::N, src_addr);
+        mem.clock(cycles);
+        src_addr += 1;
+
+        if bits::u8::test_bit(flags, 7) {
+            // Compressed
+            let data_len = (flags & 0x7F) + 3;
+            let (data, load_cycles) = mem.load_byte(MemCycleType::N, src_addr);
+            src_addr += 1;
+            mem.clock(load_cycles);
+
+            for _ in 0..data_len {
+                if let Some(lo_byte) = to_write.take() {
+                    let halfword = u16::make(data, lo_byte);
+                    let store_cycles = mem.store_halfword(MemCycleType::N, dst_addr, halfword);
+                    dst_addr += 2;
+                    mem.clock(store_cycles);
+                } else {
+                    to_write = Some(data);
+                }
+            }
+        } else {
+            // Uncompressed
+            let data_len = (flags & 0x7F) + 1;
+
+            for _ in 0..data_len {
+                let (data, load_cycles) = mem.load_byte(MemCycleType::N, src_addr);
+                src_addr += 1;
+
+                let store_cycles = if let Some(lo_byte) = to_write.take() {
+                    let halfword = u16::make(data, lo_byte);
+                    let store_cycles = mem.store_halfword(MemCycleType::N, dst_addr, halfword);
+                    dst_addr += 2;
+                    store_cycles
+                } else {
+                    to_write = Some(data);
+                    0
+                };
+
+                mem.clock(load_cycles + store_cycles);
+            }
+        }
+
+        if dst_addr >= end {
+            break 'outer;
         }
     }
 }
