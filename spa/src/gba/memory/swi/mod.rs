@@ -80,6 +80,10 @@ pub fn emulated_swi(comment: u32, mem: &mut impl Mem32<Addr = u32>, regs: &[u32;
             bg_affine_set(mem, regs[0], regs[1], regs[2]);
             [regs[0], regs[1], regs[3]]
         },
+        0x0F => {
+            obj_affine_set(mem, regs[0], regs[1], regs[2], regs[3]);
+            [regs[0], regs[1], regs[3]]
+        },
         // Decompression
         0x10 => {
             bit_unpack(mem, regs[0], regs[1], regs[2]);
@@ -358,6 +362,47 @@ fn bg_affine_set(mem: &mut impl Mem32<Addr = u32>, src_addr: u32, dst_addr: u32,
         mem.clock(c0 + c1 + c2 + c3 + c4 + c5);
     }
 }
+
+fn obj_affine_set(mem: &mut impl Mem32<Addr = u32>, src_addr: u32, mut dst_addr: u32, count: u32, offset: u32) {
+    const ANGLE_TRANSFORM: f32 = std::f32::consts::TAU / (0x10000 as f32);
+    for i in 0..count {
+        let src_addr = src_addr + (i * 8); // Not sure about the offset here
+
+        // Load input data.
+        let (scale_x, c0) = mem.load_halfword(MemCycleType::N, src_addr);
+        let (scale_y, c1) = mem.load_halfword(MemCycleType::N, src_addr + 2);
+        let (angle, c2) = mem.load_halfword(MemCycleType::N, src_addr + 4);
+        mem.clock(c0 + c1 + c2);
+    
+        let f_angle = (angle as f32) * ANGLE_TRANSFORM;
+        let f_sin_a = f32::sin(f_angle);
+        let f_cos_a = f32::cos(f_angle);
+        let sin_a = (f_sin_a * 256.0) as i32;
+        let cos_a = (f_cos_a * 256.0) as i32;
+    
+        // Calculate matrix.
+        let scale_x = (scale_x as i16) as i32;
+        let scale_y = (scale_y as i16) as i32;
+        let a = (cos_a * scale_x) >> 8;
+        let b = (sin_a * -scale_x) >> 8;
+        let c = (sin_a * scale_y) >> 8;
+        let d = (cos_a * scale_y) >> 8;
+
+        //mem.clock(142);
+    
+        // Store output data.
+        let c0 = mem.store_halfword(MemCycleType::N, dst_addr, a as u16);
+        dst_addr += offset;
+        let c1 = mem.store_halfword(MemCycleType::N, dst_addr, b as u16);
+        dst_addr += offset;
+        let c2 = mem.store_halfword(MemCycleType::N, dst_addr, c as u16);
+        dst_addr += offset;
+        let c3 = mem.store_halfword(MemCycleType::N, dst_addr, d as u16);
+        dst_addr += offset;
+        mem.clock(c0 + c1 + c2 + c3);
+    }
+}
+
 
 /*** DECOMPRESS ***/
 fn bit_unpack(mem: &mut impl Mem32<Addr = u32>, src_addr: u32, mut dst_addr: u32, info_ptr: u32) {

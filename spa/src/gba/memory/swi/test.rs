@@ -547,3 +547,28 @@ fn test_bg_affine_set() {
         //assert_eq!(cycles, true);
     }
 }
+
+#[test]
+fn test_obj_affine_set() {
+    let regs = [0x0300_0100, 0x0300_0110, 1, 2];
+    
+    let mut data = vec![
+        vec![
+            0, 2,       // Scale X
+            0, 2,       // Scale Y
+            0, 0,       // Angle
+        ],
+        vec![
+            128, 1,       // Scale X
+            32, 1,       // Scale Y
+            0, 233,       // Angle
+        ],
+    ];
+
+    for mem in data.iter_mut() {
+        mem.extend((0..0x20).map(|i| i as u8));
+        let (mem_out, _cycles) = compare_mem(&regs, 0x0300_0100, &mem, 0x0300_0100, 0x0F);
+        assert_eq!(mem_out, true);
+        //assert_eq!(cycles, true);
+    }
+}
