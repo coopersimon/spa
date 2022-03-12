@@ -80,6 +80,16 @@ pub fn emulated_swi(comment: u32, mem: &mut impl Mem32<Addr = u32>, regs: &[u32;
             bit_unpack(mem, regs[0], regs[1], regs[2]);
             [regs[0], regs[1], regs[3]]
         },
+        0x11 => {
+            lz77_uncomp_byte(mem, regs[0], regs[1]);
+            [regs[0], regs[1], regs[3]]
+        },
+        0x12 => {
+            lz77_uncomp_byte(mem, regs[0], regs[1]);
+            // TODO: fix bugs here
+            //lz77_uncomp_halfword(mem, regs[0], regs[1]);
+            [regs[0], regs[1], regs[3]]
+        },
         _ => panic!("unsupported SWI 0x{:X}. This ROM requires the BIOS", function),
     }
 }
@@ -340,5 +350,120 @@ fn bit_unpack(mem: &mut impl Mem32<Addr = u32>, src_addr: u32, mut dst_addr: u32
     if out_bit_idx > 0 {
         let cycles = mem.store_word(MemCycleType::N, dst_addr, out);
         mem.clock(cycles);
+    }
+}
+
+fn lz77_uncomp_byte(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_addr: u32) {
+    let (header, cycles) = mem.load_word(MemCycleType::N, src_addr);
+    mem.clock(cycles);
+    src_addr += 4;
+
+    let len = header >> 8;
+    let end = dst_addr + len;
+    'outer: loop {
+        // Process block.
+        let (flags, cycles) = mem.load_byte(MemCycleType::N, src_addr);
+        mem.clock(cycles);
+        src_addr += 1;
+
+        for i in (0..8).rev() {
+            if bits::u8::test_bit(flags, i) {
+                // Compressed
+                let (disp_lo, load_cycles_lo) = mem.load_byte(MemCycleType::N, src_addr);
+                let (disp_hi, load_cycles_hi) = mem.load_byte(MemCycleType::S, src_addr + 1);
+                mem.clock(load_cycles_lo + load_cycles_hi);
+                src_addr += 2;
+
+                let displacement = u16::make(disp_lo & 0xF, disp_hi) + 1;
+                let mut copy_src_addr = dst_addr - (displacement as u32);
+                let copy_len = 3 + ((disp_lo >> 4) & 0xF);
+
+                for _ in 0..copy_len {
+                    let (data, load_cycles) = mem.load_byte(MemCycleType::N, copy_src_addr);
+                    copy_src_addr += 1;
+                    let store_cycles = mem.store_byte(MemCycleType::N, dst_addr, data);
+                    dst_addr += 1;
+                    mem.clock(load_cycles + store_cycles);
+                }
+            } else {
+                // Raw data
+                let (data, load_cycles) = mem.load_byte(MemCycleType::N, src_addr);
+                src_addr += 1;
+                let store_cycles = mem.store_byte(MemCycleType::N, dst_addr, data);
+                dst_addr += 1;
+                mem.clock(load_cycles + store_cycles);
+            }
+
+            if dst_addr >= end {
+                break 'outer;
+            }
+        }
+    }
+}
+
+fn lz77_uncomp_halfword(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_addr: u32) {
+    let (header, cycles) = mem.load_word(MemCycleType::N, src_addr);
+    mem.clock(cycles);
+    src_addr += 4;
+
+    let len = header >> 8;
+    let end = dst_addr + len;
+    let mut to_write = None;
+    'outer: loop {
+        // Process block.
+        let (flags, cycles) = mem.load_byte(MemCycleType::N, src_addr);
+        mem.clock(cycles);
+        src_addr += 1;
+
+        for i in (0..8).rev() {
+            if bits::u8::test_bit(flags, i) {
+                // Compressed
+                let (disp_lo, load_cycles_lo) = mem.load_byte(MemCycleType::N, src_addr);
+                let (disp_hi, load_cycles_hi) = mem.load_byte(MemCycleType::S, src_addr + 1);
+                mem.clock(load_cycles_lo + load_cycles_hi);
+                src_addr += 2;
+
+                let displacement = u16::make(disp_lo & 0xF, disp_hi) + 1;
+                let mut copy_src_addr = dst_addr - (displacement as u32);
+                let copy_len = 3 + ((disp_lo >> 4) & 0xF);
+
+                for _ in 0..copy_len {
+                    let (data, load_cycles) = mem.load_byte(MemCycleType::N, copy_src_addr);
+                    copy_src_addr += 1;
+
+                    let store_cycles = if let Some(lo_byte) = to_write.take() {
+                        let halfword = u16::make(data, lo_byte);
+                        let store_cycles = mem.store_halfword(MemCycleType::N, dst_addr, halfword);
+                        dst_addr += 2;
+                        store_cycles
+                    } else {
+                        to_write = Some(data);
+                        0
+                    };
+
+                    mem.clock(load_cycles + store_cycles);
+                }
+            } else {
+                // Raw data
+                let (data, load_cycles) = mem.load_byte(MemCycleType::N, src_addr);
+                src_addr += 1;
+
+                let store_cycles = if let Some(lo_byte) = to_write.take() {
+                    let halfword = u16::make(data, lo_byte);
+                    let store_cycles = mem.store_halfword(MemCycleType::N, dst_addr, halfword);
+                    dst_addr += 2;
+                    store_cycles
+                } else {
+                    to_write = Some(data);
+                    0
+                };
+                
+                mem.clock(load_cycles + store_cycles);
+            }
+
+            if dst_addr >= end {
+                break 'outer;
+            }
+        }
     }
 }

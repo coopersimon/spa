@@ -480,3 +480,19 @@ fn test_bit_unpack() {
         //assert_eq!(cycles, true);
     }
 }
+
+#[test]
+fn test_lz77_byte() {
+    let data = vec![
+        [0x0300_0100, 0x0300_0200, 0x0300_00F8, 0],
+    ];
+    
+    let mut mem = vec![0x10, 0x00, 0x1, 0x4, 0, 0, 0, 0];
+    mem.extend((0..0x10).map(|i| i as u8));
+
+    for regs in data.iter() {
+        let (mem_out, _cycles) = compare_mem(regs, 0x0300_00F8, &mem, 0x0300_0200, 0x10);
+        assert_eq!(mem_out, true);
+        //assert_eq!(cycles, true);
+    }
+}
