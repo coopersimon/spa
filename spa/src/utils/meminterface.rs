@@ -75,3 +75,45 @@ pub trait MemInterface16 {
         self.write_halfword(addr + 2, u32::hi(data));
     }
 }
+
+/// Use this for data which uses a 32-bit base.
+/// This has default impls for byte and halfword.
+/// Ensure that all memory interactions are aligned or there might be issues.
+/// 
+/// Lower bytes will be read/written first.
+pub trait MemInterface32 {
+    fn read_byte(&mut self, addr: u32) -> u8 {
+        use crate::utils::bytes::u32;
+        let data = self.read_word(addr & 0xFFFF_FFFC);
+        u32::byte(data, (addr & 3) as usize)
+    }
+    fn write_byte(&mut self, addr: u32, data: u8) {
+        use crate::utils::bytes::u32;
+        let word_addr = addr & 0xFFFF_FFFC;
+        let word_data = self.read_word(word_addr);
+        self.write_word(word_addr, u32::set_byte(word_data, data, (addr & 3) as usize));
+    }
+
+    fn read_halfword(&mut self, addr: u32) -> u16 {
+        use crate::utils::bytes::u32;
+        let data = self.read_word(addr & 0xFFFF_FFFC);
+        match addr & 2 {
+            0 => u32::lo(data),
+            2 => u32::hi(data),
+            _ => unreachable!()
+        }
+    }
+    fn write_halfword(&mut self, addr: u32, data: u16) {
+        use crate::utils::bytes::u32;
+        let word_addr = addr & 0xFFFF_FFFE;
+        let word_data = self.read_word(word_addr);
+        match addr & 2 {
+            0 => self.write_word(word_addr, u32::set_lo(word_data, data)),
+            2 => self.write_word(word_addr, u32::set_hi(word_data, data)),
+            _ => unreachable!()
+        }
+    }
+
+    fn read_word(&mut self, addr: u32) -> u32;
+    fn write_word(&mut self, addr: u32, data: u32);
+}
