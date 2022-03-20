@@ -12,7 +12,7 @@ use std::{
     },
     fs::File
 };
-use crate::common::meminterface::MemInterface8;
+use crate::utils::meminterface::MemInterface8;
 
 
 /// SRAM. Simple 32kB region of 8-bit battery-backed memory.

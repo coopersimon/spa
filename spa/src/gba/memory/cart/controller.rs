@@ -2,7 +2,7 @@
 
 use arm::MemCycleType;
 use bitflags::bitflags;
-use crate::common::{
+use crate::utils::{
     bits::u16,
     bytes::u32,
     meminterface::MemInterface16

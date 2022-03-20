@@ -2,8 +2,10 @@
 
 mod timer;
 
-use crate::common::bytes::u32;
-use crate::gba::interrupt::Interrupts;
+use crate::utils::{
+    bytes::u32,
+    bits::u16
+};
 use timer::Timer;
 
 pub struct Timers {
@@ -14,10 +16,10 @@ impl Timers {
     pub fn new() -> Self {
         Self {
             timers: [
-                Timer::new(Interrupts::TIMER_0),
-                Timer::new(Interrupts::TIMER_1),
-                Timer::new(Interrupts::TIMER_2),
-                Timer::new(Interrupts::TIMER_3)
+                Timer::new(u16::bit(3)),
+                Timer::new(u16::bit(4)),
+                Timer::new(u16::bit(5)),
+                Timer::new(u16::bit(6))
             ]
         }
     }
@@ -26,13 +28,13 @@ impl Timers {
     /// 
     /// Returns any interrupts to request,
     /// as well as two bools indicating if timer 0 or 1 overflowed.
-    pub fn clock(&mut self, cycles: usize) -> (Interrupts, bool, bool) {
-        let mut interrupts = Interrupts::default();
+    pub fn clock(&mut self, cycles: usize) -> (u16, bool, bool) {
+        let mut interrupts = 0;
         let mut timer_0 = false;
         let mut timer_1 = false;
         let mut overflows = self.timers[0].clock(cycles);
         if overflows > 0 {
-            interrupts.insert(self.timers[0].get_interrupt());
+            interrupts |= self.timers[0].get_interrupt();
             timer_0 = true;
         }
         for t in 1..4 {
@@ -46,7 +48,7 @@ impl Timers {
                 self.timers[t].clock(cycles)
             };
             if overflows > 0 {
-                interrupts.insert(self.timers[t].get_interrupt());
+                interrupts |= self.timers[t].get_interrupt();
                 if t == 1 {
                     timer_1 = true;
                 }

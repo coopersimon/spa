@@ -5,7 +5,7 @@ use arm::armv4::CoprocV4;
 use bitflags::bitflags;
 
 use crate::{
-    common::bits::u32,
+    utils::bits::u32,
 };
 
 struct CP15 {
@@ -180,7 +180,7 @@ impl CoprocV4 for CP15 {
             (5, 0) => self.read_access_permission_bits(info),
             (6, _) => self.protection_unit_regions[op_reg].bits(),
             (9, 1) => self.read_tcm_settings(info),
-            // 13 => Process ID
+            // 13 => Process ID (not in NDS)
             // 15 => BIST
             (_, _) => 0,
         };

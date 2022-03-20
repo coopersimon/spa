@@ -10,8 +10,10 @@ use arm::{
 };
 use crate::{
     gba::interrupt::Interrupts,
-    common::bytes::{u16, u32},
-    common::bits,
+    utils::{
+        bytes::{u16, u32},
+        bits
+    }
 };
 
 /// Emulated software interrupt for GBA.
@@ -231,7 +233,7 @@ fn arctan(op: u32) -> u32 {
 
 /*** MEMSET ***/
 fn cpu_set(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_addr: u32, len_mode: u32) {
-    use crate::common::bits::u32;
+    use crate::utils::bits::u32;
     let mut count = len_mode & 0x1F_FFFF;
     let fixed_src = u32::test_bit(len_mode, 24);
     let use_word = u32::test_bit(len_mode, 26);
@@ -283,7 +285,7 @@ fn cpu_set(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_addr: u3
 }
 
 fn cpu_fast_set(mem: &mut impl Mem32<Addr = u32>, mut src_addr: u32, mut dst_addr: u32, len_mode: u32) {
-    use crate::common::bits::u32;
+    use crate::utils::bits::u32;
     let mut count = len_mode & 0x1F_FFF8;
     let fixed_src = u32::test_bit(len_mode, 24);
 

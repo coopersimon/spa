@@ -2,7 +2,7 @@
 
 use bitflags::bitflags;
 use fixed::types::I24F8;
-use crate::common::{
+use crate::utils::{
     bits::u16,
     meminterface::MemInterface16
 };

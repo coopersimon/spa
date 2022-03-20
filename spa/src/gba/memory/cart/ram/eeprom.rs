@@ -14,7 +14,7 @@ use std::{
     },
     fs::File
 };
-use crate::common::{
+use crate::utils::{
     meminterface::MemInterface8,
     bytes::u16
 };

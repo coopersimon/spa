@@ -1,11 +1,10 @@
 /// Individual GBA timer.
 
 use bitflags::bitflags;
-use crate::common::{
+use crate::utils::{
     bits::u8,
     bytes::{u16, u32}
 };
-use crate::gba::interrupt::Interrupts;
 
 bitflags!{
     #[derive(Default)]
@@ -27,11 +26,11 @@ pub struct Timer {
     /// Timer settings.
     control:    Control,
     /// Which interrupt this timer is responsible for.
-    interrupt:  Interrupts,
+    interrupt:  u16,
 }
 
 impl Timer {
-    pub fn new(interrupt: Interrupts) -> Self {
+    pub fn new(interrupt: u16) -> Self {
         Self {
             counter:    0,
             internal:   0,
@@ -75,11 +74,11 @@ impl Timer {
     /// If the timer overflowed, we call this to get the interrupt the timer is responsible for.
     /// 
     /// This could be nothing if the timer disabled interrupts.
-    pub fn get_interrupt(&self) -> Interrupts {
+    pub fn get_interrupt(&self) -> u16 {
         if self.control.contains(Control::IRQ_EN) {
             self.interrupt
         } else {
-            Interrupts::default()
+            0
         }
     }
 

@@ -1,6 +1,6 @@
 /// Palette memory
 
-use crate::common::meminterface::MemInterface16;
+use crate::utils::meminterface::MemInterface16;
 
 /// Total size of bg or object palettes.
 const PALETTE_SIZE: usize = 256;

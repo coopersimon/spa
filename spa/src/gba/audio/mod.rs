@@ -8,7 +8,7 @@ use bitflags::bitflags;
 use crossbeam_channel::Sender;
 use dasp::frame::Stereo;
 
-use crate::common::{
+use crate::utils::{
     meminterface::MemInterface8,
     bits::u8,
     bytes::u16

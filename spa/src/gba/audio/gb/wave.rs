@@ -1,4 +1,4 @@
-use crate::common::bits::u8;
+use crate::utils::bits::u8;
 use super::*;
 
 const MAX_LEN: u16 = 256;

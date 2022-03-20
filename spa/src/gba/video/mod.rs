@@ -4,7 +4,7 @@ mod background;
 mod memory;
 mod render;
 
-use crate::common::meminterface::MemInterface16;
+use crate::utils::meminterface::MemInterface16;
 use crate::gba::{
     constants::*,
     interrupt::Interrupts

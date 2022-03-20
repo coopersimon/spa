@@ -10,7 +10,7 @@ use std::{
     fs::File,
     convert::TryInto
 };
-use crate::common::{
+use crate::utils::{
     bytes::u16,
     meminterface::MemInterface16
 };

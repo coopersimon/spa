@@ -1,7 +1,7 @@
 /// Interrupt controller.
 
 use bitflags::bitflags;
-use crate::common::{
+use crate::utils::{
     bits::u16,
     meminterface::MemInterface16,
 };

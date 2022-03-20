@@ -1,6 +1,4 @@
-/// Common helper functions.
+/// Common components.
 
-pub mod bits;
-pub mod bytes;
-pub mod meminterface;
 pub mod wram;
+pub mod timers;

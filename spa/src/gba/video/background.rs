@@ -1,7 +1,7 @@
 use bitflags::bitflags;
 use fixed::types::I24F8;
 
-use crate::common::bits::u8;
+use crate::utils::bits::u8;
 
 /// Colour special effect
 pub enum ColourEffect {

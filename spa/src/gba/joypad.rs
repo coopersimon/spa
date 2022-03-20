@@ -1,7 +1,7 @@
 /// Button inputs
 
 use bitflags::bitflags;
-use crate::common::{
+use crate::utils::{
     bits::u16,
     meminterface::MemInterface16,
 };

@@ -14,7 +14,7 @@ use std::{
         OpenOptions
     }
 };
-use crate::common::meminterface::MemInterface8;
+use crate::utils::meminterface::MemInterface8;
 
 use sram::SRAM;
 use flash::FLASH;

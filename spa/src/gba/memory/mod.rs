@@ -9,15 +9,17 @@ use arm::{Mem32, MemCycleType};
 use crossbeam_channel::{Receiver, unbounded};
 
 use crate::{
-    common::{
+    utils::{
         bits::u8,
-        meminterface::{MemInterface8, MemInterface16},
-        wram::WRAM
+        meminterface::{MemInterface8, MemInterface16}
+    },
+    common::{
+        wram::WRAM,
+        timers::Timers
     },
     gba::{
-        timers::Timers,
         joypad::Joypad,
-        interrupt::InterruptControl,
+        interrupt::{Interrupts, InterruptControl},
         video::*,
         audio::{GBAAudio, SamplePacket}
     }
@@ -188,7 +190,7 @@ impl<R: Renderer> MemoryBus<R> {
 
         self.interrupt_control.interrupt_request(
             self.joypad.get_interrupt() |
-            timer_irq |
+            Interrupts::from_bits_truncate(timer_irq) |
             video_irq
         );
 

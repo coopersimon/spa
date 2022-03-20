@@ -1,4 +1,5 @@
 mod common;
+mod utils;
 
 pub mod gba;
 pub mod ds;

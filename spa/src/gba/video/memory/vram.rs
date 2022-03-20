@@ -1,7 +1,7 @@
 
 use std::convert::TryInto;
 use bitflags::bitflags;
-use crate::common::bits::{u8, u16};
+use crate::utils::bits::{u8, u16};
 
 const VRAM_SIZE: u32 = 96 * 1024;
 const OBJ_VRAM_SIZE: u32 = 32 * 1024;

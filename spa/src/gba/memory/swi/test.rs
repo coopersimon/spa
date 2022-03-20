@@ -2,7 +2,7 @@ use arm::{
     Mem32, MemCycleType, ARM7TDMI, ARMCore
 };
 
-use crate::common::{
+use crate::utils::{
     bytes::u16,
     meminterface::MemInterface8
 };
