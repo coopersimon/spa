@@ -7,7 +7,6 @@ use crate::utils::{
     bytes::u32,
     meminterface::MemInterface16
 };
-use crate::gba::interrupt::Interrupts;
 
 bitflags!{
     #[derive(Default)]
@@ -30,21 +29,27 @@ bitflags!{
     }
 }
 
+// Interrupt bits.
+const DMA_0: u16 = u16::bit(8);
+const DMA_1: u16 = u16::bit(9);
+const DMA_2: u16 = u16::bit(10);
+const DMA_3: u16 = u16::bit(11);
+
 /// The DMA Channels.
 pub struct DMA {
     pub channels:   [DMAChannel; 4],
     /// Whether each channel is active or not.
-    pub active:     [bool; 4],
+    active:     [bool; 4],
 }
 
 impl DMA {
     pub fn new() -> Self {
         Self {
             channels: [
-                DMAChannel::new(Interrupts::DMA_0, 0x3FFF, false),
-                DMAChannel::new(Interrupts::DMA_1, 0x3FFF, true),
-                DMAChannel::new(Interrupts::DMA_2, 0x3FFF, true),
-                DMAChannel::new(Interrupts::DMA_3, 0xFFFF, false),
+                DMAChannel::new(DMA_0, 0x3FFF, false),
+                DMAChannel::new(DMA_1, 0x3FFF, true),
+                DMAChannel::new(DMA_2, 0x3FFF, true),
+                DMAChannel::new(DMA_3, 0xFFFF, false),
             ],
             active: [
                 false, false, false, false
@@ -171,7 +176,7 @@ pub enum DMAAddress {
     Done{
         source: u32,
         dest: u32,
-        irq: Interrupts,
+        irq: u16,
     }
 }
 
@@ -193,11 +198,11 @@ pub struct DMAChannel {
     // Channel-specific data (will remain const)
     fifo_special:       bool,
     word_count_mask:    u16,
-    interrupt:          Interrupts,
+    interrupt:          u16,
 }
 
 impl DMAChannel {
-    pub fn new(interrupt: Interrupts, word_count_mask: u16, fifo: bool) -> Self {
+    pub fn new(interrupt: u16, word_count_mask: u16, fifo: bool) -> Self {
         Self {
             src_addr:           0,
             dst_addr:           0,
@@ -342,7 +347,7 @@ impl DMAChannel {
     }
 
     /// Call on completion of DMA transfer.
-    fn reset(&mut self) -> Interrupts {
+    fn reset(&mut self) -> u16 {
         if self.control.contains(Control::REPEAT) {
             let fifo_mode = self.fifo_mode();
             self.current_count = if fifo_mode {
@@ -360,7 +365,7 @@ impl DMAChannel {
         if self.control.contains(Control::END_IRQ) {
             self.interrupt
         } else {
-            Interrupts::default()
+            0
         }
     }
 

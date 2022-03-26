@@ -25,7 +25,7 @@ bitflags!{
 }
 
 
-pub struct MathsModule {
+pub struct Accelerators {
     div_control:        DivisionControl,
     div_numerator:      i64,
     div_denominator:    i64,
@@ -39,7 +39,7 @@ pub struct MathsModule {
     //cycle_countdown:    usize,
 }
 
-impl MathsModule {
+impl Accelerators {
     pub fn new() -> Self {
         Self {
             div_control:        DivisionControl::default(),
@@ -93,7 +93,7 @@ impl MathsModule {
     }
 }
 
-impl MemInterface32 for MathsModule {
+impl MemInterface32 for Accelerators {
     fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
             0x0 => self.div_control.bits(),

@@ -1,5 +1,4 @@
 /// Memory bus
-mod dma;
 mod cart;
 mod bios;
 pub mod framecomms;
@@ -14,6 +13,7 @@ use crate::{
         meminterface::{MemInterface8, MemInterface16}
     },
     common::{
+        dma::{DMA, DMAAddress},
         wram::WRAM,
         timers::Timers
     },
@@ -24,7 +24,6 @@ use crate::{
         audio::{GBAAudio, SamplePacket}
     }
 };
-use dma::{DMA, DMAAddress};
 use cart::{GamePak, GamePakController};
 use framecomms::FrameSender;
 pub use swi::emulated_swi;
@@ -141,7 +140,7 @@ impl<R: Renderer> MemoryBus<R> {
                             let store_cycles = self.store_halfword(access, dest, data);
                             load_cycles + store_cycles
                         };
-                        self.interrupt_control.interrupt_request(irq);
+                        self.interrupt_control.interrupt_request(Interrupts::from_bits_truncate(irq));
                         self.dma.set_inactive(c);
                         cycles
                     }

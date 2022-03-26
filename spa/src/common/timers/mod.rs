@@ -12,14 +12,20 @@ pub struct Timers {
     timers: [Timer; 4]
 }
 
+// Interrupt bits.
+const TIMER_0: u16 = u16::bit(3);
+const TIMER_1: u16 = u16::bit(4);
+const TIMER_2: u16 = u16::bit(5);
+const TIMER_3: u16 = u16::bit(6);
+
 impl Timers {
     pub fn new() -> Self {
         Self {
             timers: [
-                Timer::new(u16::bit(3)),
-                Timer::new(u16::bit(4)),
-                Timer::new(u16::bit(5)),
-                Timer::new(u16::bit(6))
+                Timer::new(TIMER_0),
+                Timer::new(TIMER_1),
+                Timer::new(TIMER_2),
+                Timer::new(TIMER_3)
             ]
         }
     }
