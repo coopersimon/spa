@@ -369,8 +369,9 @@ impl Mem32 for DS7MemoryBus {
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.wram.read_byte(addr & 0x3F_FFFF), 3),     // WRAM
-            //0x0300_0000..=0x03FF_FFFF => (self.fast_wram.read_byte(addr & 0x7FFF), 1),  // TODO: Shared RAM
+            //0x0200_0000..=0x02FF_FFFF => (self.wram.read_byte(addr & 0x3F_FFFF), 3),    // WRAM
+            0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_byte(addr), 1),         // Shared RAM
+            0x0380_0000..=0x03FF_FFFF => (self.wram.read_byte(addr & 0xFFFF), 1),    // ARM7 WRAM
             0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), 1),                  // I/O
 
             // TODO: VRAM
@@ -388,14 +389,18 @@ impl Mem32 for DS7MemoryBus {
     fn store_byte(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u8) -> usize {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
-            0x0200_0000..=0x02FF_FFFF => {  // WRAM
-                self.wram.write_byte(addr & 0x3F_FFFF, data);
-                3
-            },
-            //0x0300_0000..=0x03FF_FFFF => {  // TODO: Shared RAM
-            //    self.fast_wram.write_byte(addr & 0x7FFF, data);
-            //    1
+            //0x0200_0000..=0x02FF_FFFF => {  // WRAM
+            //    self.wram.write_byte(addr & 0x3F_FFFF, data);
+            //    3
             //},
+            0x0300_0000..=0x037F_FFFF => {  // Shared RAM
+                self.shared_wram.write_byte(addr, data);
+                1
+            },
+            0x0380_0000..=0x03FF_FFFF => {  // ARM7 WRAM
+                self.wram.write_byte(addr & 0xFFFF, data);
+                1
+            },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_byte(addr, data);
                 1
@@ -423,8 +428,9 @@ impl Mem32 for DS7MemoryBus {
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
             //0x0000_0000..=0x0000_3FFF => (self.bios.read_halfword(addr), 1),                // BIOS
-            0x0200_0000..=0x02FF_FFFF => (self.wram.read_halfword(addr & 0x3_FFFF), 3),     // WRAM
-            //0x0300_0000..=0x03FF_FFFF => (self.fast_wram.read_halfword(addr & 0x7FFF), 1),  // FAST WRAM
+            //0x0200_0000..=0x02FF_FFFF => (self.wram.read_halfword(addr & 0x3_FFFF), 3),     // WRAM
+            0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_halfword(addr), 1),         // Shared RAM
+            0x0380_0000..=0x03FF_FFFF => (self.wram.read_halfword(addr & 0xFFFF), 1),    // ARM7 WRAM
             0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), 1),                  // I/O
 
             // VRAM
@@ -442,14 +448,18 @@ impl Mem32 for DS7MemoryBus {
     fn store_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u16) -> usize {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
-            0x0200_0000..=0x02FF_FFFF => {  // WRAM
-                self.wram.write_halfword(addr & 0x3_FFFF, data);
-                3
-            },
-            //0x0300_0000..=0x03FF_FFFF => {  // FAST WRAM
-            //    self.fast_wram.write_halfword(addr & 0x7FFF, data);
-            //    1
+            //0x0200_0000..=0x02FF_FFFF => {  // WRAM
+            //    self.wram.write_halfword(addr & 0x3_FFFF, data);
+            //    3
             //},
+            0x0300_0000..=0x037F_FFFF => {  // Shared RAM
+                self.shared_wram.write_halfword(addr, data);
+                1
+            },
+            0x0380_0000..=0x03FF_FFFF => {  // ARM7 WRAM
+                self.wram.write_halfword(addr & 0xFFFF, data);
+                1
+            },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_halfword(addr, data);
                 1
@@ -477,8 +487,9 @@ impl Mem32 for DS7MemoryBus {
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
             //0x0000_0000..=0x0000_3FFF => (self.bios.read_word(addr), 1),                // BIOS
-            0x0200_0000..=0x02FF_FFFF => (self.wram.read_word(addr & 0x3_FFFF), 6),     // WRAM
-            //0x0300_0000..=0x03FF_FFFF => (self.fast_wram.read_word(addr & 0x7FFF), 1),  // FAST WRAM
+            //0x0200_0000..=0x02FF_FFFF => (self.wram.read_word(addr & 0x3_FFFF), 6),     // WRAM
+            0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_word(addr), 1),         // Shared RAM
+            0x0380_0000..=0x03FF_FFFF => (self.wram.read_word(addr & 0xFFFF), 1),    // ARM7 WRAM
             0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), 1),                  // I/O
 
             // VRAM
@@ -497,14 +508,18 @@ impl Mem32 for DS7MemoryBus {
     fn store_word(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u32) -> usize {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
-            0x0200_0000..=0x02FF_FFFF => {  // WRAM
-                self.wram.write_word(addr & 0x3_FFFF, data);
-                6
-            },
-            //0x0300_0000..=0x03FF_FFFF => {  // FAST WRAM
-            //    self.fast_wram.write_word(addr & 0x7FFF, data);
-            //    1
+            //0x0200_0000..=0x02FF_FFFF => {  // WRAM
+            //    self.wram.write_word(addr & 0x3_FFFF, data);
+            //    6
             //},
+            0x0300_0000..=0x037F_FFFF => {  // Shared RAM
+                self.shared_wram.write_word(addr, data);
+                1
+            },
+            0x0380_0000..=0x03FF_FFFF => {  // ARM7 WRAM
+                self.wram.write_word(addr & 0xFFFF, data);
+                1
+            },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_word(addr, data);
                 1
