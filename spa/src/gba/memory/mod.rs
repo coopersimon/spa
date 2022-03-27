@@ -409,62 +409,17 @@ impl<R: Renderer> Mem32 for MemoryBus<R> {
     }
 }
 
-/// IO on the bus.
-/// There are a ton of devices that sit on IO so use this macro to construct the functions.
-macro_rules! MemoryBusIO {
-    {$(($start_addr:expr, $end_addr:expr, $device:ident)),*} => {
-        impl<R: Renderer> MemoryBus<R> {
-            fn io_read_byte(&mut self, addr: u32) -> u8 {
-                match addr {
-                    $($start_addr..=$end_addr => self.$device.read_byte(addr - $start_addr),)*
-                    _ => 0//panic!("trying to load from unmapped io address ${:08X}", addr),
-                }
-            }
-            fn io_write_byte(&mut self, addr: u32, data: u8) {
-                match addr {
-                    $($start_addr..=$end_addr => self.$device.write_byte(addr - $start_addr, data),)*
-                    _ => {}//panic!("trying to write to unmapped io address ${:08X}", addr),
-                }
-            }
-
-            fn io_read_halfword(&mut self, addr: u32) -> u16 {
-                match addr {
-                    $($start_addr..=$end_addr => self.$device.read_halfword(addr - $start_addr),)*
-                    _ => 0//panic!("trying to load from unmapped io address ${:08X}", addr),
-                }
-            }
-            fn io_write_halfword(&mut self, addr: u32, data: u16) {
-                match addr {
-                    $($start_addr..=$end_addr => self.$device.write_halfword(addr - $start_addr, data),)*
-                    _ => {}//panic!("trying to write to unmapped io address ${:08X}", addr),
-                }
-            }
-
-            fn io_read_word(&mut self, addr: u32) -> u32 {
-                match addr {
-                    $($start_addr..=$end_addr => self.$device.read_word(addr - $start_addr),)*
-                    _ => 0//panic!("trying to load from unmapped io address ${:08X}", addr),
-                }
-            }
-            fn io_write_word(&mut self, addr: u32, data: u32) {
-                match addr {
-                    $($start_addr..=$end_addr => self.$device.write_word(addr - $start_addr, data),)*
-                    _ => {}//panic!("trying to write to unmapped io address ${:08X}", addr),
-                }
-            }
-        }
-    };
-}
-
-MemoryBusIO!{
-    (0x0400_0000, 0x0400_0057, video),
-    (0x0400_0060, 0x0400_00AF, audio),
-    (0x0400_00B0, 0x0400_00DF, dma),
-    (0x0400_0100, 0x0400_010F, timers),
-    (0x0400_0130, 0x0400_0133, joypad),
-    (0x0400_0204, 0x0400_0207, game_pak_control),
-    (0x0400_0200, 0x0400_020B, interrupt_control),
-    (0x0400_0300, 0x0400_0301, internal)
+impl<R: Renderer> MemoryBus<R> {
+    MemoryBusIO!{
+        (0x0400_0000, 0x0400_0057, video),
+        (0x0400_0060, 0x0400_00AF, audio),
+        (0x0400_00B0, 0x0400_00DF, dma),
+        (0x0400_0100, 0x0400_010F, timers),
+        (0x0400_0130, 0x0400_0133, joypad),
+        (0x0400_0204, 0x0400_0207, game_pak_control),
+        (0x0400_0200, 0x0400_020B, interrupt_control),
+        (0x0400_0300, 0x0400_0301, internal)
+    }
 }
 
 /// Internal registers which are used by the BIOS.
