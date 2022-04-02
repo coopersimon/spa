@@ -4,8 +4,10 @@
 
 use arm::{
     armv4::CoprocV4,
+    armv5::CoprocV5,
     Mem32, MemCycleType,
-    ExternalException
+    ExternalException,
+    ARM9Mem
 };
 use bitflags::bitflags;
 
@@ -19,7 +21,7 @@ const DATA_TCM_SIZE: u32 = 16 * 1024;
 
 /// ARM9 on-chip memory.
 /// Includes Cache and TCM.
-struct ARM9InternalMem {
+pub struct DS9InternalMem {
 
     instr_tcm:  WRAM,
     data_tcm:   WRAM,
@@ -46,7 +48,7 @@ struct ARM9InternalMem {
     data_tcm_end:   u32,
 }
 
-impl ARM9InternalMem {
+impl DS9InternalMem {
     pub fn new(mem_bus: DS9MemoryBus) -> Self {
         Self {
             instr_tcm:  WRAM::new(32 * 1024),
@@ -74,7 +76,7 @@ impl ARM9InternalMem {
     }
 }
 
-impl Mem32 for ARM9InternalMem {
+impl Mem32 for DS9InternalMem {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<ExternalException> {
@@ -184,7 +186,7 @@ impl Mem32 for ARM9InternalMem {
 }
 
 // CP15 register functions
-impl ARM9InternalMem {
+impl DS9InternalMem {
     fn read_id_code(&self, info: u32) -> u32 {
         /// 41=ARM
         /// 05=ARMv5TE
@@ -294,7 +296,13 @@ bitflags!{
     }
 }
 
-impl CoprocV4 for ARM9InternalMem {
+impl ARM9Mem for DS9InternalMem {
+    fn mut_cp15<'a>(&'a mut self) -> &'a mut dyn CoprocV5 {
+        self
+    }
+}
+
+impl CoprocV4 for DS9InternalMem {
     /// Transfer from ARM register to Coproc register.
     fn mcr(&mut self, dest_reg: usize, op_reg: usize, data: u32, _op: u32, info: u32) -> usize {
         // opcode should always be 0.
@@ -340,4 +348,24 @@ impl CoprocV4 for ARM9InternalMem {
 
     /// Coprocessor data operation.
     fn cdp(&mut self, _op: u32, _reg_cn: usize, _reg_cd: usize, _info: u32, _reg_cm: usize) -> usize {0}
+}
+
+impl CoprocV5 for DS9InternalMem {
+    fn mcr2(&mut self, dest_reg: usize, op_reg: usize, data: u32, op: u32, info: u32) -> usize {0}
+
+    fn mrc2(&mut self, src_reg: usize, op_reg: usize, op: u32, info: u32) -> (u32, usize) {(0,0)}
+
+    fn mcrr(&mut self, op_reg: usize, data_lo: u32, data_hi: u32, op: u32) -> usize {0}
+
+    fn mrrc(&mut self, op_reg: usize, op: u32) -> (u32, u32, usize) {(0,0,0)}
+    
+    fn ldc2(&mut self, transfer_len: bool, dest_reg: usize, data: u32) -> usize {0}
+
+    fn stc2(&mut self, transfer_len: bool, src_reg: usize) -> (u32, usize) {(0,0)}
+
+    fn cdp2(&mut self, op: u32, reg_cn: usize, reg_cd: usize, info: u32, reg_cm: usize) -> usize {0}
+
+    fn as_v4<'a>(&'a mut self) -> &'a mut dyn CoprocV4 {
+        self
+    }
 }

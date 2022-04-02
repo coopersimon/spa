@@ -40,7 +40,7 @@ pub struct DS9MemoryBus {
 }
 
 impl DS9MemoryBus {
-    pub fn new() -> (Self, DS7MemoryBus) {
+    pub fn new() -> (Self, Box<DS7MemoryBus>) {
         let (arm9_ram, arm7_ram) = ARM9SharedRAM::new();
         let (ds9_ipc, ds7_ipc) = IPC::new();
 
@@ -53,7 +53,7 @@ impl DS9MemoryBus {
             accelerators:       Accelerators::new(),
             dma:                DMA::new(),
             interrupt_control:  InterruptControl::new(),
-        }, DS7MemoryBus{
+        }, Box::new(DS7MemoryBus{
             wram:               WRAM::new(64 * 1024),
             shared_wram:        arm7_ram,
             ipc:                ds7_ipc,
@@ -61,7 +61,7 @@ impl DS9MemoryBus {
             joypad:             DSJoypad::new(),
             dma:                ds7DMA::new(),
             interrupt_control:  InterruptControl::new(),
-        })
+        }))
     }
 }
 
