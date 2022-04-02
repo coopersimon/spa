@@ -1,4 +1,4 @@
-mod cp15;
+mod cache;
 mod memory;
 mod interrupt;
 mod maths;
