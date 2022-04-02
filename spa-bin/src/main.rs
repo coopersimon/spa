@@ -20,6 +20,8 @@ use cpal::traits::StreamTrait;
 
 use spa::gba::*;
 
+use std::path::PathBuf;
+
 #[repr(C)]
 #[derive(Default, Debug, Clone, Copy)]
 struct Vertex {
@@ -45,20 +47,24 @@ fn main() {
     let cmd_args = app.get_matches();
 
     let rom_path = match cmd_args.value_of("ROM") {
-        Some(c) => c.to_string(),
+        Some(c) => PathBuf::from(c),
         None => panic!("Usage: spa [ROM name]. Run with --help for more options."),
     };
 
-    let save_path = cmd_args.value_of("save").map(|s| s.to_string());
-    let bios_path = cmd_args.value_of("biosrom").map(|s| s.to_string());
+    let save_path = cmd_args.value_of("save").map(|s| PathBuf::from(s));
+    let bios_path = cmd_args.value_of("biosrom").map(|s| PathBuf::from(s));
+
+    let config = MemoryConfig{
+        rom_path, save_path, bios_path
+    };
 
     if cmd_args.is_present("debug") {
-        let debug_interface = GBA::new_debug(rom_path, save_path, bios_path);
+        let debug_interface = GBA::new_debug(config);
         debug::debug_mode(debug_interface);
         return;
     }
 
-    let mut gba = GBA::new(rom_path, save_path, bios_path);
+    let mut gba = GBA::new(config);
     let render_size = gba.render_size();
 
     let event_loop = EventLoop::new();

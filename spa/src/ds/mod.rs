@@ -14,6 +14,7 @@ use cache::DS9InternalMem;
 use memory::{
     DS9MemoryBus, DS7MemoryBus
 };
+pub use memory::MemoryConfig;
 
 pub enum Button {
     A,
@@ -35,14 +36,14 @@ pub struct NDS {
 }
 
 impl NDS {
-    pub fn new(rom_path: String, save_path: Option<String>, bios_path: Option<String>) -> Self {
+    pub fn new(config: MemoryConfig) -> Self {
         //let (render_width, render_height) = RendererType::render_size();
         //let (frame_sender, frame_receiver) = new_frame_comms(render_width * render_height * 4);
         // The below is a bit dumb but it avoids sending the CPU (which introduces a ton of problems).
         // We have to extract the audio receivers from the CPU and get them in the main thread to use
         //   for the audio handler.
         //let (channel_sender, channel_receiver) = unbounded();
-        let (arm9_bus, arm7_bus) = DS9MemoryBus::new();
+        let (arm9_bus, arm7_bus) = DS9MemoryBus::new(&config);
 
         std::thread::Builder::new().name("ARM9-CPU".to_string()).spawn(move || {
             let internal_mem = Box::new(DS9InternalMem::new(arm9_bus));
@@ -52,9 +53,9 @@ impl NDS {
             }
         }).unwrap();
 
+        let arm7_no_bios = config.ds7_bios_path.is_none();
         std::thread::Builder::new().name("ARM7-CPU".to_string()).spawn(move || {
-            let no_bios = bios_path.is_none();
-            let mut cpu = new_arm7_cpu(arm7_bus, no_bios, false);
+            let mut cpu = new_arm7_cpu(arm7_bus, arm7_no_bios, false);
             //let audio_channels = cpu.mut_mem().enable_audio();
             //channel_sender.send(audio_channels).unwrap();
             loop {

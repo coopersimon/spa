@@ -12,7 +12,8 @@ use std::{
     fs::{
         File,
         OpenOptions
-    }
+    },
+    path::Path
 };
 use crate::utils::meminterface::MemInterface8;
 
@@ -38,7 +39,7 @@ const FLASH_128_SIZE: usize = 128 * 1024;
 /// If no save_path is provided, the save data will be lost on shutdown!
 /// 
 /// If the boolean returned is true, then the RAM is EEPROM and must be addressed accordingly.
-pub fn make_save_ram(rom: &[u8], save_path: Option<String>) -> (Box<dyn SaveRAM + Send>, bool) {
+pub fn make_save_ram(rom: &[u8], save_path: Option<&Path>) -> (Box<dyn SaveRAM + Send>, bool) {
 
     // See if save file exists.
     let file = if let Some(path) = save_path {

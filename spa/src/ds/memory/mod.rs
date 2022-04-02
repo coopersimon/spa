@@ -1,7 +1,10 @@
 mod dma;
+mod main;
 mod shared;
 
 use arm::{Mem32, MemCycleType};
+
+use std::path::PathBuf;
 
 use crate::common::{
     dma::DMA as ds7DMA,
@@ -18,18 +21,23 @@ use super::{
     interrupt::InterruptControl
 };
 use dma::DMA;
+use main::MainRAM;
 use shared::*;
+
+/// Locations for external files that are used by NDS.
+pub struct MemoryConfig {
+    pub rom_path:       PathBuf,
+    pub save_path:      Option<PathBuf>,
+    pub ds9_bios_path:  Option<PathBuf>,
+    pub ds7_bios_path:  Option<PathBuf>,
+}
 
 /// Memory bus for DS ARM9 processor.
 pub struct DS9MemoryBus {
-
-    //itcm:       WRAM,
-    //dtcm:       WRAM,
-
-    wram:           WRAM,
+    main_ram:       MainRAM,
     shared_wram:    ARM9SharedRAM,
 
-    ipc:    IPC,
+    ipc:            IPC,
 
     timers:             Timers,
     joypad:             DSJoypad,
@@ -40,13 +48,14 @@ pub struct DS9MemoryBus {
 }
 
 impl DS9MemoryBus {
-    pub fn new() -> (Self, Box<DS7MemoryBus>) {
-        let (arm9_ram, arm7_ram) = ARM9SharedRAM::new();
+    pub fn new(config: &MemoryConfig) -> (Self, Box<DS7MemoryBus>) {
+        let (arm9_wram, arm7_wram) = ARM9SharedRAM::new();
         let (ds9_ipc, ds7_ipc) = IPC::new();
+        let main_ram = MainRAM::new();
 
         (Self{
-            wram:               WRAM::new(4 * 1024 * 1024),
-            shared_wram:        arm9_ram,
+            main_ram:           main_ram.clone(),
+            shared_wram:        arm9_wram,
             ipc:                ds9_ipc,
             timers:             Timers::new(),
             joypad:             DSJoypad::new(),
@@ -54,8 +63,9 @@ impl DS9MemoryBus {
             dma:                DMA::new(),
             interrupt_control:  InterruptControl::new(),
         }, Box::new(DS7MemoryBus{
+            main_ram:           main_ram,
             wram:               WRAM::new(64 * 1024),
-            shared_wram:        arm7_ram,
+            shared_wram:        arm7_wram,
             ipc:                ds7_ipc,
             timers:             Timers::new(),
             joypad:             DSJoypad::new(),
@@ -126,7 +136,7 @@ impl Mem32 for DS9MemoryBus {
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.wram.read_byte(addr & 0x3F_FFFF), 3),    // WRAM
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_byte(addr & 0x3F_FFFF), 3),    // WRAM
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_byte(addr), 1),         // Shared RAM
 
             // I/O
@@ -149,7 +159,7 @@ impl Mem32 for DS9MemoryBus {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
-                self.wram.write_byte(addr & 0x3F_FFFF, data);
+                self.main_ram.write_byte(addr & 0x3F_FFFF, data);
                 3
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared RAM
@@ -188,7 +198,7 @@ impl Mem32 for DS9MemoryBus {
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
             //0x0000_0000..=0x0000_3FFF => (self.bios.read_halfword(addr), 1),                // BIOS
-            0x0200_0000..=0x02FF_FFFF => (self.wram.read_halfword(addr & 0x3_FFFF), 3), // WRAM
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3_FFFF), 3), // WRAM
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_halfword(addr), 1),     // Shared WRAM
 
             // I/O
@@ -211,7 +221,7 @@ impl Mem32 for DS9MemoryBus {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
-                self.wram.write_halfword(addr & 0x3_FFFF, data);
+                self.main_ram.write_halfword(addr & 0x3_FFFF, data);
                 3
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
@@ -247,7 +257,7 @@ impl Mem32 for DS9MemoryBus {
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
             //0x0000_0000..=0x0000_3FFF => (self.bios.read_word(addr), 1),                // BIOS
-            0x0200_0000..=0x02FF_FFFF => (self.wram.read_word(addr & 0x3_FFFF), 6), // WRAM
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3_FFFF), 6), // WRAM
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), 1),     // Shared WRAM
 
             // I/O
@@ -270,7 +280,7 @@ impl Mem32 for DS9MemoryBus {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
-                self.wram.write_word(addr & 0x3_FFFF, data);
+                self.main_ram.write_word(addr & 0x3_FFFF, data);
                 6
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
@@ -323,6 +333,7 @@ impl DS9MemoryBus {
 
 /// Memory bus for DS ARM7 processor.
 pub struct DS7MemoryBus {
+    main_ram:       MainRAM,
     wram:           WRAM,
     shared_wram:    ARM7SharedRAM,
 
@@ -369,13 +380,10 @@ impl Mem32 for DS7MemoryBus {
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
         match addr {
-            //0x0200_0000..=0x02FF_FFFF => (self.wram.read_byte(addr & 0x3F_FFFF), 3),    // WRAM
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_byte(addr & 0x3F_FFFF), 3),    // WRAM
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_byte(addr), 1),         // Shared RAM
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_byte(addr & 0xFFFF), 1),    // ARM7 WRAM
             0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), 1),                  // I/O
-
-            // TODO: VRAM
-            //0x0500_0000..=0x07FF_FFFF => (self.video.read_byte(addr), 1),
 
             // TODO: GBA slot
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_0(cycle)),
@@ -389,10 +397,10 @@ impl Mem32 for DS7MemoryBus {
     fn store_byte(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u8) -> usize {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
-            //0x0200_0000..=0x02FF_FFFF => {  // WRAM
-            //    self.wram.write_byte(addr & 0x3F_FFFF, data);
-            //    3
-            //},
+            0x0200_0000..=0x02FF_FFFF => {  // WRAM
+                self.main_ram.write_byte(addr & 0x3F_FFFF, data);
+                3
+            },
             0x0300_0000..=0x037F_FFFF => {  // Shared RAM
                 self.shared_wram.write_byte(addr, data);
                 1
@@ -405,12 +413,6 @@ impl Mem32 for DS7MemoryBus {
                 self.io_write_byte(addr, data);
                 1
             },
-
-            // VRAM
-            //0x0500_0000..=0x07FF_FFFF => {
-            //    self.video.write_byte(addr, data);
-            //    1
-            //},
 
             // TODO: GBA slot
             //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
@@ -428,13 +430,10 @@ impl Mem32 for DS7MemoryBus {
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
             //0x0000_0000..=0x0000_3FFF => (self.bios.read_halfword(addr), 1),                // BIOS
-            //0x0200_0000..=0x02FF_FFFF => (self.wram.read_halfword(addr & 0x3_FFFF), 3),     // WRAM
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3_FFFF), 3),     // WRAM
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_halfword(addr), 1),         // Shared RAM
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_halfword(addr & 0xFFFF), 1),    // ARM7 WRAM
             0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), 1),                  // I/O
-
-            // VRAM
-            //0x0500_0000..=0x07FF_FFFF => (self.video.read_halfword(addr), 1),
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_0(cycle)),
@@ -448,10 +447,10 @@ impl Mem32 for DS7MemoryBus {
     fn store_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u16) -> usize {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
-            //0x0200_0000..=0x02FF_FFFF => {  // WRAM
-            //    self.wram.write_halfword(addr & 0x3_FFFF, data);
-            //    3
-            //},
+            0x0200_0000..=0x02FF_FFFF => {  // WRAM
+                self.main_ram.write_halfword(addr & 0x3_FFFF, data);
+                3
+            },
             0x0300_0000..=0x037F_FFFF => {  // Shared RAM
                 self.shared_wram.write_halfword(addr, data);
                 1
@@ -464,12 +463,6 @@ impl Mem32 for DS7MemoryBus {
                 self.io_write_halfword(addr, data);
                 1
             },
-
-            // VRAM
-            //0x0500_0000..=0x07FF_FFFF => {
-            //    self.video.write_halfword(addr, data);
-            //    1
-            //},
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
@@ -487,14 +480,10 @@ impl Mem32 for DS7MemoryBus {
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
             //0x0000_0000..=0x0000_3FFF => (self.bios.read_word(addr), 1),                // BIOS
-            //0x0200_0000..=0x02FF_FFFF => (self.wram.read_word(addr & 0x3_FFFF), 6),     // WRAM
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3_FFFF), 6),     // WRAM
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_word(addr), 1),         // Shared RAM
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_word(addr & 0xFFFF), 1),    // ARM7 WRAM
             0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), 1),                  // I/O
-
-            // VRAM
-            //0x0500_0000..=0x06FF_FFFF => (self.video.read_word(addr), 2),   // VRAM & Palette
-            //0x0700_0000..=0x0700_03FF => (self.video.read_word(addr), 1),   // OAM
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_0(cycle) << 1),
@@ -508,10 +497,10 @@ impl Mem32 for DS7MemoryBus {
     fn store_word(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u32) -> usize {
         match addr {
             0x0000_0000..=0x0000_3FFF => 1, // BIOS
-            //0x0200_0000..=0x02FF_FFFF => {  // WRAM
-            //    self.wram.write_word(addr & 0x3_FFFF, data);
-            //    6
-            //},
+            0x0200_0000..=0x02FF_FFFF => {  // WRAM
+                self.main_ram.write_word(addr & 0x3_FFFF, data);
+                6
+            },
             0x0300_0000..=0x037F_FFFF => {  // Shared RAM
                 self.shared_wram.write_word(addr, data);
                 1
@@ -524,17 +513,6 @@ impl Mem32 for DS7MemoryBus {
                 self.io_write_word(addr, data);
                 1
             },
-
-            // VRAM & Palette
-            //0x0500_0000..=0x06FF_FFFF => {
-            //    self.video.write_word(addr, data);
-            //    2
-            //},
-            //// OAM
-            //0x0700_0000..=0x0700_03FF => {
-            //    self.video.write_word(addr, data);
-            //    1
-            //},
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle) << 1,

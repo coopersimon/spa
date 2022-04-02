@@ -14,6 +14,7 @@ use memory::{
     MemoryBus,
     emulated_swi
 };
+pub use memory::MemoryConfig;
 use audio::{Resampler, SamplePacket};
 use video::Renderer;
 use joypad::Buttons;
@@ -46,7 +47,7 @@ pub struct GBA {
 }
 
 impl GBA {
-    pub fn new(rom_path: String, save_path: Option<String>, bios_path: Option<String>) -> Self {
+    pub fn new(config: MemoryConfig) -> Self {
         let (render_width, render_height) = RendererType::render_size();
         let (frame_sender, frame_receiver) = new_frame_comms(render_width * render_height * 4);
         // The below is a bit dumb but it avoids sending the CPU (which introduces a ton of problems).
@@ -54,8 +55,8 @@ impl GBA {
         //   for the audio handler.
         let (channel_sender, channel_receiver) = unbounded();
         std::thread::Builder::new().name("CPU".to_string()).spawn(move || {
-            let no_bios = bios_path.is_none();
-            let bus = MemoryBus::<RendererType>::new(rom_path, save_path, bios_path, frame_sender).unwrap();
+            let no_bios = config.bios_path.is_none();
+            let bus = MemoryBus::<RendererType>::new(&config, frame_sender).unwrap();
             let mut cpu = new_cpu(bus, no_bios, false);
             let audio_channels = cpu.mut_mem().enable_audio();
             channel_sender.send(audio_channels).unwrap();
@@ -122,7 +123,7 @@ impl GBAAudioHandler {
 #[cfg(feature = "debug")]
 impl GBA {
     /// Make a new debuggable GBA.
-    pub fn new_debug(rom_path: String, save_path: Option<String>, bios_path: Option<String>) -> DebugInterface {
+    pub fn new_debug(config: MemoryConfig) -> DebugInterface {
         use memory::framecomms::debug::new_debug_frame_comms;
 
         let (render_width, render_height) = RendererType::render_size();
@@ -130,8 +131,8 @@ impl GBA {
         let (debug_interface, debug_wrapper) = debug::DebugInterface::new(frame_receiver);
 
         std::thread::Builder::new().name("CPU".to_string()).spawn(move || {
-            let no_bios = bios_path.is_none();
-            let bus = MemoryBus::<RendererType>::new(rom_path, save_path, bios_path, frame_sender).unwrap();
+            let no_bios = config.bios_path.is_none();
+            let bus = MemoryBus::<RendererType>::new(&config, frame_sender).unwrap();
             let cpu = new_cpu(bus, no_bios, false);
             debug_wrapper.run_debug(cpu);
         }).unwrap();

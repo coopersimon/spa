@@ -1,11 +1,12 @@
 /// Memory bus
 mod cart;
-mod bios;
 pub mod framecomms;
 mod swi;
 
 use arm::{Mem32, MemCycleType};
 use crossbeam_channel::{Receiver, unbounded};
+
+use std::path::PathBuf;
 
 use crate::{
     utils::{
@@ -13,6 +14,7 @@ use crate::{
         meminterface::{MemInterface8, MemInterface16}
     },
     common::{
+        bios::BIOS,
         dma::{DMA, DMAAddress},
         wram::WRAM,
         timers::Timers
@@ -28,9 +30,16 @@ use cart::{GamePak, GamePakController};
 use framecomms::FrameSender;
 pub use swi::emulated_swi;
 
+/// Locations for external files that are used by GBA.
+pub struct MemoryConfig {
+    pub rom_path:   PathBuf,
+    pub save_path:  Option<PathBuf>,
+    pub bios_path:  Option<PathBuf>,
+}
+
 /// Game Boy Advance memory bus
 pub struct MemoryBus<R: Renderer> {
-    bios:       bios::BIOS,
+    bios:       BIOS,
     internal:   Internal,
 
     wram:       WRAM,
@@ -53,9 +62,13 @@ pub struct MemoryBus<R: Renderer> {
 }
 
 impl<R: Renderer> MemoryBus<R> {
-    pub fn new(rom_path: String, save_path: Option<String>, bios_path: Option<String>, frame_sender: FrameSender) -> std::io::Result<Box<Self>> {
-        let bios = bios::BIOS::new(bios_path)?;
-        let game_pak = cart::GamePak::new(rom_path, save_path)?;
+    pub fn new(config: &MemoryConfig, frame_sender: FrameSender) -> std::io::Result<Box<Self>> {
+        let bios = if let Some(path) = &config.bios_path {
+            BIOS::new_from_file(&path)?
+        } else {
+            construct_bios()
+        };
+        let game_pak = cart::GamePak::new(&config.rom_path, config.save_path.as_ref().map(|p| p.as_path()))?;
         Ok(Box::new(Self {
             bios:       bios,
             internal:   Internal::new(),
@@ -464,5 +477,33 @@ impl MemInterface8 for Internal {
             3 => {},
             _ => unreachable!()
         }
+    }
+}
+
+// TODO: handle IRQ in code
+
+/// A simple BIOS if the full ROM is not available.
+/// 
+/// This just deals with IRQ interrupt handling.
+/// 
+/// Should work for games that don't make use of SWI calls.
+pub fn construct_bios() -> BIOS {
+    let mut bios_mem = vec![0; 0x4000];
+
+    write_word_to_mem(&mut bios_mem, 0x18, 0xEA00_0042);    // B 0x128
+    write_word_to_mem(&mut bios_mem, 0x128, 0xE92D_500F);   // STMFD SP! R0-3,R12,R14
+    write_word_to_mem(&mut bios_mem, 0x12C, 0xE3A0_0301);   // MOV R0,#0400_0000
+    write_word_to_mem(&mut bios_mem, 0x130, 0xE28F_E000);   // ADD R14,R15,0
+    write_word_to_mem(&mut bios_mem, 0x134, 0xE510_F004);   // LDR R15,[R0,#-4]
+    write_word_to_mem(&mut bios_mem, 0x138, 0xE8BD_500F);   // LDMFD SP! R0-3,R12,R14
+    write_word_to_mem(&mut bios_mem, 0x13C, 0xE25E_F004);   // SUBS R15,R14,#4
+
+    BIOS::new_from_data(bios_mem)
+}
+
+fn write_word_to_mem(mem: &mut [u8], addr: usize, data: u32) {
+    let bytes = data.to_le_bytes();
+    for (dest, byte) in mem[addr..(addr + 4)].iter_mut().zip(&bytes) {
+        *dest = *byte;
     }
 }
