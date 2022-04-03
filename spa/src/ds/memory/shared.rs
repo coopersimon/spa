@@ -16,37 +16,37 @@ pub trait SharedRAM {
 
     fn read_byte(&mut self, addr: u32) -> u8 {
         self.get_bank(addr).map(|bank| {
-            bank.read_byte(addr % BANK_MASK)
+            bank.read_byte(addr & BANK_MASK)
         }).unwrap_or_default()
     }
 
     fn write_byte(&mut self, addr: u32, data: u8) {
         self.get_bank(addr).map(|mut bank| {
-            bank.write_byte(addr % BANK_MASK, data);
+            bank.write_byte(addr & BANK_MASK, data);
         });
     }
 
     fn read_halfword(&mut self, addr: u32) -> u16 {
         self.get_bank(addr).map(|bank| {
-            bank.read_halfword(addr % BANK_MASK)
+            bank.read_halfword(addr & BANK_MASK)
         }).unwrap_or_default()
     }
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         self.get_bank(addr).map(|mut bank| {
-            bank.write_halfword(addr % BANK_MASK, data);
+            bank.write_halfword(addr & BANK_MASK, data);
         });
     }
 
     fn read_word(&mut self, addr: u32) -> u32 {
         self.get_bank(addr).map(|bank| {
-            bank.read_word(addr % BANK_MASK)
+            bank.read_word(addr & BANK_MASK)
         }).unwrap_or_default()
     }
 
     fn write_word(&mut self, addr: u32, data: u32) {
         self.get_bank(addr).map(|mut bank| {
-            bank.write_word(addr % BANK_MASK, data);
+            bank.write_word(addr & BANK_MASK, data);
         });
     }
 }

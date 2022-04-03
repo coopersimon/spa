@@ -7,6 +7,7 @@ use arm::{Mem32, MemCycleType};
 use std::path::PathBuf;
 
 use crate::common::{
+    bios::BIOS,
     dma::DMA as ds7DMA,
     timers::Timers,
     wram::WRAM
@@ -34,6 +35,8 @@ pub struct MemoryConfig {
 
 /// Memory bus for DS ARM9 processor.
 pub struct DS9MemoryBus {
+    bios:           BIOS,
+
     main_ram:       MainRAM,
     shared_wram:    ARM9SharedRAM,
 
@@ -53,7 +56,11 @@ impl DS9MemoryBus {
         let (ds9_ipc, ds7_ipc) = IPC::new();
         let main_ram = MainRAM::new();
 
+        let arm9_bios = BIOS::new_from_file(config.ds9_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
+        let arm7_bios = BIOS::new_from_file(config.ds7_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
+
         (Self{
+            bios:               arm9_bios,
             main_ram:           main_ram.clone(),
             shared_wram:        arm9_wram,
             ipc:                ds9_ipc,
@@ -63,6 +70,7 @@ impl DS9MemoryBus {
             dma:                DMA::new(),
             interrupt_control:  InterruptControl::new(),
         }, Box::new(DS7MemoryBus{
+            bios:               arm7_bios,
             main_ram:           main_ram,
             wram:               WRAM::new(64 * 1024),
             shared_wram:        arm7_wram,
@@ -136,12 +144,18 @@ impl Mem32 for DS9MemoryBus {
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_byte(addr & 0x3F_FFFF), 3),    // WRAM
-            0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_byte(addr), 1),         // Shared RAM
+            0x0200_0000..=0x02FF_FFFF => (
+                self.main_ram.read_byte(addr & 0x3F_FFFF),
+                if cycle.is_non_seq() {18} else {2}
+            ),
+            0x0300_0000..=0x03FF_FFFF => (
+                self.shared_wram.read_byte(addr),
+                if cycle.is_non_seq() {8} else {2}
+            ),
 
             // I/O
-            0x0400_0247 => (self.shared_wram.get_bank_control(), 1),
-            0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), 1),
+            0x0400_0247 => (self.shared_wram.get_bank_control(), if cycle.is_non_seq() {8} else {2}),
+            0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), if cycle.is_non_seq() {8} else {2}),
 
             // TODO: VRAM
             //0x0500_0000..=0x07FF_FFFF => (self.video.read_byte(addr), 1),
@@ -152,28 +166,29 @@ impl Mem32 for DS9MemoryBus {
             //0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_2(cycle)),
             //0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.sram_wait_cycles()),
 
-            _ => (0, 1) // Unused
+            0xFFFF_0000..=0xFFFF_FFFF => (self.bios.read_byte(addr & 0xFFF), if cycle.is_non_seq() {8} else {2}),
+
+            _ => (0, 2) // Unused
         }
     }
     fn store_byte(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u8) -> usize {
         match addr {
-            0x0000_0000..=0x0000_3FFF => 1, // BIOS
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_byte(addr & 0x3F_FFFF, data);
-                3
+                if cycle.is_non_seq() {18} else {2}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared RAM
                 self.shared_wram.write_byte(addr, data);
-                1
+                if cycle.is_non_seq() {8} else {2}
             },
             // I/O
             0x0400_0247 => {
                 self.shared_wram.set_bank_control(data);
-                1
+                if cycle.is_non_seq() {8} else {2}
             },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_byte(addr, data);
-                1
+                if cycle.is_non_seq() {8} else {2}
             },
 
             // VRAM
@@ -197,13 +212,12 @@ impl Mem32 for DS9MemoryBus {
 
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            //0x0000_0000..=0x0000_3FFF => (self.bios.read_halfword(addr), 1),                // BIOS
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3_FFFF), 3), // WRAM
-            0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_halfword(addr), 1),     // Shared WRAM
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3_FFFF), if cycle.is_non_seq() {18} else {2}),
+            0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
             // TODO: mem ctl
-            0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), 1),
+            0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
             //0x0500_0000..=0x07FF_FFFF => (self.video.read_halfword(addr), 1),
@@ -214,25 +228,26 @@ impl Mem32 for DS9MemoryBus {
             //0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_2(cycle)),
             //0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.sram_wait_cycles()),
 
+            0xFFFF_0000..=0xFFFF_FFFF => (self.bios.read_halfword(addr & 0xFFF), if cycle.is_non_seq() {8} else {2}),
+
             _ => (0, 1) // Unused
         }
     }
     fn store_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u16) -> usize {
         match addr {
-            0x0000_0000..=0x0000_3FFF => 1, // BIOS
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_halfword(addr & 0x3_FFFF, data);
-                3
+                if cycle.is_non_seq() {18} else {2}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_halfword(addr, data);
-                1
+                if cycle.is_non_seq() {8} else {2}
             },
 
             // I/O
             0x0400_0000..=0x04FF_FFFF => {
                 self.io_write_halfword(addr, data);
-                1
+                if cycle.is_non_seq() {8} else {2}
             },
 
             // VRAM
@@ -256,12 +271,11 @@ impl Mem32 for DS9MemoryBus {
 
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            //0x0000_0000..=0x0000_3FFF => (self.bios.read_word(addr), 1),                // BIOS
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3_FFFF), 6), // WRAM
-            0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), 1),     // Shared WRAM
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3_FFFF), if cycle.is_non_seq() {20} else {4}),
+            0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
-            0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), 1),
+            0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
             //0x0500_0000..=0x06FF_FFFF => (self.video.read_word(addr), 2),   // VRAM & Palette
@@ -273,25 +287,26 @@ impl Mem32 for DS9MemoryBus {
             //0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_2(cycle) << 1),
             //0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.sram_wait_cycles() << 1),
 
+            0xFFFF_0000..=0xFFFF_FFFF => (self.bios.read_word(addr & 0xFFF), if cycle.is_non_seq() {8} else {2}),
+
             _ => (0, 1) // Unused
         }
     }
     fn store_word(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u32) -> usize {
         match addr {
-            0x0000_0000..=0x0000_3FFF => 1, // BIOS
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_word(addr & 0x3_FFFF, data);
-                6
+                if cycle.is_non_seq() {20} else {4}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_word(addr, data);
-                1
+                if cycle.is_non_seq() {8} else {2}
             },
 
             // I/O
             0x0400_0000..=0x04FF_FFFF => {
                 self.io_write_word(addr, data);
-                1
+                if cycle.is_non_seq() {8} else {2}
             },
 
             // VRAM & Palette
@@ -333,6 +348,8 @@ impl DS9MemoryBus {
 
 /// Memory bus for DS ARM7 processor.
 pub struct DS7MemoryBus {
+    bios:           BIOS,
+
     main_ram:       MainRAM,
     wram:           WRAM,
     shared_wram:    ARM7SharedRAM,
@@ -380,10 +397,12 @@ impl Mem32 for DS7MemoryBus {
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_byte(addr & 0x3F_FFFF), 3),    // WRAM
-            0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_byte(addr), 1),         // Shared RAM
-            0x0380_0000..=0x03FF_FFFF => (self.wram.read_byte(addr & 0xFFFF), 1),    // ARM7 WRAM
-            0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), 1),                  // I/O
+            0x0000_0000..=0x0000_3FFF => (self.bios.read_byte(addr), 1),
+
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_byte(addr & 0x3F_FFFF), if cycle.is_non_seq() {9} else {1}),
+            0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_byte(addr), 1),
+            0x0380_0000..=0x03FF_FFFF => (self.wram.read_byte(addr & 0xFFFF), 1),
+            0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), 1),
 
             // TODO: GBA slot
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_0(cycle)),
@@ -396,10 +415,9 @@ impl Mem32 for DS7MemoryBus {
     }
     fn store_byte(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u8) -> usize {
         match addr {
-            0x0000_0000..=0x0000_3FFF => 1, // BIOS
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_byte(addr & 0x3F_FFFF, data);
-                3
+                if cycle.is_non_seq() {9} else {1}
             },
             0x0300_0000..=0x037F_FFFF => {  // Shared RAM
                 self.shared_wram.write_byte(addr, data);
@@ -429,11 +447,11 @@ impl Mem32 for DS7MemoryBus {
 
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            //0x0000_0000..=0x0000_3FFF => (self.bios.read_halfword(addr), 1),                // BIOS
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3_FFFF), 3),     // WRAM
-            0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_halfword(addr), 1),         // Shared RAM
-            0x0380_0000..=0x03FF_FFFF => (self.wram.read_halfword(addr & 0xFFFF), 1),    // ARM7 WRAM
-            0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), 1),                  // I/O
+            0x0000_0000..=0x0000_3FFF => (self.bios.read_halfword(addr), 1),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3_FFFF), if cycle.is_non_seq() {9} else {1}),
+            0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_halfword(addr), 1),
+            0x0380_0000..=0x03FF_FFFF => (self.wram.read_halfword(addr & 0xFFFF), 1),
+            0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), 1),
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_0(cycle)),
@@ -446,10 +464,9 @@ impl Mem32 for DS7MemoryBus {
     }
     fn store_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u16) -> usize {
         match addr {
-            0x0000_0000..=0x0000_3FFF => 1, // BIOS
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_halfword(addr & 0x3_FFFF, data);
-                3
+                if cycle.is_non_seq() {9} else {1}
             },
             0x0300_0000..=0x037F_FFFF => {  // Shared RAM
                 self.shared_wram.write_halfword(addr, data);
@@ -479,11 +496,11 @@ impl Mem32 for DS7MemoryBus {
 
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            //0x0000_0000..=0x0000_3FFF => (self.bios.read_word(addr), 1),                // BIOS
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3_FFFF), 6),     // WRAM
-            0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_word(addr), 1),         // Shared RAM
-            0x0380_0000..=0x03FF_FFFF => (self.wram.read_word(addr & 0xFFFF), 1),    // ARM7 WRAM
-            0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), 1),                  // I/O
+            0x0000_0000..=0x0000_3FFF => (self.bios.read_word(addr), 1),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3_FFFF), if cycle.is_non_seq() {10} else {2}),
+            0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_word(addr), 1),
+            0x0380_0000..=0x03FF_FFFF => (self.wram.read_word(addr & 0xFFFF), 1),
+            0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), 1),
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_0(cycle) << 1),
@@ -496,10 +513,9 @@ impl Mem32 for DS7MemoryBus {
     }
     fn store_word(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u32) -> usize {
         match addr {
-            0x0000_0000..=0x0000_3FFF => 1, // BIOS
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_word(addr & 0x3_FFFF, data);
-                6
+                if cycle.is_non_seq() {10} else {2}
             },
             0x0300_0000..=0x037F_FFFF => {  // Shared RAM
                 self.shared_wram.write_word(addr, data);

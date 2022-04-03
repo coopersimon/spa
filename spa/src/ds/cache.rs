@@ -88,7 +88,7 @@ impl Mem32 for DS9InternalMem {
             0..=0x01FF_FFFF => (self.instr_tcm.read_halfword(addr), 1),
             _ => {
                 // TODO: try instr cache
-                self.mem_bus.load_halfword(cycle, addr)
+                self.mem_bus.fetch_instr_halfword(cycle, addr)
             }
         }
     }
@@ -98,7 +98,7 @@ impl Mem32 for DS9InternalMem {
             0..=0x01FF_FFFF => (self.instr_tcm.read_word(addr), 1),
             _ => {
                 // TODO: try instr cache
-                self.mem_bus.load_word(cycle, addr)
+                self.mem_bus.fetch_instr_word(cycle, addr)
             }
         }
     }
