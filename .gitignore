@@ -1,6 +1,7 @@
 .DS_Store
 target/
 /spa-bin/roms
+/spa-bin/bios
 /spa-bin/saves
 *.bin
 .vscode

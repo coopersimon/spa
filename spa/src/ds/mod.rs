@@ -4,6 +4,7 @@ mod interrupt;
 mod maths;
 mod joypad;
 mod ipc;
+mod card;
 
 use arm::{
     ARM7TDMI, ARM9ES, ARMCore

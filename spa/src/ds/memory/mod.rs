@@ -4,7 +4,10 @@ mod shared;
 
 use arm::{Mem32, MemCycleType};
 
-use std::path::PathBuf;
+use std::{
+    path::PathBuf,
+    sync::{Arc, Mutex}
+};
 
 use crate::common::{
     bios::BIOS,
@@ -19,7 +22,8 @@ use super::{
     maths::Accelerators,
     ipc::IPC,
     joypad::DSJoypad,
-    interrupt::InterruptControl
+    interrupt::InterruptControl,
+    card::DSCardIO
 };
 use dma::DMA;
 use main::MainRAM;
@@ -48,6 +52,7 @@ pub struct DS9MemoryBus {
 
     dma:                DMA,
     interrupt_control:  InterruptControl,
+    card:               DSCardIO
 }
 
 impl DS9MemoryBus {
@@ -55,6 +60,7 @@ impl DS9MemoryBus {
         let (arm9_wram, arm7_wram) = ARM9SharedRAM::new();
         let (ds9_ipc, ds7_ipc) = IPC::new();
         let main_ram = MainRAM::new();
+        let card = DSCardIO::new(&config.rom_path).unwrap();
 
         let arm9_bios = BIOS::new_from_file(config.ds9_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
         let arm7_bios = BIOS::new_from_file(config.ds7_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
@@ -69,6 +75,7 @@ impl DS9MemoryBus {
             accelerators:       Accelerators::new(),
             dma:                DMA::new(),
             interrupt_control:  InterruptControl::new(),
+            card:               card.clone()
         }, Box::new(DS7MemoryBus{
             bios:               arm7_bios,
             main_ram:           main_ram,
@@ -79,6 +86,7 @@ impl DS9MemoryBus {
             joypad:             DSJoypad::new(),
             dma:                ds7DMA::new(),
             interrupt_control:  InterruptControl::new(),
+            card:               card
         }))
     }
 }
@@ -340,9 +348,11 @@ impl DS9MemoryBus {
         (0x0400_0100, 0x0400_010F, timers),
         (0x0400_0130, 0x0400_0133, joypad),
         (0x0400_0180, 0x0400_018F, ipc),
+        (0x0400_01A0, 0x0400_01BF, card),
         (0x0400_0208, 0x0400_0217, interrupt_control),
         (0x0400_0280, 0x0400_02BF, accelerators),
-        (0x0410_0000, 0x0410_0003, ipc)
+        (0x0410_0000, 0x0410_0003, ipc),
+        (0x0410_0010, 0x0410_0013, card)
     }
 }
 
@@ -361,6 +371,7 @@ pub struct DS7MemoryBus {
 
     dma:    ds7DMA,
     interrupt_control:  InterruptControl,
+    card:               DSCardIO
 }
 
 impl Mem32 for DS7MemoryBus {
