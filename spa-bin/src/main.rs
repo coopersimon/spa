@@ -18,7 +18,7 @@ use clap::{clap_app, crate_version};
 
 use cpal::traits::StreamTrait;
 
-use spa::gba::*;
+use spa::{gba, ds};
 
 use std::path::PathBuf;
 
@@ -38,10 +38,11 @@ fn main() {
         (author: "Simon Cooper")
         (about: "Gameboy Advance emulator.")
         (@arg ROM: "The path to the game ROM to use.")
-        (@arg debug: -d "Enter debug mode.")
+        (@arg debug: -d +takes_value "Enter debug mode.")
         (@arg mute: -m "Mute all audio.")
         (@arg save: -s +takes_value "Save file path.")
         (@arg biosrom: -r +takes_value "BIOS ROM path. Needed for certain games.")
+        (@arg biosrom9: -a +takes_value "BIOS ROM path for NDS ARM9. Needed for certain games.")
     );
 
     let cmd_args = app.get_matches();
@@ -53,18 +54,35 @@ fn main() {
 
     let save_path = cmd_args.value_of("save").map(|s| PathBuf::from(s));
     let bios_path = cmd_args.value_of("biosrom").map(|s| PathBuf::from(s));
+    let ds9_bios_path = cmd_args.value_of("biosrom9").map(|s| PathBuf::from(s));
 
-    let config = MemoryConfig{
-        rom_path, save_path, bios_path
-    };
-
-    if cmd_args.is_present("debug") {
-        let debug_interface = GBA::new_debug(config);
-        debug::debug_mode(debug_interface);
+    if let Some(value) = cmd_args.value_of("debug") {
+        if value == "gba" {
+            let debug_interface = gba::GBA::new_debug(gba::MemoryConfig{
+                rom_path, save_path, bios_path
+            });
+            debug::debug_mode(debug_interface);
+        } else if value == "ds7" {
+            let config = ds::MemoryConfig{
+                rom_path, save_path, ds7_bios_path: bios_path, ds9_bios_path
+            };
+            let debug_interface = ds::NDS::new_debug_7(config);
+            debug::debug_mode(debug_interface);
+        } else if value == "ds9" {
+            let config = ds::MemoryConfig{
+                rom_path, save_path, ds7_bios_path: bios_path, ds9_bios_path
+            };
+            let debug_interface = ds::NDS::new_debug_9(config);
+            debug::debug_mode(debug_interface);
+        } else {
+            println!("unknown debug mode {}. use gba or ds[7|9]", value);
+        }
         return;
     }
 
-    let mut gba = GBA::new(config);
+    let mut gba = gba::GBA::new(gba::MemoryConfig{
+        rom_path, save_path, bios_path
+    });
     let render_size = gba.render_size();
 
     let event_loop = EventLoop::new();
@@ -326,16 +344,16 @@ fn main() {
                         Some(VirtualKeyCode::Q)         => {
                             *control_flow = ControlFlow::Exit;
                         },
-                        Some(VirtualKeyCode::X)         => gba.set_button(Button::A, pressed),
-                        Some(VirtualKeyCode::Z)         => gba.set_button(Button::B, pressed),
-                        Some(VirtualKeyCode::A)         => gba.set_button(Button::L, pressed),
-                        Some(VirtualKeyCode::S)         => gba.set_button(Button::R, pressed),
-                        Some(VirtualKeyCode::Space)     => gba.set_button(Button::Select, pressed),
-                        Some(VirtualKeyCode::Return)    => gba.set_button(Button::Start, pressed),
-                        Some(VirtualKeyCode::Up)        => gba.set_button(Button::Up, pressed),
-                        Some(VirtualKeyCode::Down)      => gba.set_button(Button::Down, pressed),
-                        Some(VirtualKeyCode::Left)      => gba.set_button(Button::Left, pressed),
-                        Some(VirtualKeyCode::Right)     => gba.set_button(Button::Right, pressed),
+                        Some(VirtualKeyCode::X)         => gba.set_button(gba::Button::A, pressed),
+                        Some(VirtualKeyCode::Z)         => gba.set_button(gba::Button::B, pressed),
+                        Some(VirtualKeyCode::A)         => gba.set_button(gba::Button::L, pressed),
+                        Some(VirtualKeyCode::S)         => gba.set_button(gba::Button::R, pressed),
+                        Some(VirtualKeyCode::Space)     => gba.set_button(gba::Button::Select, pressed),
+                        Some(VirtualKeyCode::Return)    => gba.set_button(gba::Button::Start, pressed),
+                        Some(VirtualKeyCode::Up)        => gba.set_button(gba::Button::Up, pressed),
+                        Some(VirtualKeyCode::Down)      => gba.set_button(gba::Button::Down, pressed),
+                        Some(VirtualKeyCode::Left)      => gba.set_button(gba::Button::Left, pressed),
+                        Some(VirtualKeyCode::Right)     => gba.set_button(gba::Button::Right, pressed),
                         _ => {},
                     }
                 },
@@ -352,7 +370,7 @@ fn main() {
     });
 }
 
-fn make_audio_stream(gba: &mut GBA) -> cpal::Stream {
+fn make_audio_stream(gba: &mut gba::GBA) -> cpal::Stream {
     use cpal::traits::{
         DeviceTrait,
         HostTrait
