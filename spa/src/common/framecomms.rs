@@ -5,9 +5,8 @@ use std::{
     sync::Mutex,
 };
 use crate::FrameBuffer;
-use crate::gba::joypad::Buttons;
 
-pub fn new_frame_comms(frame_size: usize) -> (FrameSender, FrameRequester) {
+pub fn new_frame_comms<I>(frame_size: usize) -> (FrameSender<I>, FrameRequester<I>) {
     let buffer = vec![0; frame_size];
     let frame_buffer = Arc::new(Mutex::new(buffer.into_boxed_slice()));
     let (sync_tx, sync_rx) = bounded(1);
@@ -21,7 +20,7 @@ pub fn new_frame_comms(frame_size: usize) -> (FrameSender, FrameRequester) {
 #[cfg(feature = "debug")]
 pub mod debug {
     use super::*;
-    pub fn new_debug_frame_comms(frame_size: usize) -> (FrameSender, DebugFrameReq) {
+    pub fn new_debug_frame_comms<I>(frame_size: usize) -> (FrameSender<I>, DebugFrameReq<I>) {
         let buffer = vec![0; frame_size];
         let frame_buffer = Arc::new(Mutex::new(buffer.into_boxed_slice()));
         let (sync_tx, sync_rx) = bounded(1);
@@ -32,56 +31,56 @@ pub mod debug {
         )
     }
     
-    pub struct DebugFrameReq {
-        tx: Sender<Buttons>,
+    pub struct DebugFrameReq<I> {
+        tx: Sender<I>,
         rx: Receiver<()>
     }
     
-    impl DebugFrameReq {
+    impl<I> DebugFrameReq<I> {
         /// Check if CPU thread has told us processing for the frame is complete.
         /// 
         /// Then force it to continue if so.
-        pub fn check_and_continue(&mut self) {
+        pub fn check_and_continue(&mut self, input: I) {
             // Wait for CPU thread to let us know its processing is complete.
             match self.rx.try_recv() {
                 // Let CPU thread know processing can continue.
-                Ok(_) => self.tx.send(Buttons::from_bits_truncate(0xFFFF)).expect("couldn't send to cpu thread"),
+                Ok(_) => self.tx.send(input).expect("couldn't send to cpu thread"),
                 Err(_) => {},
             }
         }
     }    
 }
 
-pub struct FrameRequester {
+pub struct FrameRequester<I> {
     frame_buffer:   Arc<Mutex<FrameBuffer>>,
 
-    tx: Sender<Buttons>,
+    tx: Sender<I>,
     rx: Receiver<()>
 }
 
-impl FrameRequester {
+impl<I> FrameRequester<I> {
     /// Indicate to the CPU thread that it is ready for a new frame.
     /// 
-    /// Extracts the next frame, and sends buttons pressed since last time.
-    pub fn get_frame(&mut self, buffer: &mut [u8], buttons: Buttons) {
+    /// Extracts the next frame, and sends user input since last frame.
+    pub fn get_frame(&mut self, buffer: &mut [u8], input: I) {
         // Wait for CPU thread to let us know its processing is complete.
         self.rx.recv().expect("couldn't get from cpu thread");
         // Copy frame into buffer.
         let frame = self.frame_buffer.lock().unwrap();
         buffer.copy_from_slice(&(*frame));
         // Let CPU thread know processing can continue.
-        self.tx.send(buttons).expect("couldn't send to cpu thread");
+        self.tx.send(input).expect("couldn't send to cpu thread");
     }
 }
 
-pub struct FrameSender {
+pub struct FrameSender<I> {
     frame_buffer:   Arc<Mutex<FrameBuffer>>,
     
     tx: Sender<()>,
-    rx: Receiver<Buttons>
+    rx: Receiver<I>
 }
 
-impl FrameSender {
+impl<I> FrameSender<I> {
 
     /// Clone the frame buffer Arc.
     pub fn get_frame_buffer(&self) -> Arc<Mutex<FrameBuffer>> {
@@ -92,8 +91,8 @@ impl FrameSender {
     /// 
     /// Then block until the main thread indicates that processing for the next frame can begin.
     /// 
-    /// Returns any buttons pressed since last time.
-    pub fn sync_frame(&mut self) -> Buttons {
+    /// Returns any input changed since last time.
+    pub fn sync_frame(&mut self) -> I {
         self.tx.send(()).expect("couldn't send to main thread");
         self.rx.recv().expect("couldn't get from main thread")
     }

@@ -1,14 +1,10 @@
 /// Debug comms
 
-use super::{
-    RendererType,
-    MemoryBus,
-    memory::framecomms::debug::DebugFrameReq
-};
+use super::framecomms::debug::DebugFrameReq;
 use arm::{
-    ARM7TDMI,
     CPUState,
     Debugger,
+    ARMDriver,
     ARMCore,
     Mem32,
     MemCycleType
@@ -34,15 +30,16 @@ enum Response {
 /// The interface for the debugger.
 /// 
 /// Call methods on the main thread.
-pub struct DebugInterface {
+pub struct DebugInterface<I: Clone> {
     req_send: Sender<Request>,
     res_recv: Receiver<Response>,
 
-    requester: DebugFrameReq
+    requester: DebugFrameReq<I>,
+    default_input: I
 }
 
-impl DebugInterface {
-    pub fn new(requester: DebugFrameReq) -> (Self, DebugWrapper) {
+impl<I: Clone> DebugInterface<I> {
+    pub fn new(requester: DebugFrameReq<I>, default_input: I) -> (Self, DebugWrapper) {
         let (req_send, req_recv) = bounded(1);
         let (res_send, res_recv) = bounded(1);
         let wrapper = DebugWrapper {
@@ -51,7 +48,8 @@ impl DebugInterface {
         (Self {
             req_send,
             res_recv,
-            requester
+            requester,
+            default_input
         }, wrapper)
     }
 
@@ -59,7 +57,7 @@ impl DebugInterface {
         self.req_send.send(Request::DoStep).unwrap();
         match self.res_recv.recv().unwrap() {
             Response::Cycles(_) => {
-                self.requester.check_and_continue();
+                self.requester.check_and_continue(self.default_input.clone());
             },
             _ => panic!("unexpected response")
         }
@@ -105,7 +103,7 @@ pub struct DebugWrapper {
 }
 
 impl DebugWrapper {
-    pub fn run_debug(self, mut cpu: ARM7TDMI<MemoryBus<RendererType>>) {
+    pub fn run_debug<M: Mem32<Addr = u32>, A: Debugger + ARMDriver + ARMCore<M>>(self, mut cpu: A) {
         use Request::*;
         use Response::*;
         loop {

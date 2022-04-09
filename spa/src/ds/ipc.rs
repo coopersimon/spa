@@ -81,7 +81,7 @@ impl IPC {
         })
     }
 
-    pub fn clock(&mut self) -> Interrupts {
+    pub fn get_interrupts(&mut self) -> Interrupts {
         let mut interrupts = Interrupts::default();
         // TODO: these interrupts should be edge-triggered.
         if self.ipc_fifo_control.contains(IPCFifoControl::SEND_FIFO_IRQ) && self.send.is_empty() {
@@ -163,8 +163,7 @@ impl MemInterface32 for IPC {
         match addr {
             0x0 => self.read_sync_reg(),
             0x4 => self.read_control_reg(),
-            // At addr 0x0410_0000, offset by start (0x0400_0180)
-            0xF_FE80 => self.fifo_read(),
+            0x0410_0000 => self.fifo_read(),
             _ => 0,
         }
     }

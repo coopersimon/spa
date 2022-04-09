@@ -1,6 +1,5 @@
 /// Memory bus
 mod cart;
-pub mod framecomms;
 mod swi;
 
 use arm::{Mem32, MemCycleType};
@@ -17,17 +16,17 @@ use crate::{
         bios::BIOS,
         dma::{DMA, DMAAddress},
         wram::WRAM,
-        timers::Timers
+        timers::Timers,
+        framecomms::FrameSender
     },
     gba::{
-        joypad::Joypad,
+        joypad::{Joypad, Buttons},
         interrupt::{Interrupts, InterruptControl},
         video::*,
         audio::{GBAAudio, SamplePacket}
     }
 };
 use cart::{GamePak, GamePakController};
-use framecomms::FrameSender;
 pub use swi::emulated_swi;
 
 /// Locations for external files that are used by GBA.
@@ -58,11 +57,11 @@ pub struct MemoryBus<R: Renderer> {
     dma:                DMA,
     interrupt_control:  InterruptControl,
 
-    frame_sender:       FrameSender,
+    frame_sender:       FrameSender<Buttons>,
 }
 
 impl<R: Renderer> MemoryBus<R> {
-    pub fn new(config: &MemoryConfig, frame_sender: FrameSender) -> std::io::Result<Box<Self>> {
+    pub fn new(config: &MemoryConfig, frame_sender: FrameSender<Buttons>) -> std::io::Result<Box<Self>> {
         let bios = if let Some(path) = &config.bios_path {
             BIOS::new_from_file(&path)?
         } else {

@@ -17,6 +17,8 @@ use crate::{
 };
 use super::memory::DS9MemoryBus;
 
+const INSTR_TCM_SIZE: u32 = 32 * 1024;
+const ITCM_MASK: u32 = INSTR_TCM_SIZE - 1;
 const DATA_TCM_SIZE: u32 = 16 * 1024;
 
 /// ARM9 on-chip memory.
@@ -51,7 +53,7 @@ pub struct DS9InternalMem {
 impl DS9InternalMem {
     pub fn new(mem_bus: DS9MemoryBus) -> Self {
         Self {
-            instr_tcm:  WRAM::new(32 * 1024),
+            instr_tcm:  WRAM::new(INSTR_TCM_SIZE as usize),
             data_tcm:   WRAM::new(DATA_TCM_SIZE as usize),
 
             mem_bus: mem_bus,
@@ -85,7 +87,7 @@ impl Mem32 for DS9InternalMem {
 
     fn fetch_instr_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            0..=0x01FF_FFFF => (self.instr_tcm.read_halfword(addr), 1),
+            0..=0x01FF_FFFF => (self.instr_tcm.read_halfword(addr & ITCM_MASK), 1),
             _ => {
                 // TODO: try instr cache
                 self.mem_bus.fetch_instr_halfword(cycle, addr)
@@ -95,7 +97,7 @@ impl Mem32 for DS9InternalMem {
 
     fn fetch_instr_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            0..=0x01FF_FFFF => (self.instr_tcm.read_word(addr), 1),
+            0..=0x01FF_FFFF => (self.instr_tcm.read_word(addr & ITCM_MASK), 1),
             _ => {
                 // TODO: try instr cache
                 self.mem_bus.fetch_instr_word(cycle, addr)
@@ -105,7 +107,7 @@ impl Mem32 for DS9InternalMem {
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
         match addr {
-            0..=0x01FF_FFFF => (self.instr_tcm.read_byte(addr), 1),
+            0..=0x01FF_FFFF => (self.instr_tcm.read_byte(addr & ITCM_MASK), 1),
             _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
                 (self.data_tcm.read_byte(addr - self.data_tcm_start), 1)
             } else {
@@ -117,7 +119,7 @@ impl Mem32 for DS9InternalMem {
     fn store_byte(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u8) -> usize {
         match addr {
             0..=0x01FF_FFFF => {
-                self.instr_tcm.write_byte(addr, data);
+                self.instr_tcm.write_byte(addr & ITCM_MASK, data);
                 1
             },
             _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
@@ -132,7 +134,7 @@ impl Mem32 for DS9InternalMem {
 
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            0..=0x01FF_FFFF => (self.instr_tcm.read_halfword(addr), 1),
+            0..=0x01FF_FFFF => (self.instr_tcm.read_halfword(addr & ITCM_MASK), 1),
             _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
                 (self.data_tcm.read_halfword(addr - self.data_tcm_start), 1)
             } else {
@@ -144,7 +146,7 @@ impl Mem32 for DS9InternalMem {
     fn store_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u16) -> usize {
         match addr {
             0..=0x01FF_FFFF => {
-                self.instr_tcm.write_halfword(addr, data);
+                self.instr_tcm.write_halfword(addr & ITCM_MASK, data);
                 1
             },
             _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
@@ -159,7 +161,7 @@ impl Mem32 for DS9InternalMem {
 
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            0..=0x01FF_FFFF => (self.instr_tcm.read_word(addr), 1),
+            0..=0x01FF_FFFF => (self.instr_tcm.read_word(addr & ITCM_MASK), 1),
             _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
                 (self.data_tcm.read_word(addr - self.data_tcm_start), 1)
             } else {
@@ -171,7 +173,7 @@ impl Mem32 for DS9InternalMem {
     fn store_word(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u32) -> usize {
         match addr {
             0..=0x01FF_FFFF => {
-                self.instr_tcm.write_word(addr, data);
+                self.instr_tcm.write_word(addr & ITCM_MASK, data);
                 1
             },
             _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {

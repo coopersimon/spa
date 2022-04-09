@@ -6,28 +6,35 @@ use arm::{Mem32, MemCycleType};
 
 use std::{
     path::PathBuf,
-    sync::{Arc, Mutex}
+    sync::{Arc, Barrier}
 };
 
-use crate::common::{
-    bios::BIOS,
-    dma::DMA as ds7DMA,
-    timers::Timers,
-    wram::WRAM
-};
-use crate::utils::{
-    meminterface::{MemInterface16, MemInterface32}
-};
-use super::{
-    maths::Accelerators,
-    ipc::IPC,
-    joypad::DSJoypad,
-    interrupt::InterruptControl,
-    card::DSCardIO
+use crate::{
+    common::{
+        bios::BIOS,
+        dma::DMA as ds7DMA,
+        timers::Timers,
+        wram::WRAM
+    },
+    utils::{
+        meminterface::{MemInterface16, MemInterface32}
+    },
+    ds::{
+        maths::Accelerators,
+        ipc::IPC,
+        joypad::DSJoypad,
+        interrupt::{Interrupts, InterruptControl},
+        card::DSCardIO
+    }
 };
 use dma::DMA;
 use main::MainRAM;
 use shared::*;
+
+/// How many cycles the ARM7 should run for before syncing.
+const ARM7_THREAD_SYNC_CYCLES: usize = 100;
+/// How many cycles the ARM9 should run for before syncing.
+const ARM9_THREAD_SYNC_CYCLES: usize = ARM7_THREAD_SYNC_CYCLES * 2;
 
 /// Locations for external files that are used by NDS.
 pub struct MemoryConfig {
@@ -52,7 +59,11 @@ pub struct DS9MemoryBus {
 
     dma:                DMA,
     interrupt_control:  InterruptControl,
-    card:               DSCardIO
+    card:               DSCardIO,
+
+    // sync
+    counter:            usize,
+    barrier:            Arc<Barrier>
 }
 
 impl DS9MemoryBus {
@@ -65,6 +76,8 @@ impl DS9MemoryBus {
         let arm9_bios = BIOS::new_from_file(config.ds9_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
         let arm7_bios = BIOS::new_from_file(config.ds7_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
 
+        let barrier = Arc::new(Barrier::new(2));
+
         (Self{
             bios:               arm9_bios,
             main_ram:           main_ram.clone(),
@@ -75,7 +88,10 @@ impl DS9MemoryBus {
             accelerators:       Accelerators::new(),
             dma:                DMA::new(),
             interrupt_control:  InterruptControl::new(),
-            card:               card.clone()
+            card:               card.clone(),
+            
+            counter:            0,
+            barrier:            barrier.clone()
         }, Box::new(DS7MemoryBus{
             bios:               arm7_bios,
             main_ram:           main_ram,
@@ -86,13 +102,17 @@ impl DS9MemoryBus {
             joypad:             DSJoypad::new(),
             dma:                ds7DMA::new(),
             interrupt_control:  InterruptControl::new(),
-            card:               card
+            card:               card,
+
+            counter:            0,
+            barrier:            barrier
         }))
     }
 }
 
-/*impl DS9MemoryBus {
-    fn read_mem_control_abcd(&self) -> u32 {
+// Internal
+impl DS9MemoryBus {
+    /*fn read_mem_control_abcd(&self) -> u32 {
         0 // TODO
     }
     fn read_mem_control_efg(&self) -> u32 {
@@ -115,17 +135,56 @@ impl DS9MemoryBus {
     }
     fn write_mem_control_hi(&mut self, data: u32) {
         // TODO
+    }*/
+
+    /// Indicate to all of the devices on the memory bus that cycles have passed.
+    /// 
+    /// Returns true if VBlank occurred, and therefore the frame is ready to be presented.
+    fn do_clock(&mut self, cycles: usize) -> bool {
+        /*let (video_signal, video_irq) = self.video.clock(cycles);
+        let vblank = match video_signal {
+            Signal::VBlank => {
+                self.dma.on_vblank();
+                true
+            },
+            Signal::HBlank => {
+                self.dma.on_hblank();
+                false
+            },
+            Signal::None => false,
+        };*/
+
+        let (timer_irq, _, _) = self.timers.clock(cycles);
+        //self.audio.clock(cycles);
+
+        self.interrupt_control.interrupt_request(
+            //self.joypad.get_interrupt() |
+            Interrupts::from_bits_truncate(timer_irq.into()) |
+            self.ipc.get_interrupts()
+            //video_irq
+        );
+
+        false//vblank
     }
-}*/
+
+    fn check_irq(&self) -> bool {
+        self.interrupt_control.irq()
+    }
+}
 
 impl Mem32 for DS9MemoryBus {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
-        /*if self.do_clock(cycles) {
-            self.frame_end();
+        self.counter += cycles;
+        if self.counter >= ARM9_THREAD_SYNC_CYCLES {
+            self.counter -= ARM9_THREAD_SYNC_CYCLES;
+            self.barrier.wait();
         }
-        self.do_dma();
+        if self.do_clock(cycles) {
+            //self.frame_end();
+        }
+        /*self.do_dma();
 
         // Check if CPU is halted.
         if self.internal.halt {
@@ -139,15 +198,14 @@ impl Mem32 for DS9MemoryBus {
                     return Some(arm::ExternalException::IRQ);
                 }
             }
-        }
+        }*/
 
         if self.check_irq() {
-            self.internal.halt = false;
+            //self.internal.halt = false;
             Some(arm::ExternalException::IRQ)
         } else {
             None
-        }*/
-        None
+        }
     }
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
@@ -163,6 +221,7 @@ impl Mem32 for DS9MemoryBus {
 
             // I/O
             0x0400_0247 => (self.shared_wram.get_bank_control(), if cycle.is_non_seq() {8} else {2}),
+            0x0410_0000..=0x0410_0003 => (self.ipc.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), if cycle.is_non_seq() {8} else {2}),
 
             // TODO: VRAM
@@ -192,6 +251,10 @@ impl Mem32 for DS9MemoryBus {
             // I/O
             0x0400_0247 => {
                 self.shared_wram.set_bank_control(data);
+                if cycle.is_non_seq() {8} else {2}
+            },
+            0x0410_0000..=0x0410_0003 => {
+                self.ipc.write_byte(addr, data);
                 if cycle.is_non_seq() {8} else {2}
             },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
@@ -225,6 +288,7 @@ impl Mem32 for DS9MemoryBus {
 
             // I/O
             // TODO: mem ctl
+            0x0410_0000..=0x0410_0003 => (self.ipc.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
@@ -253,6 +317,10 @@ impl Mem32 for DS9MemoryBus {
             },
 
             // I/O
+            0x0410_0000..=0x0410_0003 => {
+                self.ipc.write_halfword(addr, data);
+                if cycle.is_non_seq() {8} else {2}
+            },
             0x0400_0000..=0x04FF_FFFF => {
                 self.io_write_halfword(addr, data);
                 if cycle.is_non_seq() {8} else {2}
@@ -283,6 +351,7 @@ impl Mem32 for DS9MemoryBus {
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
+            0x0410_0000..=0x0410_0003 => (self.ipc.read_word(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
@@ -312,6 +381,10 @@ impl Mem32 for DS9MemoryBus {
             },
 
             // I/O
+            0x0410_0000..=0x0410_0003 => {
+                self.ipc.write_word(addr, data);
+                if cycle.is_non_seq() {8} else {2}
+            },
             0x0400_0000..=0x04FF_FFFF => {
                 self.io_write_word(addr, data);
                 if cycle.is_non_seq() {8} else {2}
@@ -351,8 +424,8 @@ impl DS9MemoryBus {
         (0x0400_01A0, 0x0400_01BF, card),
         (0x0400_0208, 0x0400_0217, interrupt_control),
         (0x0400_0280, 0x0400_02BF, accelerators),
-        (0x0410_0000, 0x0410_0003, ipc),
-        (0x0410_0010, 0x0410_0013, card)
+        (0x0410_0000, 0x0410_0003, ipc)
+        //(0x0410_0010, 0x0410_0013, card)
     }
 }
 
@@ -371,17 +444,49 @@ pub struct DS7MemoryBus {
 
     dma:    ds7DMA,
     interrupt_control:  InterruptControl,
-    card:               DSCardIO
+    card:               DSCardIO,
+
+    counter:            usize,
+    barrier:            Arc<Barrier>
+}
+
+// Internal
+impl DS7MemoryBus {
+    /// Indicate to all of the devices on the memory bus that cycles have passed.
+    /// 
+    /// Returns true if VBlank occurred, and therefore the frame is ready to be presented.
+    fn do_clock(&mut self, cycles: usize) -> bool {
+        let (timer_irq, _, _) = self.timers.clock(cycles);
+        //self.audio.clock(cycles);
+
+        self.interrupt_control.interrupt_request(
+            //self.joypad.get_interrupt() |
+            Interrupts::from_bits_truncate(timer_irq.into()) |
+            self.ipc.get_interrupts()
+            //video_irq
+        );
+
+        false//vblank
+    }
+
+    fn check_irq(&self) -> bool {
+        self.interrupt_control.irq()
+    }
 }
 
 impl Mem32 for DS7MemoryBus {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
-        /*if self.do_clock(cycles) {
-            self.frame_end();
+        self.counter += cycles;
+        if self.counter >= ARM7_THREAD_SYNC_CYCLES {
+            self.counter -= ARM7_THREAD_SYNC_CYCLES;
+            self.barrier.wait();
         }
-        self.do_dma();
+        if self.do_clock(cycles) {
+            //self.frame_end();
+        }
+        /*self.do_dma();
 
         // Check if CPU is halted.
         if self.internal.halt {
@@ -395,15 +500,14 @@ impl Mem32 for DS7MemoryBus {
                     return Some(arm::ExternalException::IRQ);
                 }
             }
-        }
+        }*/
 
         if self.check_irq() {
-            self.internal.halt = false;
+            //self.internal.halt = false;
             Some(arm::ExternalException::IRQ)
         } else {
             None
-        }*/
-        None
+        }
     }
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {

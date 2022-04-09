@@ -1,5 +1,5 @@
 use arm::{
-    Mem32, MemCycleType, ARM7TDMI, ARMCore
+    Mem32, MemCycleType, ARM7TDMI, ARMDriver, ARMCore
 };
 
 use std::path::{PathBuf, Path};

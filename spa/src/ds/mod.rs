@@ -7,14 +7,17 @@ mod ipc;
 mod card;
 
 use arm::{
-    ARM7TDMI, ARM9ES, ARMCore
+    ARM7TDMI, ARM9ES, ARMDriver, ARMCore
 };
 use crossbeam_channel::{Sender, Receiver, unbounded};
 
+#[cfg(feature = "debug")]
+use crate::common::debug::DebugInterface;
 use cache::DS9InternalMem;
 use memory::{
     DS9MemoryBus, DS7MemoryBus
 };
+use joypad::DSButtons;
 pub use memory::MemoryConfig;
 
 pub enum Button {
@@ -83,6 +86,72 @@ impl NDS {
 
     pub fn set_button(&mut self, button: Button, pressed: bool) {
         //self.buttons_pressed.set(button.into(), !pressed);
+    }
+}
+
+// Debug
+#[cfg(feature = "debug")]
+impl NDS {
+    /// Make a new debuggable NDS.
+    /// 
+    /// Steps through the ARM7 CPU.
+    pub fn new_debug_7(config: MemoryConfig) -> DebugInterface<DSButtons> {
+        use crate::common::framecomms::debug::new_debug_frame_comms;
+
+        let (render_width, render_height) = (256, 384);//RendererType::render_size();
+        let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4);
+        let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, DSButtons::default());
+
+        let (arm9_bus, arm7_bus) = DS9MemoryBus::new(&config);
+
+        std::thread::Builder::new().name("ARM9-CPU".to_string()).spawn(move || {
+            let internal_mem = Box::new(DS9InternalMem::new(arm9_bus));
+            let mut cpu = new_arm9_cpu(internal_mem);
+            loop {
+                cpu.step();
+            }
+        }).unwrap();
+
+        let arm7_no_bios = config.ds7_bios_path.is_none();
+        std::thread::Builder::new().name("ARM7-CPU".to_string()).spawn(move || {
+            let mut cpu = new_arm7_cpu(arm7_bus, arm7_no_bios, false);
+            //let audio_channels = cpu.mut_mem().enable_audio();
+            //channel_sender.send(audio_channels).unwrap();
+            debug_wrapper.run_debug(cpu);
+        }).unwrap();
+
+        debug_interface
+    }
+
+    /// Make a new debuggable NDS.
+    /// 
+    /// Steps through the ARM9 CPU.
+    pub fn new_debug_9(config: MemoryConfig) -> DebugInterface<DSButtons> {
+        use crate::common::framecomms::debug::new_debug_frame_comms;
+
+        let (render_width, render_height) = (256, 384);//RendererType::render_size();
+        let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4);
+        let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, DSButtons::default());
+
+        let (arm9_bus, arm7_bus) = DS9MemoryBus::new(&config);
+
+        std::thread::Builder::new().name("ARM9-CPU".to_string()).spawn(move || {
+            let internal_mem = Box::new(DS9InternalMem::new(arm9_bus));
+            let mut cpu = new_arm9_cpu(internal_mem);
+            debug_wrapper.run_debug(cpu);
+        }).unwrap();
+
+        let arm7_no_bios = config.ds7_bios_path.is_none();
+        std::thread::Builder::new().name("ARM7-CPU".to_string()).spawn(move || {
+            let mut cpu = new_arm7_cpu(arm7_bus, arm7_no_bios, false);
+            //let audio_channels = cpu.mut_mem().enable_audio();
+            //channel_sender.send(audio_channels).unwrap();
+            loop {
+                cpu.step();
+            }
+        }).unwrap();
+
+        debug_interface
     }
 }
 

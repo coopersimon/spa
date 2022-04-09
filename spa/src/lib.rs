@@ -6,3 +6,4 @@ pub mod gba;
 pub mod ds;
 
 pub type FrameBuffer = Box<[u8]>;
+pub use common::debug::DebugInterface;

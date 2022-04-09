@@ -6,11 +6,14 @@ mod video;
 mod audio;
 
 use arm::{
-    ARM7TDMI, ARMCore
+    ARM7TDMI, ARMDriver, ARMCore
 };
 use crossbeam_channel::{Receiver, unbounded};
+
+use crate::common::framecomms::{new_frame_comms, FrameRequester};
+#[cfg(feature = "debug")]
+use crate::common::debug::DebugInterface;
 use memory::{
-    framecomms::{new_frame_comms, FrameRequester},
     MemoryBus,
     emulated_swi
 };
@@ -18,11 +21,6 @@ pub use memory::MemoryConfig;
 use audio::{Resampler, SamplePacket};
 use video::Renderer;
 use joypad::Buttons;
-
-#[cfg(feature = "debug")]
-mod debug;
-#[cfg(feature = "debug")]
-pub use debug::DebugInterface;
 
 pub enum Button {
     A,
@@ -40,7 +38,7 @@ pub enum Button {
 type RendererType = video::ProceduralRenderer;
 
 pub struct GBA {
-    frame_receiver: FrameRequester,
+    frame_receiver: FrameRequester<Buttons>,
     audio_channels: Option<(Receiver<SamplePacket>, Receiver<f64>)>,
 
     buttons_pressed: Buttons,
@@ -123,12 +121,12 @@ impl GBAAudioHandler {
 #[cfg(feature = "debug")]
 impl GBA {
     /// Make a new debuggable GBA.
-    pub fn new_debug(config: MemoryConfig) -> DebugInterface {
-        use memory::framecomms::debug::new_debug_frame_comms;
+    pub fn new_debug(config: MemoryConfig) -> DebugInterface<Buttons> {
+        use crate::common::framecomms::debug::new_debug_frame_comms;
 
         let (render_width, render_height) = RendererType::render_size();
         let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4);
-        let (debug_interface, debug_wrapper) = debug::DebugInterface::new(frame_receiver);
+        let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, Buttons::from_bits_truncate(0xFFFF));
 
         std::thread::Builder::new().name("CPU".to_string()).spawn(move || {
             let no_bios = config.bios_path.is_none();
