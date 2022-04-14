@@ -17,14 +17,15 @@ use crate::{
         wram::WRAM
     },
     utils::{
-        meminterface::{MemInterface16, MemInterface32}
+        meminterface::{MemInterface8, MemInterface16, MemInterface32}
     },
     ds::{
         maths::Accelerators,
         ipc::IPC,
         joypad::DSJoypad,
         interrupt::{Interrupts, InterruptControl},
-        card::DSCardIO
+        card::DSCardIO,
+        rtc::RealTimeClock
     }
 };
 use dma::DMA;
@@ -100,6 +101,7 @@ impl DS9MemoryBus {
             ipc:                ds7_ipc,
             timers:             Timers::new(),
             joypad:             DSJoypad::new(),
+            rtc:                RealTimeClock::new(),
             dma:                ds7DMA::new(),
             interrupt_control:  InterruptControl::new(),
             card:               card,
@@ -222,6 +224,7 @@ impl Mem32 for DS9MemoryBus {
             // I/O
             0x0400_0247 => (self.shared_wram.get_bank_control(), if cycle.is_non_seq() {8} else {2}),
             0x0410_0000..=0x0410_0003 => (self.ipc.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
+            0x0410_0010..=0x0410_0013 => (self.card.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), if cycle.is_non_seq() {8} else {2}),
 
             // TODO: VRAM
@@ -253,8 +256,8 @@ impl Mem32 for DS9MemoryBus {
                 self.shared_wram.set_bank_control(data);
                 if cycle.is_non_seq() {8} else {2}
             },
-            0x0410_0000..=0x0410_0003 => {
-                self.ipc.write_byte(addr, data);
+            0x0410_0010..=0x0410_0013 => {
+                self.card.write_byte(addr, data);
                 if cycle.is_non_seq() {8} else {2}
             },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
@@ -289,6 +292,7 @@ impl Mem32 for DS9MemoryBus {
             // I/O
             // TODO: mem ctl
             0x0410_0000..=0x0410_0003 => (self.ipc.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
+            0x0410_0010..=0x0410_0013 => (self.card.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
@@ -317,8 +321,8 @@ impl Mem32 for DS9MemoryBus {
             },
 
             // I/O
-            0x0410_0000..=0x0410_0003 => {
-                self.ipc.write_halfword(addr, data);
+            0x0410_0010..=0x0410_0013 => {
+                self.card.write_halfword(addr, data);
                 if cycle.is_non_seq() {8} else {2}
             },
             0x0400_0000..=0x04FF_FFFF => {
@@ -352,6 +356,7 @@ impl Mem32 for DS9MemoryBus {
 
             // I/O
             0x0410_0000..=0x0410_0003 => (self.ipc.read_word(addr), if cycle.is_non_seq() {8} else {2}),
+            0x0410_0010..=0x0410_0013 => (self.card.read_word(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
@@ -381,8 +386,8 @@ impl Mem32 for DS9MemoryBus {
             },
 
             // I/O
-            0x0410_0000..=0x0410_0003 => {
-                self.ipc.write_word(addr, data);
+            0x0410_0010..=0x0410_0013 => {
+                self.card.write_word(addr, data);
                 if cycle.is_non_seq() {8} else {2}
             },
             0x0400_0000..=0x04FF_FFFF => {
@@ -423,9 +428,7 @@ impl DS9MemoryBus {
         (0x0400_0180, 0x0400_018F, ipc),
         (0x0400_01A0, 0x0400_01BF, card),
         (0x0400_0208, 0x0400_0217, interrupt_control),
-        (0x0400_0280, 0x0400_02BF, accelerators),
-        (0x0410_0000, 0x0410_0003, ipc)
-        //(0x0410_0010, 0x0410_0013, card)
+        (0x0400_0280, 0x0400_02BF, accelerators)
     }
 }
 
@@ -441,6 +444,7 @@ pub struct DS7MemoryBus {
 
     timers: Timers,
     joypad: DSJoypad,
+    rtc:    RealTimeClock,
 
     dma:    ds7DMA,
     interrupt_control:  InterruptControl,
@@ -517,6 +521,9 @@ impl Mem32 for DS7MemoryBus {
             0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_byte(addr & 0x3F_FFFF), if cycle.is_non_seq() {9} else {1}),
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_byte(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_byte(addr & 0xFFFF), 1),
+
+            0x0410_0000..=0x0410_0003 => (self.ipc.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
+            0x0410_0010..=0x0410_0013 => (self.card.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), 1),
 
             // TODO: GBA slot
@@ -542,6 +549,11 @@ impl Mem32 for DS7MemoryBus {
                 self.wram.write_byte(addr & 0xFFFF, data);
                 1
             },
+
+            0x0410_0010..=0x0410_0013 => {
+                self.card.write_byte(addr, data);
+                if cycle.is_non_seq() {8} else {2}
+            },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_byte(addr, data);
                 1
@@ -566,6 +578,9 @@ impl Mem32 for DS7MemoryBus {
             0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3_FFFF), if cycle.is_non_seq() {9} else {1}),
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_halfword(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_halfword(addr & 0xFFFF), 1),
+
+            0x0410_0000..=0x0410_0003 => (self.ipc.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
+            0x0410_0010..=0x0410_0013 => (self.card.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), 1),
 
             // Cart
@@ -591,6 +606,11 @@ impl Mem32 for DS7MemoryBus {
                 self.wram.write_halfword(addr & 0xFFFF, data);
                 1
             },
+
+            0x0410_0010..=0x0410_0013 => {
+                self.card.write_halfword(addr, data);
+                if cycle.is_non_seq() {8} else {2}
+            },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_halfword(addr, data);
                 1
@@ -615,6 +635,9 @@ impl Mem32 for DS7MemoryBus {
             0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3_FFFF), if cycle.is_non_seq() {10} else {2}),
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_word(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_word(addr & 0xFFFF), 1),
+
+            0x0410_0000..=0x0410_0003 => (self.ipc.read_word(addr), if cycle.is_non_seq() {8} else {2}),
+            0x0410_0010..=0x0410_0013 => (self.card.read_word(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), 1),
 
             // Cart
@@ -640,6 +663,11 @@ impl Mem32 for DS7MemoryBus {
                 self.wram.write_word(addr & 0xFFFF, data);
                 1
             },
+
+            0x0410_0010..=0x0410_0013 => {
+                self.card.write_word(addr, data);
+                if cycle.is_non_seq() {8} else {2}
+            },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_word(addr, data);
                 1
@@ -664,8 +692,9 @@ impl DS7MemoryBus {
         (0x0400_00B0, 0x0400_00DF, dma),
         (0x0400_0100, 0x0400_010F, timers),
         (0x0400_0130, 0x0400_0137, joypad),
+        (0x0400_0138, 0x0400_013B, rtc),
         (0x0400_0180, 0x0400_018F, ipc),
-        (0x0400_0208, 0x0400_0217, interrupt_control),
-        (0x0410_0000, 0x0410_0003, ipc)
+        (0x0400_01A0, 0x0400_01BF, card),
+        (0x0400_0208, 0x0400_0217, interrupt_control)
     }
 }

@@ -13,6 +13,7 @@ use std::{
 };
 
 use crate::utils::{
+    bits,
     bytes::u16,
     meminterface::{MemInterface16, MemInterface32}
 };
@@ -64,6 +65,10 @@ struct DSCard {
     rom_buffer: Vec<u8>,
     buffer_tag: u32,
 
+    spi_control: u16,
+    rom_control_lo: u16,
+    rom_control_hi: u16,
+
     command: [u8; 8],
     seed_0: [u8; 8],
     seed_1: [u8; 8],
@@ -90,6 +95,10 @@ impl DSCard {
             rom_buffer: buffer,
             buffer_tag: 0,
 
+            spi_control: 0,
+            rom_control_lo: 0,
+            rom_control_hi: 0,
+
             command: [0; 8],
             seed_0: [0xE8, 0xE0, 0x6D, 0xC5, 0x58, 0, 0, 0],
             seed_1: [0x05, 0x9B, 0x9B, 0x87, 0x5C, 0, 0, 0],
@@ -108,15 +117,14 @@ impl MemInterface16 for DSCard {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
             // 0x0400_01A0
-            0x0 => 0,   // AUXSPICNT
+            0x0 => self.spi_control,   // AUXSPICNT
             0x2 => 0,   // AUXSPIDATA
-            0x4 => 0,   // ROMCTRL
-            0x6 => 0,   // ROMCTRL
+            0x4 => self.rom_control_lo,   // ROMCTRL
+            0x6 => self.rom_control_hi | bits::u16::bit(7),   // ROMCTRL
             0x8..=0xF => 0,     // Command
             0x10..=0x1B => 0,   // Encryption seeds
 
-            // 0x0410_0010
-            0x000F_FE70 | 0x000F_FE72 => {    // Data out
+            0x0410_0010 | 0x0410_0012 => {    // Data out
                 let lo = self.get_data_out();
                 let hi = self.get_data_out();
                 u16::make(hi, lo)
@@ -126,13 +134,50 @@ impl MemInterface16 for DSCard {
         }
     }
 
+    fn write_byte(&mut self, addr: u32, data: u8) {
+        match addr {
+            // 0x0400_01A0
+            0x0 => self.spi_control = u16::set_lo(self.spi_control, data),   // AUXSPICNT
+            0x1 => self.spi_control = u16::set_hi(self.spi_control, data),   // AUXSPICNT
+
+            0x8..=0xE => {
+                let idx = 0xF - addr;
+                self.command[idx as usize] = data;
+            },
+            0xF => {
+                self.command[0] = data;
+                self.do_command();
+            },
+
+            0x10..=0x13 => {
+                let idx = addr - 0x10;
+                self.seed_0[idx as usize] = data;
+            },
+            0x18 => {
+                self.seed_0[4] = data & 0x7F;
+            },
+            0x14..=0x17 => {
+                let idx = addr - 0x10;
+                self.seed_1[idx as usize] = data;
+            },
+            0x1A => {
+                self.seed_1[4] = data & 0x7F;
+            },
+
+            0x0410_0010 => {},   // Data in
+            0x0410_0012 => {},   // Data in
+
+            _ => panic!("writing with byte to {:X} in card", addr),
+        }
+    }
+
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
             // 0x0400_01A0
-            0x0 => {},   // AUXSPICNT
+            0x0 => self.spi_control = data,   // AUXSPICNT
             0x2 => {},   // AUXSPIDATA
-            0x4 => {},   // ROMCTRL
-            0x6 => {},   // ROMCTRL
+            0x4 => self.rom_control_lo = data,   // ROMCTRL
+            0x6 => self.rom_control_hi = data,   // ROMCTRL
 
             0x8 => {
                 self.command[7] = u16::lo(data);
@@ -175,9 +220,8 @@ impl MemInterface16 for DSCard {
                 self.seed_1[4] = u16::lo(data) & 0x7F;
             },
 
-            // 0x0410_0010
-            0x000F_FE70 => {},   // Data in
-            0x000F_FE72 => {},   // Data in
+            0x0410_0010 => {},   // Data in
+            0x0410_0012 => {},   // Data in
 
             _ => unreachable!(),
         }
@@ -195,6 +239,7 @@ enum CommandEncryptMode {
 /// 
 /// These states relate to the data returned or read by the cart,
 /// via port at 0x0410_0010
+#[derive(Debug)]
 enum DSCardDataState {
     Dummy,              // 9F, 3C, 3D(?), 
     Header(u32),        // 00 + addr
@@ -217,11 +262,13 @@ impl DSCard {
             Key1 => self.key1_command(),
             Key2 => self.key2_command(),
         };
+        println!("do command {:?}", self.data_state);
     }
 
     fn unencrypted_command(&mut self) -> DSCardDataState {
         use DSCardDataState::*;
         let command = u64::from_le_bytes(self.command);
+        println!("got command {:X}", command);
         match command >> 56 {   // Command is MSB
             0x9F => Dummy,
             0x00 => {
