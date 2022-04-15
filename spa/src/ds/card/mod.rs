@@ -1,5 +1,7 @@
 mod crypto;
 
+use bitflags::bitflags;
+
 use std::{
     io::{
         Result,
@@ -9,14 +11,32 @@ use std::{
     },
     fs::File,
     path::Path,
-    sync::{Arc, Mutex}
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering}
+    }
 };
 
 use crate::utils::{
-    bits,
-    bytes::u16,
+    bits::u16,
+    bytes,
     meminterface::{MemInterface16, MemInterface32}
 };
+
+bitflags!{
+    #[derive(Default)]
+    pub struct RomControlHi: u16 {
+        const START_STAT    = u16::bit(15);
+        const DATA_WRITE    = u16::bit(14);
+        const RELEASE       = u16::bit(13);
+        const KEY1_GAP_CLK  = u16::bit(12);
+        const TRANSFER_RATE = u16::bit(11);
+        const BLOCK_SIZE    = u16::bits(8, 10);
+        const DATA_STATUS   = u16::bit(7);
+        const KEY2_ENCRYPT  = u16::bit(6);
+        const KEY1_GAP2_LEN = u16::bits(0, 5);
+    }
+}
 
 /// We read 1kB at a time from disk.
 const ROM_BUFFER_SIZE: u32 = 1024;
@@ -24,15 +44,21 @@ const ROM_BUFFER_SIZE: u32 = 1024;
 /// DS Card attached to IO ports.
 #[derive(Clone)]
 pub struct DSCardIO {
-    card:   Arc<Mutex<DSCard>>
+    card:       Arc<Mutex<DSCard>>,
+    interrupt:  Arc<AtomicBool>,
 }
 
 impl DSCardIO {
     pub fn new(rom_path: &Path) -> Result<Self> {
-        let card = Arc::new(Mutex::new(DSCard::new(rom_path)?));
+        let interrupt = Arc::new(AtomicBool::new(false));
+        let card = Arc::new(Mutex::new(DSCard::new(rom_path, interrupt.clone())?));
         Ok(DSCardIO{
-            card
+            card, interrupt
         })
+    }
+
+    pub fn get_interrupt(&self) -> bool {
+        self.interrupt.load(Ordering::Acquire)
     }
 }
 
@@ -67,7 +93,7 @@ struct DSCard {
 
     spi_control: u16,
     rom_control_lo: u16,
-    rom_control_hi: u16,
+    rom_control_hi: RomControlHi,
 
     command: [u8; 8],
     seed_0: [u8; 8],
@@ -76,14 +102,17 @@ struct DSCard {
     key2_0: u64,
     key2_1: u64,
 
+    transfer_count: usize,
     /// Key-1 encrypted commands return 0x910 bytes of dummy data
     key2_dummy_count: usize,
     cmd_encrypt_mode: CommandEncryptMode,
     data_state: DSCardDataState,
+
+    interrupt: Arc<AtomicBool>
 }
 
 impl DSCard {
-    fn new(rom_path: &Path) -> Result<Self> {
+    fn new(rom_path: &Path, interrupt: Arc<AtomicBool>) -> Result<Self> {
         let mut rom_file = File::open(rom_path)?;
         let mut buffer = vec![0; ROM_BUFFER_SIZE as usize];
 
@@ -97,7 +126,7 @@ impl DSCard {
 
             spi_control: 0,
             rom_control_lo: 0,
-            rom_control_hi: 0,
+            rom_control_hi: RomControlHi::default(),
 
             command: [0; 8],
             seed_0: [0xE8, 0xE0, 0x6D, 0xC5, 0x58, 0, 0, 0],
@@ -106,9 +135,12 @@ impl DSCard {
             key2_0: 0,
             key2_1: 0,
 
+            transfer_count: 0,
             key2_dummy_count: 0,
             cmd_encrypt_mode: CommandEncryptMode::None,
             data_state: DSCardDataState::Dummy,
+
+            interrupt: interrupt,
         })
     }
 }
@@ -120,14 +152,14 @@ impl MemInterface16 for DSCard {
             0x0 => self.spi_control,   // AUXSPICNT
             0x2 => 0,   // AUXSPIDATA
             0x4 => self.rom_control_lo,   // ROMCTRL
-            0x6 => self.rom_control_hi | bits::u16::bit(7),   // ROMCTRL
+            0x6 => self.rom_control_hi.bits(), // ROMCTRL
             0x8..=0xF => 0,     // Command
             0x10..=0x1B => 0,   // Encryption seeds
 
             0x0410_0010 | 0x0410_0012 => {    // Data out
                 let lo = self.get_data_out();
                 let hi = self.get_data_out();
-                u16::make(hi, lo)
+                bytes::u16::make(hi, lo)
             },
 
             _ => unreachable!(),
@@ -137,8 +169,8 @@ impl MemInterface16 for DSCard {
     fn write_byte(&mut self, addr: u32, data: u8) {
         match addr {
             // 0x0400_01A0
-            0x0 => self.spi_control = u16::set_lo(self.spi_control, data),   // AUXSPICNT
-            0x1 => self.spi_control = u16::set_hi(self.spi_control, data),   // AUXSPICNT
+            0x0 => self.spi_control = bytes::u16::set_lo(self.spi_control, data),   // AUXSPICNT
+            0x1 => self.spi_control = bytes::u16::set_hi(self.spi_control, data),   // AUXSPICNT
 
             0x8..=0xE => {
                 let idx = 0xF - addr;
@@ -177,47 +209,47 @@ impl MemInterface16 for DSCard {
             0x0 => self.spi_control = data,   // AUXSPICNT
             0x2 => {},   // AUXSPIDATA
             0x4 => self.rom_control_lo = data,   // ROMCTRL
-            0x6 => self.rom_control_hi = data,   // ROMCTRL
+            0x6 => self.write_rom_control_hi(data),   // ROMCTRL
 
             0x8 => {
-                self.command[7] = u16::lo(data);
-                self.command[6] = u16::hi(data);
+                self.command[7] = bytes::u16::lo(data);
+                self.command[6] = bytes::u16::hi(data);
             },
             0xA => {
-                self.command[5] = u16::lo(data);
-                self.command[4] = u16::hi(data);
+                self.command[5] = bytes::u16::lo(data);
+                self.command[4] = bytes::u16::hi(data);
             },
             0xC => {
-                self.command[3] = u16::lo(data);
-                self.command[2] = u16::hi(data);
+                self.command[3] = bytes::u16::lo(data);
+                self.command[2] = bytes::u16::hi(data);
             },
             0xE => {
-                self.command[1] = u16::lo(data);
-                self.command[0] = u16::hi(data);
+                self.command[1] = bytes::u16::lo(data);
+                self.command[0] = bytes::u16::hi(data);
                 self.do_command();
             },
 
             0x10 => {
-                self.seed_0[0] = u16::lo(data);
-                self.seed_0[1] = u16::hi(data);
+                self.seed_0[0] = bytes::u16::lo(data);
+                self.seed_0[1] = bytes::u16::hi(data);
             },
             0x12 => {
-                self.seed_0[2] = u16::lo(data);
-                self.seed_0[3] = u16::hi(data);
+                self.seed_0[2] = bytes::u16::lo(data);
+                self.seed_0[3] = bytes::u16::hi(data);
             },
             0x18 => {
-                self.seed_0[4] = u16::lo(data) & 0x7F;
+                self.seed_0[4] = bytes::u16::lo(data) & 0x7F;
             },
             0x14 => {
-                self.seed_1[0] = u16::lo(data);
-                self.seed_1[1] = u16::hi(data);
+                self.seed_1[0] = bytes::u16::lo(data);
+                self.seed_1[1] = bytes::u16::hi(data);
             },
             0x16 => {
-                self.seed_1[2] = u16::lo(data);
-                self.seed_1[3] = u16::hi(data);
+                self.seed_1[2] = bytes::u16::lo(data);
+                self.seed_1[3] = bytes::u16::hi(data);
             },
             0x1A => {
-                self.seed_1[4] = u16::lo(data) & 0x7F;
+                self.seed_1[4] = bytes::u16::lo(data) & 0x7F;
             },
 
             0x0410_0010 => {},   // Data in
@@ -239,22 +271,34 @@ enum CommandEncryptMode {
 /// 
 /// These states relate to the data returned or read by the cart,
 /// via port at 0x0410_0010
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 enum DSCardDataState {
     Dummy,              // 9F, 3C, 3D(?), 
     Header(u32),        // 00 + addr
-    ID(u32),            // 90
+    ID,                 // 90
     Key2,               // 4
-    Key1ID(u32),        // 1
+    Key1ID,             // 1
     SecureBlock(u32),   // 2
     Key2Disable(u32),   // 6
     EnterMain(u32),     // A
     GetData(u32),       // B7
-    Key2ID(u32)         // B8
+    Key2ID              // B8
 }
 
 // Internal
 impl DSCard {
+    fn write_rom_control_hi(&mut self, data: u16) {
+        self.rom_control_hi = RomControlHi::from_bits_truncate(data);
+        if self.rom_control_hi.contains(RomControlHi::START_STAT) {
+            self.transfer_count = match (self.rom_control_hi & RomControlHi::BLOCK_SIZE).bits() >> 8 {
+                0 => 0,
+                7 => 4,
+                n => 0x100 << n
+            };
+        }
+        self.rom_control_hi.insert(RomControlHi::DATA_STATUS);
+    }
+
     fn do_command(&mut self) {
         use CommandEncryptMode::*;
         self.data_state = match self.cmd_encrypt_mode {
@@ -275,7 +319,7 @@ impl DSCard {
                 let addr = (command >> 24) as u32;
                 Header(addr)
             },
-            0x90 => ID(0),
+            0x90 => ID,
             0x3C => {
                 self.cmd_encrypt_mode = CommandEncryptMode::Key1;
                 Dummy
@@ -291,7 +335,7 @@ impl DSCard {
         self.key2_dummy_count = 0x910;
         match command >> 60 {
             0x4 => Key2,
-            0x1 => Key1ID(0),
+            0x1 => Key1ID,
             0x2 => {
                 let block = ((command >> 44) & 0xFFFF) as u32;
                 let addr = block * 0x1000;
@@ -325,7 +369,7 @@ impl DSCard {
                     GetData(0x8000 + (addr & 0x1FF))
                 }
             },
-            0xB8 => Key2ID(0),
+            0xB8 => Key2ID,
             _ => panic!("unrecognised DS card command: {:X} (key2: {:X})", command, u64::from_le_bytes(self.command))
         }
     }
@@ -337,33 +381,42 @@ impl DSCard {
             // TODO: encode?
             return 0;
         }
-        let (data, new_state) = match self.data_state {
-            Dummy => (0xFF, Dummy),
+        let data = match self.data_state {
+            Dummy => 0xFF,
             Header(addr) => if addr >= 0x200 {
-                (0xFF, Dummy)
+                0xFF
             } else {
-                (self.read_card_byte(addr), Header(addr + 1))
+                self.data_state = Header(addr + 1);
+                self.read_card_byte(addr)
             },
-            ID(n) => (0, ID(n + 1)),
-            Key1ID(n) => (0, Key1ID(n + 1)),
-            Key2ID(n) => (0, Key2ID(n + 1)),
+            ID => 0,
+            Key1ID => 0,
+            Key2ID => 0,
             Key2 => {
                 // TODO: calc keys
 
-                (0xFF, Dummy)
+                0xFF
             },
             SecureBlock(addr) => {
                 let data = self.read_card_byte(addr);
-                (self.encrypt_byte_key2(data), SecureBlock(addr + 1))
+                self.data_state = SecureBlock(addr + 1);
+                self.encrypt_byte_key2(data)
             },
-            Key2Disable(n) => (0, Key2Disable(n + 1)),
-            EnterMain(n) => (0, EnterMain(n + 1)),
+            Key2Disable(_) => 0,
+            EnterMain(_) => 0,
             GetData(addr) => {
                 let data = self.read_card_byte(addr);
-                (self.encrypt_byte_key2(data), GetData(addr + 1))
+                self.data_state = GetData(addr + 1);
+                self.encrypt_byte_key2(data)
             }
         };
-        self.data_state = new_state;
+        println!("bytes left: {:X}", self.transfer_count);
+        self.transfer_count -= 1;
+        if self.transfer_count == 0 {
+            self.data_state = Dummy;
+            self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
+            self.interrupt.store(true, Ordering::Release);
+        }
         data
     }
 
