@@ -6,6 +6,7 @@ mod joypad;
 mod ipc;
 mod card;
 mod rtc;
+mod spi;
 
 use arm::{
     ARM7TDMI, ARM9ES, ARMDriver, ARMCore

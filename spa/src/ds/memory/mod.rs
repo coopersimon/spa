@@ -25,7 +25,8 @@ use crate::{
         joypad::DSJoypad,
         interrupt::{Interrupts, InterruptControl},
         card::DSCardIO,
-        rtc::RealTimeClock
+        rtc::RealTimeClock,
+        spi::SPI
     }
 };
 use dma::DMA;
@@ -43,6 +44,7 @@ pub struct MemoryConfig {
     pub save_path:      Option<PathBuf>,
     pub ds9_bios_path:  Option<PathBuf>,
     pub ds7_bios_path:  Option<PathBuf>,
+    pub firmware_path:  Option<PathBuf>
 }
 
 /// Memory bus for DS ARM9 processor.
@@ -76,6 +78,7 @@ impl DS9MemoryBus {
 
         let arm9_bios = BIOS::new_from_file(config.ds9_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
         let arm7_bios = BIOS::new_from_file(config.ds7_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
+        let spi = SPI::new(config.firmware_path.as_ref().map(|p| p.as_path()));
 
         let barrier = Arc::new(Barrier::new(2));
 
@@ -102,6 +105,7 @@ impl DS9MemoryBus {
             timers:             Timers::new(),
             joypad:             DSJoypad::new(),
             rtc:                RealTimeClock::new(),
+            spi:                spi,
             dma:                ds7DMA::new(),
             interrupt_control:  InterruptControl::new(),
             card:               card,
@@ -445,6 +449,7 @@ pub struct DS7MemoryBus {
     timers: Timers,
     joypad: DSJoypad,
     rtc:    RealTimeClock,
+    spi:    SPI,
 
     dma:    ds7DMA,
     interrupt_control:  InterruptControl,
@@ -695,6 +700,7 @@ impl DS7MemoryBus {
         (0x0400_0138, 0x0400_013B, rtc),
         (0x0400_0180, 0x0400_018F, ipc),
         (0x0400_01A0, 0x0400_01BF, card),
+        (0x0400_01C0, 0x0400_01C3, spi),
         (0x0400_0208, 0x0400_0217, interrupt_control)
     }
 }
