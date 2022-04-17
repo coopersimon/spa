@@ -14,7 +14,7 @@ dependencies = [
 [[package]]
 name = "arm"
 version = "0.4.0"
-source = "git+https://github.com/coopersimon/e-arm#6de0dc923b3aaf3d0d77b412fd182676b8352c93"
+source = "git+https://github.com/coopersimon/e-arm#c3a519cbfe189452ac11f95524ca719f39485425"
 dependencies = [
  "bitflags",
  "dynasmrt",
@@ -203,6 +203,10 @@ checksum = "66bcb90ea007ba45fc48d426e28af3e8a653634f9a7174d768dcfe90fa6211f4"
 dependencies = [
  "dasp_sample",
 ]
+
+[[package]]
+name = "dscrypto"
+version = "0.1.0"
 
 [[package]]
 name = "dynasm"
@@ -403,6 +407,7 @@ dependencies = [
  "bitflags",
  "crossbeam-channel",
  "dasp",
+ "dscrypto",
  "fixed",
  "regex",
 ]

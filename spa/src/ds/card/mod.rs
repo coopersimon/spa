@@ -1,4 +1,4 @@
-mod crypto;
+//mod crypto;
 
 use bitflags::bitflags;
 
@@ -125,7 +125,7 @@ impl DSCard {
 
         // Game ID code.
         let id_code = u32::from_le_bytes([buffer[0xC], buffer[0xD], buffer[0xE], buffer[0xF]]);
-        let key1_level2 = crypto::key_1_init(id_code, &key1);
+        let key1_level2 = dscrypto::key1::init(id_code, &key1, 2, 2);
 
         Ok(Self {
             rom_file:   rom_file,
@@ -342,7 +342,7 @@ impl DSCard {
 
     fn key1_command(&mut self) -> DSCardDataState {
         use DSCardDataState::*;
-        let command = crypto::key_1_decrypt(u64::from_le_bytes(self.command), &self.key1);
+        let command = dscrypto::key1::decrypt(u64::from_le_bytes(self.command), &self.key1);
         println!("got command {:X} => {:X}", u64::from_le_bytes(self.command), command);
         self.key2_dummy_count = 0x910;
         match command >> 60 {
@@ -451,7 +451,7 @@ impl DSCard {
 
     #[inline]
     fn encrypt_byte_key2(&mut self, data_in: u8) -> u8 {
-        let (data, key2_0, key2_1) = crypto::key_2_encrypt(data_in, self.key2_0, self.key2_1);
+        let (data, key2_0, key2_1) = dscrypto::key_2_encrypt(data_in, self.key2_0, self.key2_1);
         self.key2_0 = key2_0;
         self.key2_1 = key2_1;
         data

@@ -16,6 +16,9 @@ crossbeam-channel = "0.5"
 version = "0.11"
 features = ["interpolate", "interpolate-sinc", "ring_buffer", "signal"]
 
+[dependencies.dscrypto]
+path = "../dscrypto"
+
 [dependencies.arm]
 git = "https://github.com/coopersimon/e-arm"
 #path = "../../arm"
