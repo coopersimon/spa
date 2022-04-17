@@ -112,7 +112,7 @@ impl RealTimeClock {
     }
 
     fn process_command(&mut self) {
-        println!("got command: {:X}", self.command);
+        //println!("got command: {:X}", self.command);
         use RTCState::*;
         // Should be in format 0110 CCC R : R=Read CCC=Command
         self.state = match (self.command >> 1) & 0b111 {
@@ -127,7 +127,7 @@ impl RealTimeClock {
             _ => unreachable!()
         };
         self.transfer = 8;
-        println!("set command: {:?}", self.state);
+        //println!("set command: {:?}", self.state);
     }
 
     fn read_data(&mut self) -> u8 {
@@ -195,7 +195,6 @@ impl RealTimeClock {
             _ => Ready,
         };
         self.transfer = 8;
-        println!("new state: {:?}", self.state);
     }
 }
 
@@ -216,16 +215,16 @@ impl MemInterface8 for RealTimeClock {
         use RTCState::*;
         match self.state {
             Idle => if !u8::test_bit(data, 2) && u8::test_bit(data, 1) && u8::test_bit(data, 4) { // CS=Low, SCK=High, WRITE
-                println!("READY");
+                //println!("READY");
                 self.state = Ready;
             },
             Ready => if u8::test_bit(data, 2) && u8::test_bit(data, 1) && u8::test_bit(data, 4) { // CS=High, SCK=High, WRITE
-                println!("begin transfer");
+                //println!("begin transfer");
                 self.state = TransferCommand;
                 self.transfer = 8;
             } else if !u8::test_bit(data, 2) { // CS=Low
                 // Command is finished.
-                println!("Done!");
+                //println!("Done!");
                 self.state = Idle;
             },
             TransferCommand => if !u8::test_bit(data, 1) && u8::test_bit(data, 4) { // SCK=Low, WRITE

@@ -74,11 +74,13 @@ impl DS9MemoryBus {
         let (arm9_wram, arm7_wram) = ARM9SharedRAM::new();
         let (ds9_ipc, ds7_ipc) = IPC::new();
         let main_ram = MainRAM::new();
-        let card = DSCardIO::new(&config.rom_path).unwrap();
 
         let arm9_bios = BIOS::new_from_file(config.ds9_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
         let arm7_bios = BIOS::new_from_file(config.ds7_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
         let spi = SPI::new(config.firmware_path.as_ref().map(|p| p.as_path()));
+
+        let key1 = (0..0x412).map(|n| arm7_bios.read_word(0x30 + (n*4))).collect::<Vec<_>>();
+        let card = DSCardIO::new(&config.rom_path, key1).unwrap();
 
         let barrier = Arc::new(Barrier::new(2));
 

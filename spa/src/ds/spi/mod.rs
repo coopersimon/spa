@@ -61,6 +61,13 @@ impl MemInterface16 for SPI {
         }
     }
 
+    fn read_word(&mut self, addr: u32) -> u32 {
+        match addr {
+            0 => self.control.bits() as u32,
+            _ => unreachable!()
+        }
+    }
+
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
             0 => self.control = SPIControl::from_bits_truncate(data),

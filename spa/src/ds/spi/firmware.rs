@@ -19,10 +19,11 @@ enum Instruction {
 
 /// Internal NDS firmware
 pub struct Firmware {
-    instr:  Instruction,
-    addr:   u32,
+    instr:      Instruction,
+    addr:       u32,
 
-    data: Vec<u8>,
+    data:       Vec<u8>,
+    can_read:   bool
 }
 
 impl Firmware {
@@ -40,10 +41,11 @@ impl Firmware {
         };
 
         Ok(Self {
-            instr:  Instruction::None,
-            addr:   0,
+            instr:      Instruction::None,
+            addr:       0,
 
-            data: data,
+            data:       data,
+            can_read:   false,
         })
     }
 
@@ -53,7 +55,14 @@ impl Firmware {
     }
 
     pub fn read(&mut self) -> u8 {
-        self.data[self.addr as usize]
+        if self.can_read {
+            self.can_read = false;
+            let data = self.data[self.addr as usize];
+            self.addr += 1;
+            data
+        } else {
+            0
+        }
     }
 
     pub fn write(&mut self, data: u8) {
@@ -63,12 +72,14 @@ impl Firmware {
                 0x03 => self.instr = Read(3),
                 _ => panic!("unsupported instr {:X}", data),
             },
-            Read(0) => {},  // Dummy write
+            Read(0) => { // Dummy write
+                self.can_read = true;
+            },
             Read(n) => {
-                self.addr |= (data as u32) << ((3 - n) * 8);
+                // Addr written in MSB first
+                self.addr |= (data as u32) << ((n - 1) * 8);
                 self.instr = Read(n-1);
             }
         }
     }
 }
-
