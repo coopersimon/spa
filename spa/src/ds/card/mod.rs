@@ -22,6 +22,19 @@ use crate::utils::{
     bytes,
     meminterface::{MemInterface16, MemInterface32}
 };
+use crate::ds::interrupt::Interrupts;
+
+bitflags!{
+    #[derive(Default)]
+    pub struct GamecardControl: u16 {
+        const NDS_SLOT_ENABLE   = u16::bit(15);
+        const TRANSFER_IRQ      = u16::bit(14);
+        const NDS_SLOT_MODE     = u16::bit(13);
+        const SPI_BUSY          = u16::bit(7);
+        const SPI_HOLD          = u16::bit(6);
+        const SPI_BAUDRATE      = u16::bits(0, 1);
+    }
+}
 
 bitflags!{
     #[derive(Default)]
@@ -33,8 +46,17 @@ bitflags!{
         const TRANSFER_RATE = u16::bit(11);
         const BLOCK_SIZE    = u16::bits(8, 10);
         const DATA_STATUS   = u16::bit(7);
-        const KEY2_ENCRYPT  = u16::bit(6);
+        const KEY2_COMMAND  = u16::bit(6);
         const KEY1_GAP2_LEN = u16::bits(0, 5);
+    }
+}
+
+bitflags!{
+    #[derive(Default)]
+    pub struct RomControlLo: u16 {
+        const KEY2_APPLY    = u16::bit(15);
+        const KEY2_DATA     = u16::bit(13);
+        const KEY1_GAP1_LEN = u16::bits(0, 12);
     }
 }
 
@@ -59,8 +81,12 @@ impl DSCardIO {
         })
     }
 
-    pub fn get_interrupt(&self) -> bool {
-        self.interrupt.load(Ordering::Acquire)
+    pub fn get_interrupt(&self) -> Interrupts {
+        if self.interrupt.swap(false, Ordering::Acquire) {
+            Interrupts::CARD_COMPLETE
+        } else {
+            Interrupts::empty()
+        }
     }
 }
 
@@ -93,8 +119,8 @@ struct DSCard {
     rom_buffer: Vec<u8>,
     buffer_tag: u32,
 
-    spi_control: u16,
-    rom_control_lo: u16,
+    spi_control: GamecardControl,
+    rom_control_lo: RomControlLo,
     rom_control_hi: RomControlHi,
 
     key1: Vec<u32>, // 0x1048 byte key
@@ -132,8 +158,8 @@ impl DSCard {
             rom_buffer: buffer,
             buffer_tag: 0,
 
-            spi_control: 0,
-            rom_control_lo: 0,
+            spi_control: GamecardControl::default(),
+            rom_control_lo: RomControlLo::default(),
             rom_control_hi: RomControlHi::default(),
 
             key1: key1_level2,
@@ -159,9 +185,9 @@ impl MemInterface16 for DSCard {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
             // 0x0400_01A0
-            0x0 => self.spi_control,   // AUXSPICNT
+            0x0 => self.spi_control.bits(),   // AUXSPICNT
             0x2 => 0,   // AUXSPIDATA
-            0x4 => self.rom_control_lo,   // ROMCTRL
+            0x4 => self.rom_control_lo.bits(),   // ROMCTRL
             0x6 => self.rom_control_hi.bits(), // ROMCTRL
             0x8..=0xF => 0,     // Command
             0x10..=0x1B => 0,   // Encryption seeds
@@ -179,8 +205,8 @@ impl MemInterface16 for DSCard {
     fn write_byte(&mut self, addr: u32, data: u8) {
         match addr {
             // 0x0400_01A0
-            0x0 => self.spi_control = bytes::u16::set_lo(self.spi_control, data),   // AUXSPICNT
-            0x1 => self.spi_control = bytes::u16::set_hi(self.spi_control, data),   // AUXSPICNT
+            0x0 => self.spi_control = GamecardControl::from_bits_truncate(bytes::u16::set_lo(self.spi_control.bits(), data)),
+            0x1 => self.spi_control = GamecardControl::from_bits_truncate(bytes::u16::set_hi(self.spi_control.bits(), data)),
 
             0x8..=0xF => {
                 let idx = 0xF - addr;
@@ -214,9 +240,9 @@ impl MemInterface16 for DSCard {
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
             // 0x0400_01A0
-            0x0 => self.spi_control = data,   // AUXSPICNT
+            0x0 => self.spi_control = GamecardControl::from_bits_truncate(data),   // AUXSPICNT
             0x2 => {},   // AUXSPIDATA
-            0x4 => self.rom_control_lo = data,   // ROMCTRL
+            0x4 => self.write_rom_control_lo(data),   // ROMCTRL
             0x6 => self.write_rom_control_hi(data),   // ROMCTRL
 
             0x8 => {
@@ -296,6 +322,14 @@ enum DSCardDataState {
 
 // Internal
 impl DSCard {
+    fn write_rom_control_lo(&mut self, data: u16) {
+        self.rom_control_lo = RomControlLo::from_bits_truncate(data);
+        println!("Set ROMCTRL: {:X}", data);
+        if self.rom_control_lo.contains(RomControlLo::KEY2_APPLY) {
+            self.apply_key2_seeds();
+        }
+    }
+
     fn write_rom_control_hi(&mut self, data: u16) {
         self.rom_control_hi = RomControlHi::from_bits_truncate(data);
         self.rom_control_hi.insert(RomControlHi::DATA_STATUS);
@@ -317,6 +351,11 @@ impl DSCard {
             Key2 => self.key2_command(),
         };
         println!("do command {:?} | block size: {:X}", self.data_state, self.transfer_count);
+    }
+
+    fn apply_key2_seeds(&mut self) {
+        self.key2_0 = u64::from_le_bytes(self.seed_0).reverse_bits() >> 25;
+        self.key2_1 = u64::from_le_bytes(self.seed_1).reverse_bits() >> 25;
     }
 
     fn unencrypted_command(&mut self) -> DSCardDataState {
@@ -348,9 +387,15 @@ impl DSCard {
         match command >> 60 {
             0x4 => {
                 self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
+                if self.spi_control.contains(GamecardControl::TRANSFER_IRQ) {
+                    println!("trigger int");
+                    self.interrupt.store(true, Ordering::Release);
+                }
                 Key2
             },
-            0x1 => Key1ID,
+            0x1 => {
+                Key1ID
+            },
             0x2 => {
                 let block = ((command >> 44) & 0xFFFF) as u32;
                 let addr = block * 0x1000;
@@ -391,11 +436,12 @@ impl DSCard {
 
     fn get_data_out(&mut self) -> u8 {
         use DSCardDataState::*;
-        if self.key2_dummy_count > 0 {
+        /*if self.key2_dummy_count > 0 {
             self.key2_dummy_count -= 1;
             // TODO: encode?
+            println!("return key2 dummy {:X}", self.key2_dummy_count);
             return 0;
-        }
+        }*/
         let data = match self.data_state {
             Dummy => 0xFF,
             Header(addr) => if addr >= 0x200 {
@@ -408,8 +454,10 @@ impl DSCard {
                 let idx = 4 - self.transfer_count;
                 ROM_ID[idx]
             },
-            Key1ID => 0,
-            Key2ID => 0,
+            Key1ID | Key2ID => {
+                let idx = 4 - self.transfer_count;
+                self.encrypt_byte_key2(ROM_ID[idx])
+            },
             Key2 => {
                 // TODO: calc keys
                 self.transfer_count = 1;
@@ -432,7 +480,10 @@ impl DSCard {
         if self.transfer_count == 0 {
             self.data_state = Dummy;
             self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
-            self.interrupt.store(true, Ordering::Release);
+            if self.spi_control.contains(GamecardControl::TRANSFER_IRQ) {
+                println!("trigger int2");
+                self.interrupt.store(true, Ordering::Release);
+            }
         }
         data
     }

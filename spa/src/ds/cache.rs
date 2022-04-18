@@ -87,7 +87,7 @@ impl Mem32 for DS9InternalMem {
 
     fn fetch_instr_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            0..=0x01FF_FFFF => (self.instr_tcm.read_halfword(addr & ITCM_MASK), 1),
+            0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_halfword(addr & ITCM_MASK), 1),
             _ => {
                 // TODO: try instr cache
                 self.mem_bus.fetch_instr_halfword(cycle, addr)
@@ -97,7 +97,7 @@ impl Mem32 for DS9InternalMem {
 
     fn fetch_instr_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            0..=0x01FF_FFFF => (self.instr_tcm.read_word(addr & ITCM_MASK), 1),
+            0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_word(addr & ITCM_MASK), 1),
             _ => {
                 // TODO: try instr cache
                 self.mem_bus.fetch_instr_word(cycle, addr)
@@ -107,7 +107,7 @@ impl Mem32 for DS9InternalMem {
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
         match addr {
-            0..=0x01FF_FFFF => (self.instr_tcm.read_byte(addr & ITCM_MASK), 1),
+            0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_byte(addr & ITCM_MASK), 1),
             _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
                 (self.data_tcm.read_byte(addr - self.data_tcm_start), 1)
             } else {
@@ -118,7 +118,7 @@ impl Mem32 for DS9InternalMem {
     }
     fn store_byte(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u8) -> usize {
         match addr {
-            0..=0x01FF_FFFF => {
+            0x0100_0000..=0x01FF_FFFF => {
                 self.instr_tcm.write_byte(addr & ITCM_MASK, data);
                 1
             },
@@ -134,7 +134,7 @@ impl Mem32 for DS9InternalMem {
 
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            0..=0x01FF_FFFF => (self.instr_tcm.read_halfword(addr & ITCM_MASK), 1),
+            0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_halfword(addr & ITCM_MASK), 1),
             _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
                 (self.data_tcm.read_halfword(addr - self.data_tcm_start), 1)
             } else {
@@ -145,7 +145,7 @@ impl Mem32 for DS9InternalMem {
     }
     fn store_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u16) -> usize {
         match addr {
-            0..=0x01FF_FFFF => {
+            0x0100_0000..=0x01FF_FFFF => {
                 self.instr_tcm.write_halfword(addr & ITCM_MASK, data);
                 1
             },
@@ -161,7 +161,7 @@ impl Mem32 for DS9InternalMem {
 
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            0..=0x01FF_FFFF => (self.instr_tcm.read_word(addr & ITCM_MASK), 1),
+            0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_word(addr & ITCM_MASK), 1),
             _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
                 (self.data_tcm.read_word(addr - self.data_tcm_start), 1)
             } else {
@@ -172,7 +172,7 @@ impl Mem32 for DS9InternalMem {
     }
     fn store_word(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u32) -> usize {
         match addr {
-            0..=0x01FF_FFFF => {
+            0x0100_0000..=0x01FF_FFFF => {
                 self.instr_tcm.write_word(addr & ITCM_MASK, data);
                 1
             },
@@ -263,6 +263,12 @@ impl DS9InternalMem {
             self.data_tcm_end = self.data_tcm_start + DATA_TCM_SIZE;
         }
     }
+
+    // Cache commands
+
+    fn wait_for_interrupt(&mut self) {
+        self.mem_bus.halt = true;
+    }
 }
 
 bitflags!{
@@ -315,7 +321,7 @@ impl CoprocV4 for DS9InternalMem {
             (3, 0) => self.cache_write_buffer_bits = data as u8,
             (5, 0) => self.write_access_permission_bits(data, info),
             (6, _) => self.protection_unit_regions[op_reg] = MemRegion::from_bits_truncate(data),
-            // 7 => cache commands
+            (7, 0) => self.wait_for_interrupt(),
             (9, 1) => self.write_tcm_settings(data, info),
             (_, _) => {},
         };
@@ -353,19 +359,19 @@ impl CoprocV4 for DS9InternalMem {
 }
 
 impl CoprocV5 for DS9InternalMem {
-    fn mcr2(&mut self, dest_reg: usize, op_reg: usize, data: u32, op: u32, info: u32) -> usize {0}
+    fn mcr2(&mut self, _dest_reg: usize, _op_reg: usize, _data: u32, _op: u32, _info: u32) -> usize {0}
 
-    fn mrc2(&mut self, src_reg: usize, op_reg: usize, op: u32, info: u32) -> (u32, usize) {(0,0)}
+    fn mrc2(&mut self, _src_reg: usize, _op_reg: usize, _op: u32, _info: u32) -> (u32, usize) {(0,0)}
 
-    fn mcrr(&mut self, op_reg: usize, data_lo: u32, data_hi: u32, op: u32) -> usize {0}
+    fn mcrr(&mut self, _op_reg: usize, _data_lo: u32, _data_hi: u32, _op: u32) -> usize {0}
 
-    fn mrrc(&mut self, op_reg: usize, op: u32) -> (u32, u32, usize) {(0,0,0)}
+    fn mrrc(&mut self, _op_reg: usize, _op: u32) -> (u32, u32, usize) {(0,0,0)}
     
-    fn ldc2(&mut self, transfer_len: bool, dest_reg: usize, data: u32) -> usize {0}
+    fn ldc2(&mut self, _transfer_len: bool, _dest_reg: usize, _data: u32) -> usize {0}
 
-    fn stc2(&mut self, transfer_len: bool, src_reg: usize) -> (u32, usize) {(0,0)}
+    fn stc2(&mut self, _transfer_len: bool, _src_reg: usize) -> (u32, usize) {(0,0)}
 
-    fn cdp2(&mut self, op: u32, reg_cn: usize, reg_cd: usize, info: u32, reg_cm: usize) -> usize {0}
+    fn cdp2(&mut self, _op: u32, _reg_cn: usize, _reg_cd: usize, _info: u32, _reg_cm: usize) -> usize {0}
 
     fn as_v4<'a>(&'a mut self) -> &'a mut dyn CoprocV4 {
         self
