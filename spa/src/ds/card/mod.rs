@@ -66,19 +66,23 @@ const ROM_BUFFER_SIZE: u32 = 1024;
 const ROM_ID: [u8; 4] = [0xC2, 0x1F, 0x00, 0x00];
 
 /// DS Card attached to IO ports.
-#[derive(Clone)]
 pub struct DSCardIO {
     card:       Arc<Mutex<DSCard>>,
     interrupt:  Arc<AtomicBool>,
 }
 
 impl DSCardIO {
-    pub fn new(rom_path: &Path, key1: Vec<u32>) -> Result<Self> {
-        let interrupt = Arc::new(AtomicBool::new(false));
-        let card = Arc::new(Mutex::new(DSCard::new(rom_path, key1, interrupt.clone())?));
-        Ok(DSCardIO{
-            card, interrupt
-        })
+    pub fn new(rom_path: &Path, key1: Vec<u32>) -> Result<(Self, Self)> {
+        let interrupt_7 = Arc::new(AtomicBool::new(false));
+        let interrupt_9 = Arc::new(AtomicBool::new(false));
+        let card = Arc::new(Mutex::new(DSCard::new(rom_path, key1, interrupt_7.clone(), interrupt_9.clone())?));
+        Ok((DSCardIO{
+            card: card.clone(),
+            interrupt: interrupt_9
+        }, DSCardIO{
+            card: card,
+            interrupt: interrupt_7
+        }))
     }
 
     pub fn get_interrupt(&self) -> Interrupts {
@@ -138,11 +142,12 @@ struct DSCard {
     cmd_encrypt_mode: CommandEncryptMode,
     data_state: DSCardDataState,
 
-    interrupt: Arc<AtomicBool>
+    interrupt_7: Arc<AtomicBool>,
+    interrupt_9: Arc<AtomicBool>
 }
 
 impl DSCard {
-    fn new(rom_path: &Path, key1: Vec<u32>, interrupt: Arc<AtomicBool>) -> Result<Self> {
+    fn new(rom_path: &Path, key1: Vec<u32>, interrupt_7: Arc<AtomicBool>, interrupt_9: Arc<AtomicBool>) -> Result<Self> {
         let mut rom_file = File::open(rom_path)?;
         let mut buffer = vec![0; ROM_BUFFER_SIZE as usize];
 
@@ -176,7 +181,8 @@ impl DSCard {
             cmd_encrypt_mode: CommandEncryptMode::None,
             data_state: DSCardDataState::Dummy,
 
-            interrupt: interrupt,
+            interrupt_7: interrupt_7,
+            interrupt_9: interrupt_9,
         })
     }
 }
@@ -322,6 +328,14 @@ enum DSCardDataState {
 
 // Internal
 impl DSCard {
+    fn trigger_interrupt(&mut self) {
+        if self.spi_control.contains(GamecardControl::TRANSFER_IRQ) {
+            println!("trigger int");
+            self.interrupt_7.store(true, Ordering::Release);
+            self.interrupt_9.store(true, Ordering::Release);
+        }
+    }
+
     fn write_rom_control_lo(&mut self, data: u16) {
         self.rom_control_lo = RomControlLo::from_bits_truncate(data);
         println!("Set ROMCTRL: {:X}", data);
@@ -372,7 +386,7 @@ impl DSCard {
             0x3C => {
                 self.cmd_encrypt_mode = CommandEncryptMode::Key1;
                 self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
-                self.interrupt.store(true, Ordering::Release);
+                self.trigger_interrupt();
                 Dummy
             },
             _ => panic!("unrecognised DS card command: {:X}", command)
@@ -387,10 +401,7 @@ impl DSCard {
         match command >> 60 {
             0x4 => {
                 self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
-                if self.spi_control.contains(GamecardControl::TRANSFER_IRQ) {
-                    println!("trigger int");
-                    self.interrupt.store(true, Ordering::Release);
-                }
+                self.trigger_interrupt();
                 Key2
             },
             0x1 => {
@@ -480,10 +491,7 @@ impl DSCard {
         if self.transfer_count == 0 {
             self.data_state = Dummy;
             self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
-            if self.spi_control.contains(GamecardControl::TRANSFER_IRQ) {
-                println!("trigger int2");
-                self.interrupt.store(true, Ordering::Release);
-            }
+            self.trigger_interrupt();
         }
         data
     }

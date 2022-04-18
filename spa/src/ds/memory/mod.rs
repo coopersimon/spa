@@ -84,7 +84,7 @@ impl DS9MemoryBus {
         let spi = SPI::new(config.firmware_path.as_ref().map(|p| p.as_path()));
 
         let key1 = (0..0x412).map(|n| arm7_bios.read_word(0x30 + (n*4))).collect::<Vec<_>>();
-        let card = DSCardIO::new(&config.rom_path, key1).unwrap();
+        let (card_9, card_7) = DSCardIO::new(&config.rom_path, key1).unwrap();
 
         let barrier = Arc::new(Barrier::new(2));
 
@@ -102,7 +102,7 @@ impl DS9MemoryBus {
             accelerators:       Accelerators::new(),
             dma:                DMA::new(),
             interrupt_control:  InterruptControl::new(),
-            card:               card.clone(),
+            card:               card_9,
             
             counter:            0,
             barrier:            barrier.clone()
@@ -121,7 +121,7 @@ impl DS9MemoryBus {
             spi:                spi,
             dma:                ds7DMA::new(),
             interrupt_control:  InterruptControl::new(),
-            card:               card,
+            card:               card_7,
 
             counter:            0,
             barrier:            barrier
