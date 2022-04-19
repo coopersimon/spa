@@ -488,6 +488,8 @@ impl DS7MemoryBus {
             self.barrier.wait();
         }
 
+        self.card.clock(cycles);
+
         let (timer_irq, _, _) = self.timers.clock(cycles);
         //self.audio.clock(cycles);
 

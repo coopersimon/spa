@@ -57,7 +57,6 @@ impl Firmware {
     pub fn read(&mut self) -> u8 {
         if self.can_read {
             self.can_read = false;
-            println!("Read {:X}", self.addr);
             let data = self.data[self.addr as usize];
             self.addr += 1;
             data

@@ -85,6 +85,11 @@ impl DSCardIO {
         }))
     }
 
+    /// To be called by only the ARM7 processor.
+    pub fn clock(&mut self, cycles: usize) {
+        self.card.lock().unwrap().clock(cycles);
+    }
+
     pub fn get_interrupt(&self) -> Interrupts {
         if self.interrupt.swap(false, Ordering::Acquire) {
             Interrupts::CARD_COMPLETE
@@ -184,6 +189,20 @@ impl DSCard {
             interrupt_7: interrupt_7,
             interrupt_9: interrupt_9,
         })
+    }
+
+    fn clock(&mut self, cycles: usize) {
+        if self.key2_dummy_count > 0 {
+            if self.key2_dummy_count > cycles {
+                // TODO: 1 per cycle?
+                self.key2_dummy_count -= cycles;
+            } else {
+                self.key2_dummy_count = 0;
+                self.rom_control_hi.insert(RomControlHi::DATA_STATUS);
+                self.rom_control_hi.remove(RomControlHi::START_STAT);
+                //self.trigger_interrupt();
+            }
+        }
     }
 }
 
@@ -346,7 +365,6 @@ impl DSCard {
 
     fn write_rom_control_hi(&mut self, data: u16) {
         self.rom_control_hi = RomControlHi::from_bits_truncate(data);
-        self.rom_control_hi.insert(RomControlHi::DATA_STATUS);
         if self.rom_control_hi.contains(RomControlHi::START_STAT) {
             self.transfer_count = match (self.rom_control_hi & RomControlHi::BLOCK_SIZE).bits() >> 8 {
                 0 => 0,
@@ -370,12 +388,14 @@ impl DSCard {
     fn apply_key2_seeds(&mut self) {
         self.key2_0 = u64::from_le_bytes(self.seed_0).reverse_bits() >> 25;
         self.key2_1 = u64::from_le_bytes(self.seed_1).reverse_bits() >> 25;
+        self.trigger_interrupt();
     }
 
     fn unencrypted_command(&mut self) -> DSCardDataState {
         use DSCardDataState::*;
         let command = u64::from_le_bytes(self.command);
         println!("got command {:X}", command);
+        self.rom_control_hi.insert(RomControlHi::DATA_STATUS);
         match command >> 56 {   // Command is MSB
             0x9F => Dummy,
             0x00 => {
@@ -386,7 +406,7 @@ impl DSCard {
             0x3C => {
                 self.cmd_encrypt_mode = CommandEncryptMode::Key1;
                 self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
-                self.trigger_interrupt();
+                //self.trigger_interrupt();
                 Dummy
             },
             _ => panic!("unrecognised DS card command: {:X}", command)
@@ -400,11 +420,11 @@ impl DSCard {
         self.key2_dummy_count = 0x910;
         match command >> 60 {
             0x4 => {
-                self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
-                self.trigger_interrupt();
+                //self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
                 Key2
             },
             0x1 => {
+                //self.trigger_interrupt();
                 Key1ID
             },
             0x2 => {
@@ -418,6 +438,7 @@ impl DSCard {
             },
             0xA => {
                 self.cmd_encrypt_mode = CommandEncryptMode::Key2;
+                //self.trigger_interrupt();
                 EnterMain(0)
             }
             _ => panic!("unrecognised DS card command: {:X} (key1: {:X})", command, u64::from_le_bytes(self.command))
@@ -471,7 +492,7 @@ impl DSCard {
             },
             Key2 => {
                 // TODO: calc keys
-                self.transfer_count = 1;
+                //self.transfer_count = 1;
                 0xFF
             },
             SecureBlock(addr) => {
@@ -487,6 +508,7 @@ impl DSCard {
                 self.encrypt_byte_key2(data)
             }
         };
+        //println!("read data: {:X}", data);
         self.transfer_count -= 1;
         if self.transfer_count == 0 {
             self.data_state = Dummy;

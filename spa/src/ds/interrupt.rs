@@ -38,7 +38,7 @@ bitflags!{
 
 pub struct InterruptControl {
     interrupt_enable:   Interrupts,
-    pub interrupt_req:      Interrupts,
+    interrupt_req:      Interrupts,
     interrupt_master:   bool,
 }
 
