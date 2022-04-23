@@ -1,7 +1,6 @@
 mod memory;
 mod joypad;
 mod interrupt;
-mod constants;
 mod video;
 mod audio;
 

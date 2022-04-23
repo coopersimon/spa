@@ -1,31 +1,30 @@
-/// Video memory
 
-mod registers;
 mod oam;
 mod palette;
+mod registers;
 mod vram;
 
-pub use registers::*;
-pub use palette::PaletteRAM;
 pub use oam::OAM;
-pub use vram::VRAM;
+pub use palette::PaletteRAM;
+pub use registers::*;
+pub use vram::VRAM2D;
 
 pub struct VideoMemory {
     pub registers:  VideoRegisters,
 
     pub oam:        OAM,
     pub palette:    PaletteRAM,
-    pub vram:       VRAM,
+    pub vram:       Box<dyn VRAM2D>,
 }
 
 impl VideoMemory {
-    pub fn new() -> Self {
+    pub fn new(vram: Box<dyn VRAM2D>) -> Self {
         Self {
             registers:  VideoRegisters::new(),
 
             oam:        OAM::new(),
             palette:    PaletteRAM::new(),
-            vram:       VRAM::new(),
+            vram:       vram,
         }
     }
 }

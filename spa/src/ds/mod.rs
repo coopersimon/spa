@@ -7,6 +7,7 @@ mod ipc;
 mod card;
 mod rtc;
 mod spi;
+//mod video;
 
 use arm::{
     ARM7TDMI, ARM9ES, ARMDriver, ARMCore

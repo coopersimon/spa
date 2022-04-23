@@ -7,5 +7,8 @@ pub mod dma;
 pub mod wram;
 pub mod timers;
 pub mod framecomms;
+pub mod videomem;
+pub mod drawing;
+
 #[cfg(feature = "debug")]
 pub mod debug;

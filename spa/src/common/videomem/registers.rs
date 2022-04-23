@@ -9,8 +9,7 @@ use crate::utils::{
     bytes,
     meminterface::MemInterface16
 };
-use crate::gba::interrupt::Interrupts;
-use super::super::background::*;
+use crate::common::drawing::background::*;
 
 bitflags! {
     #[derive(Default)]
@@ -273,28 +272,16 @@ impl VideoRegisters {
         self.bg3_internal_y = I24F8::from_bits(self.bg3_ref_y as i32);
     }
 
-    pub fn v_blank_irq(&self) -> Interrupts {
-        if self.lcd_status.contains(LCDStatus::VBLANK_IRQ | LCDStatus::VBLANK_FLAG) {
-            Interrupts::V_BLANK
-        } else {
-            Interrupts::default()
-        }
+    pub fn v_blank_irq(&self) -> bool {
+        self.lcd_status.contains(LCDStatus::VBLANK_IRQ | LCDStatus::VBLANK_FLAG)
     }
 
-    pub fn h_blank_irq(&self) -> Interrupts {
-        if self.lcd_status.contains(LCDStatus::HBLANK_IRQ | LCDStatus::HBLANK_FLAG)  {
-            Interrupts::H_BLANK
-        } else {
-            Interrupts::default()
-        }
+    pub fn h_blank_irq(&self) -> bool {
+        self.lcd_status.contains(LCDStatus::HBLANK_IRQ | LCDStatus::HBLANK_FLAG)
     }
 
-    pub fn v_count_irq(&self) -> Interrupts {
-        if self.lcd_status.contains(LCDStatus::VCOUNT_IRQ | LCDStatus::VCOUNT_FLAG)  {
-            Interrupts::V_COUNTER
-        } else {
-            Interrupts::default()
-        }
+    pub fn v_count_irq(&self) -> bool {
+        self.lcd_status.contains(LCDStatus::VCOUNT_IRQ | LCDStatus::VCOUNT_FLAG)
     }
 }
 

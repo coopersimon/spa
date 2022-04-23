@@ -1,12 +1,14 @@
 /// Software rendering.
 
+pub mod colour;
+pub mod background;
+
 use fixed::types::I24F8;
-use crate::gba::constants::*;
-use super::{
-    colour::*,
-    super::memory::*,
-    super::background::*
+use crate::common::videomem::{
+    VideoMemory, VideoRegisters, VRAM2D
 };
+use colour::*;
+use background::*;
 
 const VRAM_TILE_BLOCK: u32 = 16 * 1024;
 const TILE_SIZE: u32 = 8;
@@ -15,13 +17,22 @@ const TILE_BYTES_8BPP: u32 = 64;
 const TILE_MAP_SIZE: u32 = 32;
 const VRAM_MAP_BLOCK: u32 = TILE_MAP_SIZE * TILE_MAP_SIZE * 2;
 
+/// Width of bitmap in mode 5.
+const SMALL_BITMAP_WIDTH: u8 = 160;
+/// Height of bitmap in mode 5.
+const SMALL_BITMAP_HEIGHT: u8 = 128;
+const SMALL_BITMAP_LEFT: u8 = (240 - SMALL_BITMAP_WIDTH) / 2;
+const SMALL_BITMAP_TOP: u8 = (160 - SMALL_BITMAP_HEIGHT) / 2;
+
 pub struct SoftwareRenderer {
+    h_res:  usize,
     palette_cache:  PaletteCache
 }
 
 impl SoftwareRenderer {
-    pub fn new() -> Self {
+    pub fn new(h_res: usize) -> Self {
         Self {
+            h_res: h_res,
             palette_cache:  PaletteCache::new()
         }
     }
@@ -88,7 +99,7 @@ impl SoftwareRenderer {
 
             for object_x in 0..width {
                 let x = left.wrapping_add(object_x);
-                if x >= (H_RES as u16) {
+                if x >= (self.h_res as u16) {
                     continue;
                 }
                 if !in_obj_window {
@@ -163,7 +174,7 @@ impl SoftwareRenderer {
     /// The x and y values provided should be scrolled & mosaiced already (i.e., background values and not screen values).
     /// 
     /// If None is returned, the pixel is transparent.
-    fn tile_bg_pixel(&self, bg: &TiledBackgroundData, vram: &VRAM, bg_x: u32, bg_y: u32) -> Option<Colour> {
+    fn tile_bg_pixel(&self, bg: &TiledBackgroundData, vram: &Box<dyn VRAM2D>, bg_x: u32, bg_y: u32) -> Option<Colour> {
         let (x, y) = match bg.layout {
             BackgroundMapLayout::Small => (bg_x % 256, bg_y % 256),
             BackgroundMapLayout::Wide => (bg_x % 512, bg_y % 256),
@@ -225,7 +236,7 @@ impl SoftwareRenderer {
     /// The x and y values provided should be mosaiced already.
     /// 
     /// If 0 is returned, the pixel is transparent.
-    fn affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &VRAM, screen_x: u8, _screen_y: u8) -> Option<Colour> {
+    fn affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &Box<dyn VRAM2D>, screen_x: u8, _screen_y: u8) -> Option<Colour> {
         // Transform from screen space to BG space.
         // Displacement points x0 and y0 are incremented by matrix points B and D respectively
         // after each scanline, simulating (B * y_i) + x_0 and (D * y_i) + x_0
@@ -276,7 +287,7 @@ impl SoftwareRenderer {
     }
 
     /// Draw a bitmap pixel.
-    fn bitmap_bg_pixel(&self, bg: &BitmapBackgroundData, vram: &VRAM, bg_x: u8, bg_y: u8) -> Option<Colour> {
+    fn bitmap_bg_pixel(&self, bg: &BitmapBackgroundData, vram: &Box<dyn VRAM2D>, bg_x: u8, bg_y: u8) -> Option<Colour> {
         if bg.small {
             let bitmap_x = bg_x.wrapping_sub(SMALL_BITMAP_LEFT);
             let bitmap_y = bg_y.wrapping_sub(SMALL_BITMAP_TOP);
@@ -305,12 +316,13 @@ impl SoftwareRenderer {
         // Gather the backgrounds.
         let bg_data = mem.registers.bg_data_for_mode();
 
-        let mut obj_line = vec![None; H_RES];
-        let mut obj_window = vec![false; H_RES];
+        // TODO: don't alloc these every time
+        let mut obj_line = vec![None; self.h_res];
+        let mut obj_window = vec![false; self.h_res];
         if mem.registers.is_obj_enabled() {
             self.draw_obj_line(mem, &mut obj_line, &mut obj_window, line);
         }
-        for x in 0..H_RES {
+        for x in 0..self.h_res {
             let dest = x * 4;
             // Prio 0
             let colour = self.eval_pixel(mem, obj_line[x], obj_window[x], &bg_data, x as u8, line);
