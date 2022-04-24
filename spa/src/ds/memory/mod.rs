@@ -16,7 +16,8 @@ use crate::{
         dma::DMA as ds7DMA,
         timers::Timers,
         wram::WRAM,
-        framecomms::FrameSender
+        framecomms::FrameSender,
+        joypad::Joypad
     },
     utils::{
         meminterface::{MemInterface8, MemInterface16, MemInterface32}
@@ -24,12 +25,13 @@ use crate::{
     ds::{
         maths::Accelerators,
         ipc::IPC,
-        joypad::{DSButtons, DSJoypad},
+        joypad::DSJoypad,
         interrupt::{Interrupts, InterruptControl},
         card::DSCardIO,
         rtc::RealTimeClock,
         spi::SPI,
-        video::{Renderer, DSVideo, ARM7VRAM}
+        video::*,
+        input::UserInput
     }
 };
 use dma::DMA;
@@ -65,7 +67,7 @@ pub struct DS9MemoryBus<R: Renderer> {
     ipc:            IPC,
 
     timers:             Timers,
-    joypad:             DSJoypad,
+    joypad:             Joypad,
     accelerators:       Accelerators,
 
     dma:                DMA,
@@ -74,16 +76,16 @@ pub struct DS9MemoryBus<R: Renderer> {
 
     // sync
     counter:            usize,
-    barrier:            Arc<Barrier>
+    barrier:            Arc<Barrier>,
+    frame_sender:       FrameSender<UserInput>,
 }
 
 impl<R: Renderer> DS9MemoryBus<R> {
-    pub fn new(config: &MemoryConfig, frame_sender: FrameSender<DSButtons>) -> (Self, Box<DS7MemoryBus>) {
+    pub fn new(config: &MemoryConfig, frame_sender: FrameSender<UserInput>) -> (Self, Box<DS7MemoryBus>) {
         let (arm9_wram, arm7_wram) = ARM9SharedRAM::new();
         let (ds9_ipc, ds7_ipc) = IPC::new();
         let main_ram = MainRAM::new();
 
-        //let upper frame_sender.get_frame_buffer(0), frame_sender.get_frame_buffer(1)];
         let (video, arm7_vram) = DSVideo::new(R::new(frame_sender.get_frame_buffer(0), frame_sender.get_frame_buffer(1)));
 
         let arm9_bios = BIOS::new_from_file(config.ds9_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
@@ -107,14 +109,15 @@ impl<R: Renderer> DS9MemoryBus<R> {
 
             ipc:                ds9_ipc,
             timers:             Timers::new(),
-            joypad:             DSJoypad::new(),
+            joypad:             Joypad::new(),
             accelerators:       Accelerators::new(),
             dma:                DMA::new(),
             interrupt_control:  InterruptControl::new(),
             card:               card_9,
             
             counter:            0,
-            barrier:            barrier.clone()
+            barrier:            barrier.clone(),
+            frame_sender:       frame_sender
         }, Box::new(DS7MemoryBus{
             bios:               arm7_bios,
             power_control:      DS7PowerControl::new(),
@@ -127,9 +130,11 @@ impl<R: Renderer> DS9MemoryBus<R> {
 
             ipc:                ds7_ipc,
             timers:             Timers::new(),
-            joypad:             DSJoypad::new(),
+            joypad:             Joypad::new(),
+            ds_joypad:          DSJoypad::new(),
             rtc:                RealTimeClock::new(),
             spi:                spi,
+
             dma:                ds7DMA::new(),
             interrupt_control:  InterruptControl::new(),
             card:               card_7,
@@ -177,7 +182,7 @@ impl <R: Renderer> DS9MemoryBus<R> {
             self.barrier.wait();
         }
 
-        /*let (video_signal, video_irq) = self.video.clock(cycles);
+        let (video_signal, video_irq) = self.video.clock(cycles);
         let vblank = match video_signal {
             Signal::VBlank => {
                 self.dma.on_vblank();
@@ -188,24 +193,37 @@ impl <R: Renderer> DS9MemoryBus<R> {
                 false
             },
             Signal::None => false,
-        };*/
+        };
 
         let (timer_irq, _, _) = self.timers.clock(cycles);
-        //self.audio.clock(cycles);
+        let joypad_irq = if self.joypad.get_interrupt() {
+            Interrupts::KEYPAD
+        } else {
+            Interrupts::empty()
+        };
 
         self.interrupt_control.interrupt_request(
-            //self.joypad.get_interrupt() |
+            joypad_irq |
             Interrupts::from_bits_truncate(timer_irq.into()) |
             self.ipc.get_interrupts() |
-            self.card.get_interrupt()
-            //video_irq
+            self.card.get_interrupt() |
+            video_irq
         );
 
-        false//vblank
+        vblank
     }
 
     fn check_irq(&self) -> bool {
         self.interrupt_control.irq()
+    }
+
+    /// Called when vblank occurs. Halts emulation until the next frame.
+    fn frame_end(&mut self) {
+        //self.game_pak.flush_save();
+
+        let input = self.frame_sender.sync_frame();
+        self.joypad.set_all_buttons(input.buttons);
+        // TODO: send input to ARM7
     }
 }
 
@@ -214,7 +232,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
         if self.do_clock(cycles) {
-            //self.frame_end();
+            self.frame_end();
         }
         //self.do_dma();
 
@@ -222,7 +240,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         if self.halt {
             loop {
                 if self.do_clock(1) {
-                    //self.frame_end();
+                    self.frame_end();
                 }
                 //self.do_dma();
                 if self.check_irq() {
@@ -476,10 +494,11 @@ pub struct DS7MemoryBus {
 
     ipc:    IPC,
 
-    timers: Timers,
-    joypad: DSJoypad,
-    rtc:    RealTimeClock,
-    spi:    SPI,
+    timers:     Timers,
+    joypad:     Joypad,
+    ds_joypad:  DSJoypad,
+    rtc:        RealTimeClock,
+    spi:        SPI,
 
     dma:    ds7DMA,
     interrupt_control:  InterruptControl,
@@ -506,15 +525,20 @@ impl DS7MemoryBus {
         let (timer_irq, _, _) = self.timers.clock(cycles);
         //self.audio.clock(cycles);
 
+        let joypad_irq = if self.joypad.get_interrupt() {
+            Interrupts::KEYPAD
+        } else {
+            Interrupts::empty()
+        };
+
         self.interrupt_control.interrupt_request(
-            //self.joypad.get_interrupt() |
+            joypad_irq |
             Interrupts::from_bits_truncate(timer_irq.into()) |
             self.ipc.get_interrupts() |
             self.card.get_interrupt()
-            //video_irq
         );
 
-        false//vblank
+        false
     }
 
     fn check_irq(&self) -> bool {
@@ -561,8 +585,9 @@ impl Mem32 for DS7MemoryBus {
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_byte(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_byte(addr & 0xFFFF), 1),
 
-            0x0410_0000..=0x0410_0003 => (self.ipc.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
-            0x0410_0010..=0x0410_0013 => (self.card.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
+            0x0400_0241 => (self.shared_wram.get_bank_status(), if cycle.is_non_seq() {4} else {1}),
+            0x0410_0000..=0x0410_0003 => (self.ipc.read_byte(addr), if cycle.is_non_seq() {4} else {1}),
+            0x0410_0010..=0x0410_0013 => (self.card.read_byte(addr), if cycle.is_non_seq() {4} else {1}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), 1),
 
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_byte(addr), 1),
@@ -593,7 +618,7 @@ impl Mem32 for DS7MemoryBus {
 
             0x0410_0010..=0x0410_0013 => {
                 self.card.write_byte(addr, data);
-                if cycle.is_non_seq() {8} else {2}
+                if cycle.is_non_seq() {4} else {1}
             },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_byte(addr, data);
@@ -625,8 +650,8 @@ impl Mem32 for DS7MemoryBus {
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_halfword(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_halfword(addr & 0xFFFF), 1),
 
-            0x0410_0000..=0x0410_0003 => (self.ipc.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
-            0x0410_0010..=0x0410_0013 => (self.card.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
+            0x0410_0000..=0x0410_0003 => (self.ipc.read_halfword(addr), if cycle.is_non_seq() {4} else {1}),
+            0x0410_0010..=0x0410_0013 => (self.card.read_halfword(addr), if cycle.is_non_seq() {4} else {1}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), 1),
 
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_halfword(addr), 1),
@@ -657,7 +682,7 @@ impl Mem32 for DS7MemoryBus {
 
             0x0410_0010..=0x0410_0013 => {
                 self.card.write_halfword(addr, data);
-                if cycle.is_non_seq() {8} else {2}
+                if cycle.is_non_seq() {4} else {1}
             },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_halfword(addr, data);
@@ -689,8 +714,8 @@ impl Mem32 for DS7MemoryBus {
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_word(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_word(addr & 0xFFFF), 1),
 
-            0x0410_0000..=0x0410_0003 => (self.ipc.read_word(addr), if cycle.is_non_seq() {8} else {2}),
-            0x0410_0010..=0x0410_0013 => (self.card.read_word(addr), if cycle.is_non_seq() {8} else {2}),
+            0x0410_0000..=0x0410_0003 => (self.ipc.read_word(addr), if cycle.is_non_seq() {4} else {1}),
+            0x0410_0010..=0x0410_0013 => (self.card.read_word(addr), if cycle.is_non_seq() {4} else {1}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), 1),
 
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_word(addr), 1),
@@ -721,7 +746,7 @@ impl Mem32 for DS7MemoryBus {
 
             0x0410_0010..=0x0410_0013 => {
                 self.card.write_word(addr, data);
-                if cycle.is_non_seq() {8} else {2}
+                if cycle.is_non_seq() {4} else {1}
             },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_word(addr, data);
@@ -751,7 +776,8 @@ impl DS7MemoryBus {
     MemoryBusIO!{
         (0x0400_00B0, 0x0400_00DF, dma),
         (0x0400_0100, 0x0400_010F, timers),
-        (0x0400_0130, 0x0400_0137, joypad),
+        (0x0400_0130, 0x0400_0133, joypad),
+        (0x0400_0136, 0x0400_0137, ds_joypad),
         (0x0400_0138, 0x0400_013B, rtc),
         (0x0400_0180, 0x0400_018F, ipc),
         (0x0400_01A0, 0x0400_01BF, card),

@@ -8,6 +8,7 @@ mod card;
 mod rtc;
 mod spi;
 mod video;
+mod input;
 
 use arm::{
     ARM7TDMI, ARM9ES, ARMDriver, ARMCore
@@ -22,29 +23,16 @@ use memory::{
     DS9MemoryBus, DS7MemoryBus
 };
 use video::Renderer;
-use joypad::DSButtons;
+//use joypad::DSButtons;
+use input::UserInput;
 pub use memory::MemoryConfig;
-
-pub enum Button {
-    A,
-    B,
-    X,
-    Y,
-    Start,
-    Select,
-    Left,
-    Right,
-    Up,
-    Down,
-    L,
-    R
-}
+pub use input::Button;
 
 type RendererType = video::ProceduralRenderer;
 
 pub struct NDS {
-    frame_receiver: FrameRequester<DSButtons>,
-    //buttons_pressed: Buttons,
+    frame_receiver: FrameRequester<UserInput>,
+    current_input:  UserInput
 }
 
 impl NDS {
@@ -80,21 +68,23 @@ impl NDS {
             frame_receiver: frame_receiver,
             //audio_channels: Some(audio_channels),
 //
-            //buttons_pressed: Buttons::from_bits_truncate(0xFFFF),
+            current_input:  UserInput::default()
         }
     }
 
-    /// Drives the emulator and returns a frame.
+    /// Drives the emulator and returns a pair of frames.
     /// 
     /// This should be called at 60fps.
-    /// The frame is in the format R8G8B8A8.
-    pub fn frame(&mut self, frame: &mut [u8]) {
-        //self.frame_receiver.get_frame(frame, self.buttons_pressed);
+    /// The frames are in the format R8G8B8A8.
+    pub fn frame(&mut self, upper_frame: &mut [u8], lower_frame: &mut [u8]) {
+        self.frame_receiver.get_frame(&mut [upper_frame, lower_frame], self.current_input.clone());
     }
 
     pub fn set_button(&mut self, button: Button, pressed: bool) {
-        //self.buttons_pressed.set(button.into(), !pressed);
+        self.current_input.set_button(button, pressed);
     }
+
+    // TODO: touchpad
 }
 
 // Debug
@@ -103,12 +93,12 @@ impl NDS {
     /// Make a new debuggable NDS.
     /// 
     /// Steps through the ARM7 CPU.
-    pub fn new_debug_7(config: MemoryConfig) -> DebugInterface<DSButtons> {
+    pub fn new_debug_7(config: MemoryConfig) -> DebugInterface<UserInput> {
         use crate::common::framecomms::debug::new_debug_frame_comms;
 
         let (render_width, render_height) = (256, 384);//RendererType::render_size();
         let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4, 2);
-        let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, DSButtons::empty());
+        let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, UserInput::default());
 
         let (arm9_bus, arm7_bus) = DS9MemoryBus::<RendererType>::new(&config, frame_sender);
 
@@ -134,12 +124,12 @@ impl NDS {
     /// Make a new debuggable NDS.
     /// 
     /// Steps through the ARM9 CPU.
-    pub fn new_debug_9(config: MemoryConfig) -> DebugInterface<DSButtons> {
+    pub fn new_debug_9(config: MemoryConfig) -> DebugInterface<UserInput> {
         use crate::common::framecomms::debug::new_debug_frame_comms;
 
         let (render_width, render_height) = (256, 384);//RendererType::render_size();
         let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4, 2);
-        let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, DSButtons::empty());
+        let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, UserInput::default());
 
         let (arm9_bus, arm7_bus) = DS9MemoryBus::<RendererType>::new(&config, frame_sender);
 
@@ -186,6 +176,6 @@ fn new_arm7_cpu(mem_bus: Box<DS7MemoryBus>, no_bios: bool, use_jit: bool) -> ARM
 }
 
 fn new_arm9_cpu<R: Renderer>(mem_bus: Box<DS9InternalMem<R>>) -> ARM9ES<DS9InternalMem<R>> {
-    let mut cpu_builder = ARM9ES::new(mem_bus);
+    let cpu_builder = ARM9ES::new(mem_bus);
     cpu_builder.build()
 }

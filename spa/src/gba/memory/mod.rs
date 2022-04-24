@@ -17,10 +17,10 @@ use crate::{
         dma::{DMA, DMAAddress},
         wram::WRAM,
         timers::Timers,
-        framecomms::FrameSender
+        framecomms::FrameSender,
+        joypad::{Joypad, Buttons}
     },
     gba::{
-        joypad::{Joypad, Buttons},
         interrupt::{Interrupts, InterruptControl},
         video::*,
         audio::{GBAAudio, SamplePacket}
@@ -98,10 +98,6 @@ impl<R: Renderer> MemoryBus<R> {
         self.audio.enable_audio(sample_tx, rate_tx);
         (sample_rx, rate_rx)
     }
-
-    /*pub fn set_button(&mut self, buttons: Buttons, pressed: bool) {
-        self.joypad.set_button(buttons, pressed);
-    }*/
 }
 
 // Internal
@@ -199,8 +195,14 @@ impl<R: Renderer> MemoryBus<R> {
         }
         self.audio.clock(cycles);
 
+        let joypad_irq = if self.joypad.get_interrupt() {
+            Interrupts::KEYPAD
+        } else {
+            Interrupts::empty()
+        };
+
         self.interrupt_control.interrupt_request(
-            self.joypad.get_interrupt() |
+            joypad_irq |
             Interrupts::from_bits_truncate(timer_irq) |
             video_irq
         );

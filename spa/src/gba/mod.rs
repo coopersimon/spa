@@ -1,15 +1,18 @@
 mod memory;
-mod joypad;
 mod interrupt;
 mod video;
 mod audio;
+mod input;
 
 use arm::{
     ARM7TDMI, ARMDriver, ARMCore
 };
 use crossbeam_channel::{Receiver, unbounded};
 
-use crate::common::framecomms::{new_frame_comms, FrameRequester};
+use crate::common::{
+    framecomms::{new_frame_comms, FrameRequester},
+    joypad::Buttons
+};
 #[cfg(feature = "debug")]
 use crate::common::debug::DebugInterface;
 use memory::{
@@ -19,20 +22,7 @@ use memory::{
 pub use memory::MemoryConfig;
 use audio::{Resampler, SamplePacket};
 use video::Renderer;
-use joypad::Buttons;
-
-pub enum Button {
-    A,
-    B,
-    Start,
-    Select,
-    Left,
-    Right,
-    Up,
-    Down,
-    L,
-    R
-}
+pub use input::Button;
 
 type RendererType = video::ProceduralRenderer;
 
