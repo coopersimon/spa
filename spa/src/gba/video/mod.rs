@@ -30,6 +30,7 @@ pub struct GBAVideo<R: Renderer> {
     cycle_count:    usize,
     v_count:        u8,
 
+    vram:           VRAM,
     mem:            VideoMemory,
 
     renderer:       R,
@@ -37,13 +38,15 @@ pub struct GBAVideo<R: Renderer> {
 
 impl<R: Renderer> GBAVideo<R> {
     pub fn new(renderer: R) -> Self {
+        let (vram, render_ref) = VRAM::new();
         Self {
             state:          VideoState::Init,
 
             cycle_count:    0,
             v_count:        0,
 
-            mem:            VideoMemory::new(Box::new(VRAM::new())),
+            vram:           vram,
+            mem:            VideoMemory::new(render_ref),
 
             renderer:       renderer,
         }
@@ -80,7 +83,7 @@ impl<R: Renderer> MemInterface16 for GBAVideo<R> {
         match addr {
             0x00..=0x57 => self.mem.registers.read_halfword(addr),
             0x0500_0000..=0x05FF_FFFF => self.mem.palette.read_halfword(addr & 0x3FF),
-            0x0600_0000..=0x06FF_FFFF => self.mem.vram.get_halfword(addr & 0x1_FFFF),
+            0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(addr & 0x1_FFFF),
             0x0700_0000..=0x07FF_FFFF => self.mem.oam.read_halfword(addr & 0x3FF),
             _ => panic!("reading invalid video address {:X}", addr)
         }
@@ -90,7 +93,7 @@ impl<R: Renderer> MemInterface16 for GBAVideo<R> {
         match addr {
             0x00..=0x57 => self.mem.registers.write_halfword(addr, data),
             0x0500_0000..=0x05FF_FFFF => self.mem.palette.write_halfword(addr & 0x3FF, data),
-            0x0600_0000..=0x06FF_FFFF => self.mem.vram.write_halfword(addr & 0x1_FFFF, data),
+            0x0600_0000..=0x06FF_FFFF => self.vram.write_halfword(addr & 0x1_FFFF, data),
             0x0700_0000..=0x07FF_FFFF => self.mem.oam.write_halfword(addr & 0x3FF, data),
             _ => panic!("writing invalid video address {:X}", addr)
         }

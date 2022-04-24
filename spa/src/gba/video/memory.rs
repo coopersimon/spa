@@ -1,6 +1,11 @@
 /// Video memory
 
-use std::convert::TryInto;
+use std::{
+    convert::TryInto,
+    rc::Rc,
+    cell::RefCell
+};
+use crate::utils::meminterface::MemInterface16;
 use crate::common::videomem::VRAM2D;
 
 const VRAM_SIZE: u32 = 96 * 1024;
@@ -8,63 +13,33 @@ const OBJ_VRAM_SIZE: u32 = 32 * 1024;
 
 /// VRAM. Contains tile data, background maps, and bitmaps.
 pub struct VRAM {
-    data: Vec<u8>
+    data: Rc<RefCell<Vec<u8>>>
 }
 
 // Memory interface
 impl VRAM {
-    pub fn new() -> Self {
-        Self {
-            data: vec![0; VRAM_SIZE as usize]
-        }
+    pub fn new() -> (Self, Box<VRAMRenderRef>) {
+        let data = Rc::new(RefCell::new(vec![0; VRAM_SIZE as usize]));
+        (Self {
+            data: data.clone()
+        }, Box::new(VRAMRenderRef{
+            data: data
+        }))
     }
-
-    /*pub fn read_halfword(&self, addr: u32) -> u16 {
-        let start = if addr < VRAM_SIZE {
-            addr
-        } else {
-            addr - OBJ_VRAM_SIZE
-        } as usize;
-        let end = start + 2;
-        let data: [u8; 2] = (self.data[start..end]).try_into().unwrap();
-        u16::from_le_bytes(data)
-    }
-    pub fn write_halfword(&mut self, addr: u32, data: u16) {
-        let start = if addr < VRAM_SIZE {
-            addr
-        } else {
-            addr - OBJ_VRAM_SIZE
-        } as usize;
-        let end = start + 2;
-        for (dest, byte) in self.data[start..end].iter_mut().zip(&data.to_le_bytes()) {
-            *dest = *byte;
-        }
-    }*/
 }
 
-impl VRAM2D for VRAM {
-    /// Read a byte from VRAM.
-    fn get_byte(&self, addr: u32) -> u8 {
-        self.data[addr as usize]
-    }
-
-    //fn read_halfword(&self, addr: u32) -> u16 {
-    //    let start = addr as usize;
-    //    let end = start + 2;
-    //    let data: [u8; 2] = (self.data[start..end]).try_into().unwrap();
-    //    u16::from_le_bytes(data)
-    //}
-
-    fn get_halfword(&self, addr: u32) -> u16 {
+impl MemInterface16 for VRAM {
+    fn read_halfword(&mut self, addr: u32) -> u16 {
         let start = if addr < VRAM_SIZE {
             addr
         } else {
             addr - OBJ_VRAM_SIZE
         } as usize;
         let end = start + 2;
-        let data: [u8; 2] = (self.data[start..end]).try_into().unwrap();
+        let data: [u8; 2] = (self.data.borrow()[start..end]).try_into().unwrap();
         u16::from_le_bytes(data)
     }
+
     fn write_halfword(&mut self, addr: u32, data: u16) {
         let start = if addr < VRAM_SIZE {
             addr
@@ -72,8 +47,26 @@ impl VRAM2D for VRAM {
             addr - OBJ_VRAM_SIZE
         } as usize;
         let end = start + 2;
-        for (dest, byte) in self.data[start..end].iter_mut().zip(&data.to_le_bytes()) {
+        for (dest, byte) in self.data.borrow_mut()[start..end].iter_mut().zip(&data.to_le_bytes()) {
             *dest = *byte;
         }
+    }
+}
+
+/// Used in the renderer.
+pub struct VRAMRenderRef {
+    data: Rc<RefCell<Vec<u8>>>
+}
+
+impl VRAM2D for VRAMRenderRef {
+    fn get_byte(&self, addr: u32) -> u8 {
+        self.data.borrow()[addr as usize]
+    }
+
+    fn get_halfword(&self, addr: u32) -> u16 {
+        let start = addr as usize;
+        let end = start + 2;
+        let data: [u8; 2] = (self.data.borrow()[start..end]).try_into().unwrap();
+        u16::from_le_bytes(data)
     }
 }

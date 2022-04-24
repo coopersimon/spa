@@ -1,9 +1,6 @@
 
 use bitflags::bitflags;
-use crate::utils::{
-    bits::{u8, u16},
-    meminterface::MemInterface16
-};
+use crate::utils::bits::{u8, u16};
 
 bitflags! {
     #[derive(Default)]
@@ -34,10 +31,6 @@ impl TileMapAttrs {
     }
 }
 
-pub struct VRAM {
-    data: Vec<u8>
-}
-
 /// VRAM for 2D rendering.
 /// Contains tile data, background maps, and bitmaps.
 pub trait VRAM2D {
@@ -47,9 +40,6 @@ pub trait VRAM2D {
 
     /// Read a halfword from VRAM.
     fn get_halfword(&self, addr: u32) -> u16;
-
-    /// Read a halfword from VRAM.
-    fn write_halfword(&mut self, addr: u32, data: u16);
 
     /// Get a set of tile map attributes for a regular background.
     fn tile_map_attrs(&self, addr: u32) -> TileMapAttrs {

@@ -114,7 +114,7 @@ pub fn emulated_swi(comment: u32, mem: &mut impl Mem32<Addr = u32>, regs: &[u32;
 }
 
 /*** RESET ***/
-fn register_ram_reset(mem: &mut impl Mem32<Addr = u32>, to_reset: u32) {
+fn register_ram_reset(_mem: &mut impl Mem32<Addr = u32>, to_reset: u32) {
     println!("Register RAM reset: {:X}", to_reset);
 }
 

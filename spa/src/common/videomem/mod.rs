@@ -9,6 +9,7 @@ pub use palette::PaletteRAM;
 pub use registers::*;
 pub use vram::VRAM2D;
 
+// TODO: make generic for VRAM
 pub struct VideoMemory {
     pub registers:  VideoRegisters,
 
