@@ -8,7 +8,7 @@ use crate::utils::meminterface::MemInterface16;
 use crate::common::videomem::VideoMemory;
 use crate::gba::interrupt::Interrupts;
 pub use render::*;
-use memory::VRAM;
+use memory::{VRAM, VRAMRenderRef};
 use constants::*;
 
 /// Signal from the video unit.
@@ -31,7 +31,7 @@ pub struct GBAVideo<R: Renderer> {
     v_count:        u8,
 
     vram:           VRAM,
-    mem:            VideoMemory,
+    mem:            VideoMemory<VRAMRenderRef>,
 
     renderer:       R,
 }

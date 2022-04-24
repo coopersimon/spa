@@ -3,6 +3,7 @@
 use std::sync::{
     Arc, Mutex
 };
+use super::memory::VRAMRenderRef;
 use super::constants::*;
 use crate::common::drawing::SoftwareRenderer;
 use crate::common::videomem::VideoMemory;
@@ -14,7 +15,7 @@ pub trait Renderer {
     fn new(target: RenderTarget) -> Self;
 
     /// Render a single line.
-    fn render_line(&mut self, mem: &mut VideoMemory, line: u8);
+    fn render_line(&mut self, mem: &mut VideoMemory<VRAMRenderRef>, line: u8);
     /// Start rendering the frame.
     fn start_frame(&mut self);
     /// Complete rendering the frame.
@@ -37,7 +38,7 @@ impl Renderer for ProceduralRenderer {
         }
     }
 
-    fn render_line(&mut self, mem: &mut VideoMemory, line: u8) {
+    fn render_line(&mut self, mem: &mut VideoMemory<VRAMRenderRef>, line: u8) {
         self.renderer.setup_caches(mem);
         let start_offset = (line as usize) * (H_RES * 4);
         let end_offset = start_offset + (H_RES * 4);
@@ -72,7 +73,7 @@ impl Renderer for DebugTileRenderer {
         }
     }
 
-    fn render_line(&mut self, mem: &mut VideoMemory, line: u8) {
+    fn render_line(&mut self, mem: &mut VideoMemory<VRAMRenderRef>, line: u8) {
         self.renderer.setup_caches(mem);
         if line == 0 {
             let mut target = self.target.lock().unwrap();

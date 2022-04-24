@@ -18,13 +18,13 @@ pub struct VRAM {
 
 // Memory interface
 impl VRAM {
-    pub fn new() -> (Self, Box<VRAMRenderRef>) {
+    pub fn new() -> (Self, VRAMRenderRef) {
         let data = Rc::new(RefCell::new(vec![0; VRAM_SIZE as usize]));
         (Self {
             data: data.clone()
-        }, Box::new(VRAMRenderRef{
+        }, VRAMRenderRef{
             data: data
-        }))
+        })
     }
 }
 

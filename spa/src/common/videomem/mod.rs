@@ -10,16 +10,16 @@ pub use registers::*;
 pub use vram::VRAM2D;
 
 // TODO: make generic for VRAM
-pub struct VideoMemory {
+pub struct VideoMemory<V: VRAM2D> {
     pub registers:  VideoRegisters,
 
     pub oam:        OAM,
     pub palette:    PaletteRAM,
-    pub vram:       Box<dyn VRAM2D>,
+    pub vram:       V,
 }
 
-impl VideoMemory {
-    pub fn new(vram: Box<dyn VRAM2D>) -> Self {
+impl<V: VRAM2D> VideoMemory<V> {
+    pub fn new(vram: V) -> Self {
         Self {
             registers:  VideoRegisters::new(),
 

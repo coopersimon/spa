@@ -38,7 +38,7 @@ impl SoftwareRenderer {
     }
 
     /// Create caches from dirty memory.
-    pub fn setup_caches(&mut self, mem: &mut VideoMemory) {
+    pub fn setup_caches<V: VRAM2D>(&mut self, mem: &mut VideoMemory<V>) {
         // Refresh palette cache
         if let Some(bg_palette_mem) = mem.palette.ref_bg_palette() {
             self.palette_cache.update_bg(bg_palette_mem);
@@ -48,7 +48,7 @@ impl SoftwareRenderer {
         }
     }
 
-    pub fn draw_line(&self, mem: &VideoMemory, target: &mut [u8], line: u8) {
+    pub fn draw_line<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [u8], line: u8) {
         if mem.registers.in_fblank() {
             for p in target {
                 *p = 0;
@@ -62,7 +62,7 @@ impl SoftwareRenderer {
 // Internal: draw layers
 impl SoftwareRenderer {
     /// Draw object pixels to a target line.
-    fn draw_obj_line(&self, mem: &VideoMemory, target: &mut [Option<ObjectPixel>], obj_window: &mut [bool], y: u8) {
+    fn draw_obj_line<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [Option<ObjectPixel>], obj_window: &mut [bool], y: u8) {
         const OBJECT_VRAM_BASE: u32 = VRAM_TILE_BLOCK * 4;
         let use_1d_tile_mapping = mem.registers.obj_1d_tile_mapping();
         let mosaic_x = mem.registers.obj_mosaic_x();
@@ -174,7 +174,7 @@ impl SoftwareRenderer {
     /// The x and y values provided should be scrolled & mosaiced already (i.e., background values and not screen values).
     /// 
     /// If None is returned, the pixel is transparent.
-    fn tile_bg_pixel(&self, bg: &TiledBackgroundData, vram: &Box<dyn VRAM2D>, bg_x: u32, bg_y: u32) -> Option<Colour> {
+    fn tile_bg_pixel(&self, bg: &TiledBackgroundData, vram: &impl VRAM2D, bg_x: u32, bg_y: u32) -> Option<Colour> {
         let (x, y) = match bg.layout {
             BackgroundMapLayout::Small => (bg_x % 256, bg_y % 256),
             BackgroundMapLayout::Wide => (bg_x % 512, bg_y % 256),
@@ -236,7 +236,7 @@ impl SoftwareRenderer {
     /// The x and y values provided should be mosaiced already.
     /// 
     /// If 0 is returned, the pixel is transparent.
-    fn affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &Box<dyn VRAM2D>, screen_x: u8, _screen_y: u8) -> Option<Colour> {
+    fn affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &impl VRAM2D, screen_x: u8, _screen_y: u8) -> Option<Colour> {
         // Transform from screen space to BG space.
         // Displacement points x0 and y0 are incremented by matrix points B and D respectively
         // after each scanline, simulating (B * y_i) + x_0 and (D * y_i) + x_0
@@ -287,7 +287,7 @@ impl SoftwareRenderer {
     }
 
     /// Draw a bitmap pixel.
-    fn bitmap_bg_pixel(&self, bg: &BitmapBackgroundData, vram: &Box<dyn VRAM2D>, bg_x: u8, bg_y: u8) -> Option<Colour> {
+    fn bitmap_bg_pixel(&self, bg: &BitmapBackgroundData, vram: &impl VRAM2D, bg_x: u8, bg_y: u8) -> Option<Colour> {
         if bg.small {
             let bitmap_x = bg_x.wrapping_sub(SMALL_BITMAP_LEFT);
             let bitmap_y = bg_y.wrapping_sub(SMALL_BITMAP_TOP);
@@ -312,7 +312,7 @@ impl SoftwareRenderer {
 
 // Internal: draw modes
 impl SoftwareRenderer {
-    fn draw(&self, mem: &VideoMemory, target: &mut [u8], line: u8) {
+    fn draw<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [u8], line: u8) {
         // Gather the backgrounds.
         let bg_data = mem.registers.bg_data_for_mode();
 
@@ -332,7 +332,7 @@ impl SoftwareRenderer {
         }
     }
 
-    fn eval_pixel(&self, mem: &VideoMemory, obj_pixel: Option<ObjectPixel>, obj_window: bool, bg_data: &[BackgroundData], x: u8, y: u8) -> Colour {
+    fn eval_pixel<V: VRAM2D>(&self, mem: &VideoMemory<V>, obj_pixel: Option<ObjectPixel>, obj_window: bool, bg_data: &[BackgroundData], x: u8, y: u8) -> Colour {
         let colour_window = || {
             self.window_pixel(&mem.registers, mem.registers.colour_window_mask(), obj_window, x, y)
         };
@@ -380,7 +380,7 @@ impl SoftwareRenderer {
     }
 
     /// Find a pixel value for a particular background.
-    fn bg_pixel(&self, mem: &VideoMemory, bg: &BackgroundData, obj_window: bool, x: u8, y: u8) -> Option<Colour> {
+    fn bg_pixel<V: VRAM2D>(&self, mem: &VideoMemory<V>, bg: &BackgroundData, obj_window: bool, x: u8, y: u8) -> Option<Colour> {
         if !self.window_pixel(&mem.registers, bg.window_mask, obj_window, x, y) {
             return None;
         }
@@ -468,7 +468,7 @@ enum Blended {
 // Debug
 impl SoftwareRenderer {
     /// Debug: Draws the current VRAM in 8bpp format.
-    pub fn draw_8bpp_tiles(&self, mem: &VideoMemory, target: &mut [u8]) {
+    pub fn draw_8bpp_tiles<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [u8]) {
         for y in 0..(48 * 8) {
             // First 48KB.
             let tile_row = y / 8;

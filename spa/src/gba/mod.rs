@@ -46,7 +46,7 @@ pub struct GBA {
 impl GBA {
     pub fn new(config: MemoryConfig) -> Self {
         let (render_width, render_height) = RendererType::render_size();
-        let (frame_sender, frame_receiver) = new_frame_comms(render_width * render_height * 4);
+        let (frame_sender, frame_receiver) = new_frame_comms(render_width * render_height * 4, 1);
         // The below is a bit dumb but it avoids sending the CPU (which introduces a ton of problems).
         // We have to extract the audio receivers from the CPU and get them in the main thread to use
         //   for the audio handler.
@@ -75,7 +75,7 @@ impl GBA {
     /// This should be called at 60fps.
     /// The frame is in the format R8G8B8A8.
     pub fn frame(&mut self, frame: &mut [u8]) {
-        self.frame_receiver.get_frame(frame, self.buttons_pressed);
+        self.frame_receiver.get_frame(&mut [frame], self.buttons_pressed);
     }
 
     pub fn render_size(&mut self) -> (usize, usize) {
@@ -124,7 +124,7 @@ impl GBA {
         use crate::common::framecomms::debug::new_debug_frame_comms;
 
         let (render_width, render_height) = RendererType::render_size();
-        let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4);
+        let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4, 1);
         let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, Buttons::from_bits_truncate(0xFFFF));
 
         std::thread::Builder::new().name("CPU".to_string()).spawn(move || {

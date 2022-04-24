@@ -78,7 +78,7 @@ impl<R: Renderer> MemoryBus<R> {
             game_pak:           game_pak,
             game_pak_control:   GamePakController::new(),
 
-            video:              GBAVideo::new(R::new(frame_sender.get_frame_buffer())),
+            video:              GBAVideo::new(R::new(frame_sender.get_frame_buffer(0))),
 
             audio:              GBAAudio::new(),
 
