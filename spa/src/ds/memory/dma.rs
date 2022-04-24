@@ -6,6 +6,7 @@ use crate::utils::{
     bits::u32,
     meminterface::MemInterface32
 };
+use crate::common::dma::DMAAddress;
 use crate::ds::interrupt::Interrupts;
 
 bitflags!{
@@ -143,21 +144,6 @@ impl MemInterface32 for DMA {
     }
 }
 
-/// Returned by `DMAChannel::next_addrs`.
-pub enum DMAAddress {
-    /// A pair of addresses.
-    Addr{
-        source: u32,
-        dest: u32,
-    },
-    /// Returned when the DMA is complete after this transfer.
-    Done{
-        source: u32,
-        dest: u32,
-        irq: Interrupts,
-    }
-}
-
 /// A single DMA channel.
 pub struct DMAChannel {
     // External control registers
@@ -248,7 +234,7 @@ impl DMAChannel {
             DMAAddress::Done{
                 source: src_addr,
                 dest: dst_addr,
-                irq: self.reset(),
+                irq: self.reset().bits() as u16,
             }
         } else {
             DMAAddress::Addr{
@@ -327,7 +313,7 @@ impl DMAChannel {
         if self.control.contains(Control::END_IRQ) {
             self.interrupt
         } else {
-            Interrupts::default()
+            Interrupts::empty()
         }
     }
 

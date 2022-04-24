@@ -13,7 +13,10 @@ use std::{
 use crate::{
     common::{
         bios::BIOS,
-        dma::DMA as ds7DMA,
+        dma::{
+            DMA as ds7DMA,
+            DMAAddress
+        },
         timers::Timers,
         wram::WRAM,
         framecomms::FrameSender,
@@ -172,6 +175,64 @@ impl <R: Renderer> DS9MemoryBus<R> {
         // TODO
     }*/
 
+    /// Do a DMA transfer if possible.
+    /// 
+    /// This function clocks the memory bus internally.
+    /// It will continue until the transfer is done.
+    fn do_dma(&mut self) {
+        // TODO: keep executing if inside cache?
+        let mut last_active = 4;
+        loop {
+            if let Some(c) = self.dma.get_active() {
+                // Check if DMA channel has changed since last transfer.
+                let access = if last_active != c {
+                    last_active = c;
+                    if self.do_clock(2) {
+                        self.frame_end();
+                    }
+                    arm::MemCycleType::N
+                } else {
+                    arm::MemCycleType::S
+                };
+                // Transfer one piece of data.
+                let cycles = match self.dma.channels[c].next_addrs() {
+                    DMAAddress::Addr {
+                        source, dest
+                    } => if self.dma.channels[c].transfer_32bit_word() {
+                        let (data, load_cycles) = self.load_word(access, source);
+                        let store_cycles = self.store_word(access, dest, data);
+                        load_cycles + store_cycles
+                    } else {
+                        let (data, load_cycles) = self.load_halfword(access, source);
+                        let store_cycles = self.store_halfword(access, dest, data);
+                        load_cycles + store_cycles
+                    },
+                    DMAAddress::Done {
+                        source, dest, irq
+                    } => {
+                        let cycles = if self.dma.channels[c].transfer_32bit_word() {
+                            let (data, load_cycles) = self.load_word(access, source);
+                            let store_cycles = self.store_word(access, dest, data);
+                            load_cycles + store_cycles
+                        } else {
+                            let (data, load_cycles) = self.load_halfword(access, source);
+                            let store_cycles = self.store_halfword(access, dest, data);
+                            load_cycles + store_cycles
+                        };
+                        self.interrupt_control.interrupt_request(Interrupts::from_bits_truncate(irq as u32));
+                        self.dma.set_inactive(c);
+                        cycles
+                    }
+                };
+                if self.do_clock(cycles) {
+                    self.frame_end();
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
     /// Indicate to all of the devices on the memory bus that cycles have passed.
     /// 
     /// Returns true if VBlank occurred, and therefore the frame is ready to be presented.
@@ -234,7 +295,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         if self.do_clock(cycles) {
             self.frame_end();
         }
-        //self.do_dma();
+        self.do_dma();
 
         // Check if CPU is halted.
         if self.halt {
@@ -242,7 +303,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
                 if self.do_clock(1) {
                     self.frame_end();
                 }
-                //self.do_dma();
+                self.do_dma();
                 if self.check_irq() {
                     self.halt = false;
                     return Some(arm::ExternalException::IRQ);
@@ -510,6 +571,64 @@ pub struct DS7MemoryBus {
 
 // Internal
 impl DS7MemoryBus {
+    /// Do a DMA transfer if possible.
+    /// 
+    /// This function clocks the memory bus internally.
+    /// It will continue until the transfer is done.
+    fn do_dma(&mut self) {
+        // TODO: keep executing if inside cache?
+        let mut last_active = 4;
+        loop {
+            if let Some(c) = self.dma.get_active() {
+                // Check if DMA channel has changed since last transfer.
+                let access = if last_active != c {
+                    last_active = c;
+                    if self.do_clock(4) {
+                        //self.frame_end();
+                    }
+                    arm::MemCycleType::N
+                } else {
+                    arm::MemCycleType::S
+                };
+                // Transfer one piece of data.
+                let cycles = match self.dma.channels[c].next_addrs() {
+                    DMAAddress::Addr {
+                        source, dest
+                    } => if self.dma.channels[c].transfer_32bit_word() {
+                        let (data, load_cycles) = self.load_word(access, source);
+                        let store_cycles = self.store_word(access, dest, data);
+                        load_cycles + store_cycles
+                    } else {
+                        let (data, load_cycles) = self.load_halfword(access, source);
+                        let store_cycles = self.store_halfword(access, dest, data);
+                        load_cycles + store_cycles
+                    },
+                    DMAAddress::Done {
+                        source, dest, irq
+                    } => {
+                        let cycles = if self.dma.channels[c].transfer_32bit_word() {
+                            let (data, load_cycles) = self.load_word(access, source);
+                            let store_cycles = self.store_word(access, dest, data);
+                            load_cycles + store_cycles
+                        } else {
+                            let (data, load_cycles) = self.load_halfword(access, source);
+                            let store_cycles = self.store_halfword(access, dest, data);
+                            load_cycles + store_cycles
+                        };
+                        self.interrupt_control.interrupt_request(Interrupts::from_bits_truncate(irq as u32));
+                        self.dma.set_inactive(c);
+                        cycles
+                    }
+                };
+                if self.do_clock(cycles) {
+                    //self.frame_end();
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
     /// Indicate to all of the devices on the memory bus that cycles have passed.
     /// 
     /// Returns true if VBlank occurred, and therefore the frame is ready to be presented.
@@ -553,7 +672,7 @@ impl Mem32 for DS7MemoryBus {
         if self.do_clock(cycles) {
             //self.frame_end();
         }
-        //self.do_dma();
+        self.do_dma();
 
         // Check if CPU is halted.
         if self.power_control.halt {
@@ -561,7 +680,7 @@ impl Mem32 for DS7MemoryBus {
                 if self.do_clock(1) {
                     //self.frame_end();
                 }
-                //self.do_dma();
+                self.do_dma();
                 if self.check_irq() {
                     self.power_control.halt = false;
                     return Some(arm::ExternalException::IRQ);
