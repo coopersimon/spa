@@ -15,7 +15,8 @@ use crate::{
         bios::BIOS,
         dma::DMA as ds7DMA,
         timers::Timers,
-        wram::WRAM
+        wram::WRAM,
+        framecomms::FrameSender
     },
     utils::{
         meminterface::{MemInterface8, MemInterface16, MemInterface32}
@@ -23,11 +24,12 @@ use crate::{
     ds::{
         maths::Accelerators,
         ipc::IPC,
-        joypad::DSJoypad,
+        joypad::{DSButtons, DSJoypad},
         interrupt::{Interrupts, InterruptControl},
         card::DSCardIO,
         rtc::RealTimeClock,
-        spi::SPI
+        spi::SPI,
+        video::{Renderer, DSVideo, ARM7VRAM}
     }
 };
 use dma::DMA;
@@ -50,13 +52,15 @@ pub struct MemoryConfig {
 }
 
 /// Memory bus for DS ARM9 processor.
-pub struct DS9MemoryBus {
+pub struct DS9MemoryBus<R: Renderer> {
     bios:           BIOS,
     post_flag:      DS9PostFlag,
     pub halt:       bool,
 
     main_ram:       MainRAM,
     shared_wram:    ARM9SharedRAM,
+
+    video:          DSVideo<R>,
 
     ipc:            IPC,
 
@@ -73,11 +77,14 @@ pub struct DS9MemoryBus {
     barrier:            Arc<Barrier>
 }
 
-impl DS9MemoryBus {
-    pub fn new(config: &MemoryConfig) -> (Self, Box<DS7MemoryBus>) {
+impl<R: Renderer> DS9MemoryBus<R> {
+    pub fn new(config: &MemoryConfig, frame_sender: FrameSender<DSButtons>) -> (Self, Box<DS7MemoryBus>) {
         let (arm9_wram, arm7_wram) = ARM9SharedRAM::new();
         let (ds9_ipc, ds7_ipc) = IPC::new();
         let main_ram = MainRAM::new();
+
+        //let upper frame_sender.get_frame_buffer(0), frame_sender.get_frame_buffer(1)];
+        let (video, arm7_vram) = DSVideo::new(R::new(frame_sender.get_frame_buffer(0), frame_sender.get_frame_buffer(1)));
 
         let arm9_bios = BIOS::new_from_file(config.ds9_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
         let arm7_bios = BIOS::new_from_file(config.ds7_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
@@ -95,6 +102,8 @@ impl DS9MemoryBus {
 
             main_ram:           main_ram.clone(),
             shared_wram:        arm9_wram,
+
+            video:              video,
 
             ipc:                ds9_ipc,
             timers:             Timers::new(),
@@ -114,6 +123,8 @@ impl DS9MemoryBus {
             wram:               WRAM::new(64 * 1024),
             shared_wram:        arm7_wram,
 
+            vram:               arm7_vram,
+
             ipc:                ds7_ipc,
             timers:             Timers::new(),
             joypad:             DSJoypad::new(),
@@ -130,7 +141,7 @@ impl DS9MemoryBus {
 }
 
 // Internal
-impl DS9MemoryBus {
+impl <R: Renderer> DS9MemoryBus<R> {
     /*fn read_mem_control_abcd(&self) -> u32 {
         0 // TODO
     }
@@ -198,7 +209,7 @@ impl DS9MemoryBus {
     }
 }
 
-impl Mem32 for DS9MemoryBus {
+impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
@@ -439,7 +450,7 @@ impl Mem32 for DS9MemoryBus {
     }
 }
 
-impl DS9MemoryBus {
+impl<R: Renderer> DS9MemoryBus<R> {
     MemoryBusIO!{
         (0x0400_00B0, 0x0400_00EF, dma),
         (0x0400_0100, 0x0400_010F, timers),
@@ -460,6 +471,8 @@ pub struct DS7MemoryBus {
     main_ram:       MainRAM,
     wram:           WRAM,
     shared_wram:    ARM7SharedRAM,
+
+    vram:           ARM7VRAM,
 
     ipc:    IPC,
 
@@ -552,6 +565,8 @@ impl Mem32 for DS7MemoryBus {
             0x0410_0010..=0x0410_0013 => (self.card.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), 1),
 
+            0x0600_0000..=0x06FF_FFFF => (self.vram.read_byte(addr), 1),
+
             // TODO: GBA slot
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_0(cycle)),
             //0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_1(cycle)),
@@ -585,6 +600,11 @@ impl Mem32 for DS7MemoryBus {
                 1
             },
 
+            0x0600_0000..=0x06FF_FFFF => {
+                self.vram.write_byte(addr, data);
+                1
+            },
+
             // TODO: GBA slot
             //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
             //0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle),
@@ -608,6 +628,8 @@ impl Mem32 for DS7MemoryBus {
             0x0410_0000..=0x0410_0003 => (self.ipc.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
             0x0410_0010..=0x0410_0013 => (self.card.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), 1),
+
+            0x0600_0000..=0x06FF_FFFF => (self.vram.read_halfword(addr), 1),
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_0(cycle)),
@@ -642,6 +664,11 @@ impl Mem32 for DS7MemoryBus {
                 1
             },
 
+            0x0600_0000..=0x06FF_FFFF => {
+                self.vram.write_halfword(addr, data);
+                1
+            },
+
             // Cart
             //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
             //0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle),
@@ -665,6 +692,8 @@ impl Mem32 for DS7MemoryBus {
             0x0410_0000..=0x0410_0003 => (self.ipc.read_word(addr), if cycle.is_non_seq() {8} else {2}),
             0x0410_0010..=0x0410_0013 => (self.card.read_word(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), 1),
+
+            0x0600_0000..=0x06FF_FFFF => (self.vram.read_word(addr), 1),
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_0(cycle) << 1),
@@ -696,6 +725,11 @@ impl Mem32 for DS7MemoryBus {
             },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_word(addr, data);
+                1
+            },
+
+            0x0600_0000..=0x06FF_FFFF => {
+                self.vram.write_word(addr, data);
                 1
             },
 

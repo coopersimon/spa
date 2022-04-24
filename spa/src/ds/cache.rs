@@ -15,7 +15,10 @@ use crate::{
     utils::bits::u32,
     common::wram::WRAM,
 };
-use super::memory::DS9MemoryBus;
+use super::{
+    memory::DS9MemoryBus,
+    video::Renderer
+};
 
 const INSTR_TCM_SIZE: u32 = 32 * 1024;
 const ITCM_MASK: u32 = INSTR_TCM_SIZE - 1;
@@ -23,14 +26,14 @@ const DATA_TCM_SIZE: u32 = 16 * 1024;
 
 /// ARM9 on-chip memory.
 /// Includes Cache and TCM.
-pub struct DS9InternalMem {
+pub struct DS9InternalMem<R: Renderer> {
 
     instr_tcm:  WRAM,
     data_tcm:   WRAM,
 
     // TODO: cache
 
-    mem_bus: DS9MemoryBus,
+    mem_bus: DS9MemoryBus<R>,
 
     control_reg: CP15Control,
 
@@ -50,8 +53,8 @@ pub struct DS9InternalMem {
     data_tcm_end:   u32,
 }
 
-impl DS9InternalMem {
-    pub fn new(mem_bus: DS9MemoryBus) -> Self {
+impl<R: Renderer> DS9InternalMem<R> {
+    pub fn new(mem_bus: DS9MemoryBus<R>) -> Self {
         Self {
             instr_tcm:  WRAM::new(INSTR_TCM_SIZE as usize),
             data_tcm:   WRAM::new(DATA_TCM_SIZE as usize),
@@ -78,7 +81,7 @@ impl DS9InternalMem {
     }
 }
 
-impl Mem32 for DS9InternalMem {
+impl<R: Renderer> Mem32 for DS9InternalMem<R> {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<ExternalException> {
@@ -188,7 +191,7 @@ impl Mem32 for DS9InternalMem {
 }
 
 // CP15 register functions
-impl DS9InternalMem {
+impl<R: Renderer> DS9InternalMem<R> {
     fn read_id_code(&self, info: u32) -> u32 {
         /// 41=ARM
         /// 05=ARMv5TE
@@ -304,13 +307,13 @@ bitflags!{
     }
 }
 
-impl ARM9Mem for DS9InternalMem {
+impl<R: Renderer> ARM9Mem for DS9InternalMem<R> {
     fn mut_cp15<'a>(&'a mut self) -> &'a mut dyn CoprocV5 {
         self
     }
 }
 
-impl CoprocV4 for DS9InternalMem {
+impl<R: Renderer> CoprocV4 for DS9InternalMem<R> {
     /// Transfer from ARM register to Coproc register.
     fn mcr(&mut self, dest_reg: usize, op_reg: usize, data: u32, _op: u32, info: u32) -> usize {
         // opcode should always be 0.
@@ -358,7 +361,7 @@ impl CoprocV4 for DS9InternalMem {
     fn cdp(&mut self, _op: u32, _reg_cn: usize, _reg_cd: usize, _info: u32, _reg_cm: usize) -> usize {0}
 }
 
-impl CoprocV5 for DS9InternalMem {
+impl<R: Renderer> CoprocV5 for DS9InternalMem<R> {
     fn mcr2(&mut self, _dest_reg: usize, _op_reg: usize, _data: u32, _op: u32, _info: u32) -> usize {0}
 
     fn mrc2(&mut self, _src_reg: usize, _op_reg: usize, _op: u32, _info: u32) -> (u32, usize) {(0,0)}

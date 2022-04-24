@@ -7,7 +7,7 @@ mod ipc;
 mod card;
 mod rtc;
 mod spi;
-//mod video;
+mod video;
 
 use arm::{
     ARM7TDMI, ARM9ES, ARMDriver, ARMCore
@@ -16,10 +16,12 @@ use crossbeam_channel::{Sender, Receiver, unbounded};
 
 #[cfg(feature = "debug")]
 use crate::common::debug::DebugInterface;
+use crate::common::framecomms::{new_frame_comms, FrameRequester};
 use cache::DS9InternalMem;
 use memory::{
     DS9MemoryBus, DS7MemoryBus
 };
+use video::Renderer;
 use joypad::DSButtons;
 pub use memory::MemoryConfig;
 
@@ -38,19 +40,22 @@ pub enum Button {
     R
 }
 
+type RendererType = video::ProceduralRenderer;
+
 pub struct NDS {
+    frame_receiver: FrameRequester<DSButtons>,
     //buttons_pressed: Buttons,
 }
 
 impl NDS {
     pub fn new(config: MemoryConfig) -> Self {
-        //let (render_width, render_height) = RendererType::render_size();
-        //let (frame_sender, frame_receiver) = new_frame_comms(render_width * render_height * 4);
+        let (render_width, render_height) = RendererType::render_size();
+        let (frame_sender, frame_receiver) = new_frame_comms(render_width * render_height * 4, 2);
         // The below is a bit dumb but it avoids sending the CPU (which introduces a ton of problems).
         // We have to extract the audio receivers from the CPU and get them in the main thread to use
         //   for the audio handler.
         //let (channel_sender, channel_receiver) = unbounded();
-        let (arm9_bus, arm7_bus) = DS9MemoryBus::new(&config);
+        let (arm9_bus, arm7_bus) = DS9MemoryBus::<RendererType>::new(&config, frame_sender);
 
         std::thread::Builder::new().name("ARM9-CPU".to_string()).spawn(move || {
             let internal_mem = Box::new(DS9InternalMem::new(arm9_bus));
@@ -72,7 +77,7 @@ impl NDS {
 
         //let audio_channels = channel_receiver.recv().unwrap();
         Self {
-            //frame_receiver: frame_receiver,
+            frame_receiver: frame_receiver,
             //audio_channels: Some(audio_channels),
 //
             //buttons_pressed: Buttons::from_bits_truncate(0xFFFF),
@@ -102,10 +107,10 @@ impl NDS {
         use crate::common::framecomms::debug::new_debug_frame_comms;
 
         let (render_width, render_height) = (256, 384);//RendererType::render_size();
-        let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4);
-        let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, DSButtons::default());
+        let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4, 2);
+        let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, DSButtons::empty());
 
-        let (arm9_bus, arm7_bus) = DS9MemoryBus::new(&config);
+        let (arm9_bus, arm7_bus) = DS9MemoryBus::<RendererType>::new(&config, frame_sender);
 
         std::thread::Builder::new().name("ARM9-CPU".to_string()).spawn(move || {
             let internal_mem = Box::new(DS9InternalMem::new(arm9_bus));
@@ -133,10 +138,10 @@ impl NDS {
         use crate::common::framecomms::debug::new_debug_frame_comms;
 
         let (render_width, render_height) = (256, 384);//RendererType::render_size();
-        let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4);
-        let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, DSButtons::default());
+        let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4, 2);
+        let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, DSButtons::empty());
 
-        let (arm9_bus, arm7_bus) = DS9MemoryBus::new(&config);
+        let (arm9_bus, arm7_bus) = DS9MemoryBus::<RendererType>::new(&config, frame_sender);
 
         std::thread::Builder::new().name("ARM9-CPU".to_string()).spawn(move || {
             let internal_mem = Box::new(DS9InternalMem::new(arm9_bus));
@@ -180,7 +185,7 @@ fn new_arm7_cpu(mem_bus: Box<DS7MemoryBus>, no_bios: bool, use_jit: bool) -> ARM
     }
 }
 
-fn new_arm9_cpu(mem_bus: Box<DS9InternalMem>) -> ARM9ES<DS9InternalMem> {
+fn new_arm9_cpu<R: Renderer>(mem_bus: Box<DS9InternalMem<R>>) -> ARM9ES<DS9InternalMem<R>> {
     let mut cpu_builder = ARM9ES::new(mem_bus);
     cpu_builder.build()
 }
