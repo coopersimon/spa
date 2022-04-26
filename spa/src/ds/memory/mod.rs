@@ -395,7 +395,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3_FFFF), if cycle.is_non_seq() {18} else {2}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {18} else {2}),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -421,7 +421,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
     fn store_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u16) -> usize {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
-                self.main_ram.write_halfword(addr & 0x3_FFFF, data);
+                self.main_ram.write_halfword(addr & 0x3F_FFFF, data);
                 if cycle.is_non_seq() {18} else {2}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
@@ -460,7 +460,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3_FFFF), if cycle.is_non_seq() {20} else {4}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {20} else {4}),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -486,7 +486,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
     fn store_word(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u32) -> usize {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
-                self.main_ram.write_word(addr & 0x3_FFFF, data);
+                self.main_ram.write_word(addr & 0x3F_FFFF, data);
                 if cycle.is_non_seq() {20} else {4}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
@@ -765,7 +765,7 @@ impl Mem32 for DS7MemoryBus {
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
             0x0000_0000..=0x0000_3FFF => (self.bios.read_halfword(addr), 1),
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3_FFFF), if cycle.is_non_seq() {9} else {1}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {9} else {1}),
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_halfword(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_halfword(addr & 0xFFFF), 1),
 
@@ -787,7 +787,7 @@ impl Mem32 for DS7MemoryBus {
     fn store_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u16) -> usize {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
-                self.main_ram.write_halfword(addr & 0x3_FFFF, data);
+                self.main_ram.write_halfword(addr & 0x3F_FFFF, data);
                 if cycle.is_non_seq() {9} else {1}
             },
             0x0300_0000..=0x037F_FFFF => {  // Shared RAM
@@ -829,7 +829,7 @@ impl Mem32 for DS7MemoryBus {
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
             0x0000_0000..=0x0000_3FFF => (self.bios.read_word(addr), 1),
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3_FFFF), if cycle.is_non_seq() {10} else {2}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {10} else {2}),
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_word(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_word(addr & 0xFFFF), 1),
 
@@ -851,7 +851,7 @@ impl Mem32 for DS7MemoryBus {
     fn store_word(&mut self, cycle: MemCycleType, addr: Self::Addr, data: u32) -> usize {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
-                self.main_ram.write_word(addr & 0x3_FFFF, data);
+                self.main_ram.write_word(addr & 0x3F_FFFF, data);
                 if cycle.is_non_seq() {10} else {2}
             },
             0x0300_0000..=0x037F_FFFF => {  // Shared RAM
