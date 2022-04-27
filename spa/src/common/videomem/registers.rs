@@ -33,25 +33,6 @@ bitflags! {
 
 bitflags! {
     #[derive(Default)]
-    struct LCDStatus: u16 {
-        const VCOUNT        = u16::bits(8, 15);
-        const VCOUNT_IRQ    = u16::bit(5);
-        const HBLANK_IRQ    = u16::bit(4);
-        const VBLANK_IRQ    = u16::bit(3);
-        const VCOUNT_FLAG   = u16::bit(2);
-        const HBLANK_FLAG   = u16::bit(1);
-        const VBLANK_FLAG   = u16::bit(0);
-    }
-}
-
-impl LCDStatus {
-    fn get_flags(self) -> LCDStatus {
-        self & (LCDStatus::VBLANK_FLAG | LCDStatus::HBLANK_FLAG | LCDStatus::VCOUNT_FLAG)
-    }
-}
-
-bitflags! {
-    #[derive(Default)]
     struct BGControl: u16 {
         const SCREEN_SIZE   = u16::bits(14, 15);
         const OVERFLOW      = u16::bit(13);
@@ -167,8 +148,6 @@ impl Into<ColourEffect> for ColourSpecialControl {
 #[derive(Default)]
 pub struct VideoRegisters {
     lcd_control:    LCDControl,
-    lcd_status:     LCDStatus,
-    vcount:         u8,
 
     bg0_control:    BGControl,
     bg1_control:    BGControl,
@@ -240,20 +219,8 @@ impl VideoRegisters {
         Self::default()
     }
 
-    /// Set V-blank.
-    pub fn set_v_blank(&mut self, enable: bool) {
-        self.lcd_status.set(LCDStatus::VBLANK_FLAG, enable);
-    }
-
-    /// Set H-blank.
-    pub fn set_h_blank(&mut self, enable: bool) {
-        self.lcd_status.set(LCDStatus::HBLANK_FLAG, enable);
-    }
-
     /// Increment v-count by one.
     pub fn inc_v_count(&mut self) {
-        self.vcount += 1;
-        self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.vcount == bytes::u16::hi(self.lcd_status.bits()));
         // Increment internal x & y affine transform offset points.
         // This is important for HDMA-based "mode 7" effects with affine backgrounds.
         self.bg2_internal_x += self.bg2_internal_b;
@@ -264,24 +231,10 @@ impl VideoRegisters {
 
     /// Reset v-count to zero.
     pub fn reset_v_count(&mut self) {
-        self.vcount = 0;
-        self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.vcount == bytes::u16::hi(self.lcd_status.bits()));
         self.bg2_internal_x = I24F8::from_bits(self.bg2_ref_x as i32);
         self.bg2_internal_y = I24F8::from_bits(self.bg2_ref_y as i32);
         self.bg3_internal_x = I24F8::from_bits(self.bg3_ref_x as i32);
         self.bg3_internal_y = I24F8::from_bits(self.bg3_ref_y as i32);
-    }
-
-    pub fn v_blank_irq(&self) -> bool {
-        self.lcd_status.contains(LCDStatus::VBLANK_IRQ | LCDStatus::VBLANK_FLAG)
-    }
-
-    pub fn h_blank_irq(&self) -> bool {
-        self.lcd_status.contains(LCDStatus::HBLANK_IRQ | LCDStatus::HBLANK_FLAG)
-    }
-
-    pub fn v_count_irq(&self) -> bool {
-        self.lcd_status.contains(LCDStatus::VCOUNT_IRQ | LCDStatus::VCOUNT_FLAG)
     }
 }
 
@@ -673,8 +626,8 @@ impl MemInterface16 for VideoRegisters {
         match addr {
             0x0 => self.lcd_control.bits(),
             0x2 => 0, // TODO: green swap
-            0x4 => self.lcd_status.bits(),
-            0x6 => self.vcount as u16,
+            //0x4 => 0, LCD_STAT
+            //0x6 => 0, V_COUNT
             0x8 => self.bg0_control.bits(),
             0xA => self.bg1_control.bits(),
             0xC => self.bg2_control.bits(),
@@ -723,8 +676,8 @@ impl MemInterface16 for VideoRegisters {
         match addr {
             0x0 => self.lcd_control = LCDControl::from_bits_truncate(data),
             0x2 => {}, // TODO: green swap
-            0x4 => self.set_lcd_status(data),
-            0x6 => {},
+            //0x4 => LCD_STAT
+            //0x6 => V_COUNT
             0x8 => self.bg0_control = BGControl::from_bits_truncate(data),
             0xA => self.bg1_control = BGControl::from_bits_truncate(data),
             0xC => self.bg2_control = BGControl::from_bits_truncate(data),
@@ -833,15 +786,6 @@ impl MemInterface16 for VideoRegisters {
             0x56 => {},
             _ => panic!("writing to invalid video register address {:X}", addr)
         }
-    }
-}
-
-// Internal
-impl VideoRegisters {
-    fn set_lcd_status(&mut self, data: u16) {
-        let old_flags = self.lcd_status.get_flags();
-        let lcd_status = LCDStatus::from_bits_truncate(data & 0xFFF8);
-        self.lcd_status = lcd_status | old_flags;
     }
 }
 

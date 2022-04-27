@@ -17,7 +17,7 @@ pub trait Renderer {
     /// Render a single line.
     fn render_line(&mut self, mem: &mut VideoMemory<VRAMRenderRef>, line: u8);
     /// Start rendering the frame.
-    fn start_frame(&mut self);
+    fn start_frame(&mut self, mem: &mut VideoMemory<VRAMRenderRef>);
     /// Complete rendering the frame.
     fn finish_frame(&mut self);
     /// Get the size of the render target in pixels.
@@ -44,10 +44,11 @@ impl Renderer for ProceduralRenderer {
         let end_offset = start_offset + (H_RES * 4);
         let mut target = self.target.lock().unwrap();
         self.renderer.draw_line(mem, &mut target[start_offset..end_offset], line);
+        mem.registers.inc_v_count();
     }
 
-    fn start_frame(&mut self) {
-        //println!("Start frame");
+    fn start_frame(&mut self, mem: &mut VideoMemory<VRAMRenderRef>) {
+        mem.registers.reset_v_count();
     }
 
     fn finish_frame(&mut self) {
@@ -81,7 +82,7 @@ impl Renderer for DebugTileRenderer {
         }
     }
 
-    fn start_frame(&mut self) {
+    fn start_frame(&mut self, mem: &mut VideoMemory<VRAMRenderRef>) {
         //println!("Start frame");
     }
 
