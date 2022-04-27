@@ -32,151 +32,174 @@ pub enum LCDC {
 }
 
 pub enum ARM7 {
-    LO,
-    HI
+    Lo,
+    Hi
 }
 
 pub enum EngineA {
-    BG_0,
-    BG_01,
-    BG_02,
-    BG_03,
-    BG_1,
-    BG_2,
-    BG_3,
+    Bg0,
+    Bg01,
+    Bg02,
+    Bg03,
+    Bg1,
+    Bg2,
+    Bg3,
 
-    OBJ_0,
-    OBJ_01,
-    OBJ_02,
-    OBJ_03,
-    OBJ_1,
+    Obj0,
+    Obj01,
+    Obj02,
+    Obj03,
+    Obj1,
 
-    BG_EXT_PALETTE_0,
-    BG_EXT_PALETTE_2,
+    BgExtPalette0,
+    BgExtPalette2,
 
-    OBJ_EXT_PALETTE,
+    ObjExtPalette,
 }
 
 pub enum EngineB {
-    BG_0,
-    BG_01,
+    Bg0,
+    Bg01,
 
-    OBJ,
+    Obj,
 
-    BG_EXT_PALETTE,
-    OBJ_EXT_PALETTE,
+    BgExtPalette,
+    ObjExtPalette,
 }
 
 pub enum Texture {
-    TEX_0,
-    TEX_1,
-    TEX_2,
-    TEX_3,
+    Tex0,
+    Tex1,
+    Tex2,
+    Tex3,
 
-    PALETTE_0,
-    PALETTE_1,
-    PALETTE_4,
-    PALETTE_5,
+    Palette0,
+    Palette1,
+    Palette4,
+    Palette5,
 }
 
 impl VRAMControl {
-    pub fn slot_ab(self) -> Slot {
+    pub fn slot_ab(self, lcdc: LCDC) -> Slot {
         match (self & VRAMControl::MST).bits() {
             0b01 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
-                0b00 => EngineA::BG_0,
-                0b01 => EngineA::BG_1,
-                0b10 => EngineA::BG_2,
-                _    => EngineA::BG_3,
+                0b00 => EngineA::Bg0,
+                0b01 => EngineA::Bg1,
+                0b10 => EngineA::Bg2,
+                _    => EngineA::Bg3,
             }),
             0b10 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
-                0 => EngineA::OBJ_0,
-                _ => EngineA::OBJ_1
+                0 => EngineA::Obj0,
+                _ => EngineA::Obj1
             }),
             0b11 => Slot::Texture(match (self & VRAMControl::OFFSET).bits() {
-                0b00 => Texture::TEX_0,
-                0b01 => Texture::TEX_1,
-                0b10 => Texture::TEX_2,
-                _    => Texture::TEX_3,
+                0b00 => Texture::Tex0,
+                0b01 => Texture::Tex1,
+                0b10 => Texture::Tex2,
+                _    => Texture::Tex3,
             }),
-            _ => Slot::LCDC(LCDC::A),
+            _ => Slot::LCDC(lcdc),
         }
     }
 
-    pub fn slot_cd(self) -> Slot {
+    pub fn slot_c(self) -> Slot {
         match (self & VRAMControl::MST).bits() {
             0b001 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
-                0b00 => EngineA::BG_0,
-                0b01 => EngineA::BG_1,
-                0b10 => EngineA::BG_2,
-                _    => EngineA::BG_3,
+                0b00 => EngineA::Bg0,
+                0b01 => EngineA::Bg1,
+                0b10 => EngineA::Bg2,
+                _    => EngineA::Bg3,
             }),
             0b010 => Slot::ARM7(match (self & VRAMControl::OFFSET).bits() {
-                0 => ARM7::LO,
-                _ => ARM7::HI
+                0 => ARM7::Lo,
+                _ => ARM7::Hi
             }),
             0b011 => Slot::Texture(match (self & VRAMControl::OFFSET).bits() {
-                0b00 => Texture::TEX_0,
-                0b01 => Texture::TEX_1,
-                0b10 => Texture::TEX_2,
-                _    => Texture::TEX_3,
+                0b00 => Texture::Tex0,
+                0b01 => Texture::Tex1,
+                0b10 => Texture::Tex2,
+                _    => Texture::Tex3,
             }),
-            0b100 => Slot::EngineB(EngineB::BG_0),  // TODO: D=OBJ
+            0b100 => Slot::EngineB(EngineB::Bg0),
             _ => Slot::LCDC(LCDC::C),
+        }
+    }
+
+    pub fn slot_d(self) -> Slot {
+        match (self & VRAMControl::MST).bits() {
+            0b001 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
+                0b00 => EngineA::Bg0,
+                0b01 => EngineA::Bg1,
+                0b10 => EngineA::Bg2,
+                _    => EngineA::Bg3,
+            }),
+            0b010 => Slot::ARM7(match (self & VRAMControl::OFFSET).bits() {
+                0 => ARM7::Lo,
+                _ => ARM7::Hi
+            }),
+            0b011 => Slot::Texture(match (self & VRAMControl::OFFSET).bits() {
+                0b00 => Texture::Tex0,
+                0b01 => Texture::Tex1,
+                0b10 => Texture::Tex2,
+                _    => Texture::Tex3,
+            }),
+            0b100 => Slot::EngineB(EngineB::Obj),
+            _ => Slot::LCDC(LCDC::D),
         }
     }
 
     pub fn slot_e(self) -> Slot {
         match (self & VRAMControl::MST).bits() {
-            0b001 => Slot::EngineA(EngineA::BG_0),
-            0b010 => Slot::EngineA(EngineA::OBJ_0),
-            0b011 => Slot::Texture(Texture::PALETTE_0),
-            0b100 => Slot::EngineA(EngineA::BG_EXT_PALETTE_0),
+            0b001 => Slot::EngineA(EngineA::Bg0),
+            0b010 => Slot::EngineA(EngineA::Obj0),
+            0b011 => Slot::Texture(Texture::Palette0),
+            0b100 => Slot::EngineA(EngineA::BgExtPalette0),
             _ => Slot::LCDC(LCDC::E),
         }
     }
 
-    pub fn slot_fg(self) -> Slot {
+    pub fn slot_fg(self, lcdc: LCDC) -> Slot {
         match (self & VRAMControl::MST).bits() {
             0b001 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
-                0b00 => EngineA::BG_0,
-                0b01 => EngineA::BG_01,
-                0b10 => EngineA::BG_02,
-                _    => EngineA::BG_03,
+                0b00 => EngineA::Bg0,
+                0b01 => EngineA::Bg01,
+                0b10 => EngineA::Bg02,
+                _    => EngineA::Bg03,
             }),
             0b010 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
-                0b00 => EngineA::OBJ_0,
-                0b01 => EngineA::OBJ_01,
-                0b10 => EngineA::OBJ_02,
-                _    => EngineA::OBJ_03,
+                0b00 => EngineA::Obj0,
+                0b01 => EngineA::Obj01,
+                0b10 => EngineA::Obj02,
+                _    => EngineA::Obj03,
             }),
             0b011 => Slot::Texture(match (self & VRAMControl::OFFSET).bits() {
-                0b00 => Texture::PALETTE_0,
-                0b01 => Texture::PALETTE_1,
-                0b10 => Texture::PALETTE_4,
-                _    => Texture::PALETTE_5,
+                0b00 => Texture::Palette0,
+                0b01 => Texture::Palette1,
+                0b10 => Texture::Palette4,
+                _    => Texture::Palette5,
             }),
             0b100 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
-                0 => EngineA::BG_EXT_PALETTE_0,
-                _ => EngineA::BG_EXT_PALETTE_2,
+                0 => EngineA::BgExtPalette0,
+                _ => EngineA::BgExtPalette2,
             }),
-            0b101 => Slot::EngineA(EngineA::OBJ_EXT_PALETTE),
-            _ => Slot::LCDC(LCDC::F),
+            0b101 => Slot::EngineA(EngineA::ObjExtPalette),
+            _ => Slot::LCDC(lcdc),
         }
     }
 
     pub fn slot_h(self) -> Slot {
         match (self & VRAMControl::MST).bits() {
-            0b01 => Slot::EngineB(EngineB::BG_0),
-            0b10 => Slot::EngineB(EngineB::BG_EXT_PALETTE),
+            0b01 => Slot::EngineB(EngineB::Bg0),
+            0b10 => Slot::EngineB(EngineB::BgExtPalette),
             _ => Slot::LCDC(LCDC::H),
         }
     }
 
     pub fn slot_i(self) -> Slot {
         match (self & VRAMControl::MST).bits() {
-            0b01 => Slot::EngineB(EngineB::BG_01),
-            0b10 => Slot::EngineB(EngineB::OBJ),
-            0b11 => Slot::EngineB(EngineB::OBJ_EXT_PALETTE),
+            0b01 => Slot::EngineB(EngineB::Bg01),
+            0b10 => Slot::EngineB(EngineB::Obj),
+            0b11 => Slot::EngineB(EngineB::ObjExtPalette),
             _ => Slot::LCDC(LCDC::I),
         }
     }

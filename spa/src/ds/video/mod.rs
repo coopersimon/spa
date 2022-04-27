@@ -107,9 +107,9 @@ impl<R: Renderer> DSVideo<R> {
             StartFrame => {
                 self.state = Drawing;
                 self.v_count = 0;
-                self.mem.set_h_blank(false);
-                self.mem.set_v_blank(false);
-                self.mem.reset_v_count();
+                //self.mem.set_h_blank(false);
+                //self.mem.set_v_blank(false);
+                //self.mem.reset_v_count();
                 self.renderer.start_frame();
                 self.renderer.render_line(&mut self.mem, 0);
                 (Signal::None, self.v_count_irq())
@@ -117,34 +117,34 @@ impl<R: Renderer> DSVideo<R> {
             BeginDrawing => {
                 self.state = Drawing;
                 self.v_count += 1;
-                self.mem.set_h_blank(false);
-                self.mem.inc_v_count();
+                //self.mem.set_h_blank(false);
+                //self.mem.inc_v_count();
                 self.renderer.render_line(&mut self.mem, self.v_count);
                 (Signal::None, self.v_count_irq())
             },
             EnterHBlank => {
                 self.state = HBlank;
-                self.mem.set_h_blank(true);
+                //self.mem.set_h_blank(true);
                 (Signal::HBlank, self.h_blank_irq())
             },
             EnterVBlank => {
                 self.state = VBlank;
                 self.v_count += 1;
-                self.mem.set_v_blank(true);
-                self.mem.inc_v_count();
+                //self.mem.set_v_blank(true);
+                //self.mem.inc_v_count();
                 self.renderer.finish_frame();
                 (Signal::VBlank, self.v_blank_irq())
             }
             EnterVHBlank => {
                 self.state = VHBlank;
-                self.mem.set_h_blank(true);
+                //self.mem.set_h_blank(true);
                 (Signal::None, Interrupts::empty())
             },
             ExitVHBlank => {
                 self.state = VBlank;
                 self.v_count += 1;
-                self.mem.set_h_blank(false);
-                self.mem.inc_v_count();
+                //self.mem.set_h_blank(false);
+                //self.mem.inc_v_count();
                 (Signal::None, self.v_count_irq())
             },
         }
@@ -152,29 +152,29 @@ impl<R: Renderer> DSVideo<R> {
 
     #[inline]
     fn v_count_irq(&self) -> Interrupts {
-        if self.mem.engine_a_mem.registers.v_count_irq() {
-            Interrupts::V_COUNTER
-        } else {
+        //if self.mem.engine_a_mem.registers.v_count_irq() {
+        //    Interrupts::V_COUNTER
+        //} else {
             Interrupts::empty()
-        }
+        //}
     }
 
     #[inline]
     fn h_blank_irq(&self) -> Interrupts {
-        if self.mem.engine_a_mem.registers.h_blank_irq() {
-            Interrupts::H_BLANK
-        } else {
+        //if self.mem.engine_a_mem.registers.h_blank_irq() {
+        //    Interrupts::H_BLANK
+        //} else {
             Interrupts::empty()
-        }
+        //}
     }
 
     #[inline]
     fn v_blank_irq(&self) -> Interrupts {
-        if self.mem.engine_a_mem.registers.v_blank_irq() {
-            Interrupts::V_BLANK
-        } else {
+        //if self.mem.engine_a_mem.registers.v_blank_irq() {
+        //    Interrupts::V_BLANK
+        //} else {
             Interrupts::empty()
-        }
+        //}
     }
 }
 

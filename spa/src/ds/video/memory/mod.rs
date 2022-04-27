@@ -2,11 +2,8 @@ mod vram;
 mod control;
 
 use std::{
-    convert::TryInto,
-    rc::Rc,
-    cell::RefCell,
     sync::{
-        Arc, Mutex, atomic::{AtomicU8, Ordering}, MutexGuard
+        Arc, Mutex, MutexGuard
     },
 };
 use crate::utils::{
@@ -14,9 +11,7 @@ use crate::utils::{
     bits::u8
 };
 use crate::common::wram::WRAM;
-use crate::common::videomem::{
-    VideoMemory, VideoRegisters
-};
+use crate::common::videomem::VideoMemory;
 use vram::{ARM9VRAM, ARM7VRAMSlots, EngineAVRAM, EngineBVRAM};
 pub use vram::ARM7VRAM;
 use control::*;
@@ -101,6 +96,135 @@ impl MemInterface8 for DSVideoMemory {
             8 => self.set_h_cnt(data),
             9 => self.set_i_cnt(data),
             _ => {},
+        }
+    }
+}
+
+// Mem interface: VRAM
+impl DSVideoMemory {
+    pub fn read_halfword_vram(&mut self, addr: u32) -> u16 {
+        (match addr {
+            0x0600_0000..=0x061F_FFFF => {
+                let addr = addr & 0x7_FFFF;
+                let engine_a = self.engine_a_mem.lock().unwrap();
+                engine_a.vram.lookup_bg(addr)
+                    .map(|(vram, offset)| vram.read_halfword(addr - offset))
+            },
+            0x0620_0000..=0x063F_FFFF => {
+                let addr = addr & 0x1_FFFF;
+                let engine_b = self.engine_b_mem.lock().unwrap();
+                engine_b.vram.lookup_bg(addr)
+                    .map(|(vram, offset)| vram.read_halfword(addr - offset))
+            },
+            0x0640_0000..=0x065F_FFFF => {
+                let addr = addr & 0x3_FFFF;
+                let engine_a = self.engine_a_mem.lock().unwrap();
+                engine_a.vram.lookup_obj(addr)
+                    .map(|(vram, offset)| vram.read_halfword(addr - offset))
+            },
+            0x0660_0000..=0x067F_FFFF => {
+                let addr = addr & 0x1_FFFF;
+                let mut engine_b = self.engine_b_mem.lock().unwrap();
+                engine_b.vram.obj_slot.as_mut().map(|v| v.read_halfword(addr))
+            },
+            _ => {
+                let (vram, offset) = self.ref_lcdc_vram(addr);
+                vram.map(|v| v.read_halfword(addr - offset))
+            }
+        }).unwrap_or(0)
+    }
+    pub fn write_halfword_vram(&mut self, addr: u32, data: u16) {
+        match addr {
+            0x0600_0000..=0x061F_FFFF => {
+                let addr = addr & 0x7_FFFF;
+                let mut engine_a = self.engine_a_mem.lock().unwrap();
+                engine_a.vram.lookup_bg_mut(addr)
+                    .map(|(vram, offset)| vram.write_halfword(addr - offset, data));
+            },
+            0x0620_0000..=0x063F_FFFF => {
+                let addr = addr & 0x1_FFFF;
+                let mut engine_b = self.engine_b_mem.lock().unwrap();
+                engine_b.vram.lookup_bg_mut(addr)
+                    .map(|(vram, offset)| vram.write_halfword(addr - offset, data));
+            },
+            0x0640_0000..=0x065F_FFFF => {
+                let addr = addr & 0x3_FFFF;
+                let mut engine_a = self.engine_a_mem.lock().unwrap();
+                engine_a.vram.lookup_obj_mut(addr)
+                    .map(|(vram, offset)| vram.write_halfword(addr - offset, data));
+            },
+            0x0660_0000..=0x067F_FFFF => {
+                let addr = addr & 0x1_FFFF;
+                let mut engine_b = self.engine_b_mem.lock().unwrap();
+                engine_b.vram.obj_slot.as_mut().map(|v| v.write_halfword(addr, data));
+            },
+            _ => {
+                let (vram, offset) = self.ref_lcdc_vram(addr);
+                vram.map(|v| v.write_halfword(addr - offset, data));
+            }
+        }
+    }
+
+    pub fn read_word_vram(&mut self, addr: u32) -> u32 {
+        (match addr {
+            0x0600_0000..=0x061F_FFFF => {
+                let addr = addr & 0x7_FFFF;
+                let engine_a = self.engine_a_mem.lock().unwrap();
+                engine_a.vram.lookup_bg(addr)
+                    .map(|(vram, offset)| vram.read_word(addr - offset))
+            },
+            0x0620_0000..=0x063F_FFFF => {
+                let addr = addr & 0x1_FFFF;
+                let engine_b = self.engine_b_mem.lock().unwrap();
+                engine_b.vram.lookup_bg(addr)
+                    .map(|(vram, offset)| vram.read_word(addr - offset))
+            },
+            0x0640_0000..=0x065F_FFFF => {
+                let addr = addr & 0x3_FFFF;
+                let engine_a = self.engine_a_mem.lock().unwrap();
+                engine_a.vram.lookup_obj(addr)
+                    .map(|(vram, offset)| vram.read_word(addr - offset))
+            },
+            0x0660_0000..=0x067F_FFFF => {
+                let addr = addr & 0x1_FFFF;
+                let mut engine_b = self.engine_b_mem.lock().unwrap();
+                engine_b.vram.obj_slot.as_mut().map(|v| v.read_word(addr))
+            },
+            _ => {
+                let (vram, offset) = self.ref_lcdc_vram(addr);
+                vram.map(|v| v.read_word(addr - offset))
+            }
+        }).unwrap_or(0)
+    }
+    pub fn write_word_vram(&mut self, addr: u32, data: u32) {
+        match addr {
+            0x0600_0000..=0x061F_FFFF => {
+                let addr = addr & 0x7_FFFF;
+                let mut engine_a = self.engine_a_mem.lock().unwrap();
+                engine_a.vram.lookup_bg_mut(addr)
+                    .map(|(vram, offset)| vram.write_word(addr - offset, data));
+            },
+            0x0620_0000..=0x063F_FFFF => {
+                let addr = addr & 0x1_FFFF;
+                let mut engine_b = self.engine_b_mem.lock().unwrap();
+                engine_b.vram.lookup_bg_mut(addr)
+                    .map(|(vram, offset)| vram.write_word(addr - offset, data));
+            },
+            0x0640_0000..=0x065F_FFFF => {
+                let addr = addr & 0x3_FFFF;
+                let mut engine_a = self.engine_a_mem.lock().unwrap();
+                engine_a.vram.lookup_obj_mut(addr)
+                    .map(|(vram, offset)| vram.write_word(addr - offset, data));
+            },
+            0x0660_0000..=0x067F_FFFF => {
+                let addr = addr & 0x1_FFFF;
+                let mut engine_b = self.engine_b_mem.lock().unwrap();
+                engine_b.vram.obj_slot.as_mut().map(|v| v.write_word(addr, data));
+            },
+            _ => {
+                let (vram, offset) = self.ref_lcdc_vram(addr);
+                vram.map(|v| v.write_word(addr - offset, data));
+            }
         }
     }
 }
@@ -198,44 +322,44 @@ impl DSVideoMemory {
                 LCDC::I => self.vram.i.take().unwrap(),
             },
             Slot::ARM7(arm7) => match arm7 {
-                ARM7::LO => self.arm7_mem.lock().unwrap().c.take().unwrap(),
-                ARM7::HI => self.arm7_mem.lock().unwrap().d.take().unwrap(),
+                ARM7::Lo => self.arm7_mem.lock().unwrap().c.take().unwrap(),
+                ARM7::Hi => self.arm7_mem.lock().unwrap().d.take().unwrap(),
             },
             Slot::EngineA(slot) => {
                 use EngineA::*;
-                let engine_a = self.engine_a_mem.lock().unwrap();
+                let mut engine_a = self.engine_a_mem.lock().unwrap();
                 match slot {
-                    BG_0    => engine_a.vram.bg_slot_0.take().unwrap(),
-                    BG_01   => engine_a.vram.bg_slot_01.take().unwrap(),
-                    BG_02   => engine_a.vram.bg_slot_02.take().unwrap(),
-                    BG_03   => engine_a.vram.bg_slot_03.take().unwrap(),
-                    BG_1    => engine_a.vram.bg_slot_1.take().unwrap(),
-                    BG_2    => engine_a.vram.bg_slot_2.take().unwrap(),
-                    BG_3    => engine_a.vram.bg_slot_3.take().unwrap(),
+                    Bg0    => engine_a.vram.bg_slot_0.take().unwrap(),
+                    Bg01   => engine_a.vram.bg_slot_01.take().unwrap(),
+                    Bg02   => engine_a.vram.bg_slot_02.take().unwrap(),
+                    Bg03   => engine_a.vram.bg_slot_03.take().unwrap(),
+                    Bg1    => engine_a.vram.bg_slot_1.take().unwrap(),
+                    Bg2    => engine_a.vram.bg_slot_2.take().unwrap(),
+                    Bg3    => engine_a.vram.bg_slot_3.take().unwrap(),
                 
-                    OBJ_0   => engine_a.vram.obj_slot_0.take().unwrap(),
-                    OBJ_01  => engine_a.vram.obj_slot_01.take().unwrap(),
-                    OBJ_02  => engine_a.vram.obj_slot_02.take().unwrap(),
-                    OBJ_03  => engine_a.vram.obj_slot_03.take().unwrap(),
-                    OBJ_1   => engine_a.vram.obj_slot_1.take().unwrap(),
+                    Obj0   => engine_a.vram.obj_slot_0.take().unwrap(),
+                    Obj01  => engine_a.vram.obj_slot_01.take().unwrap(),
+                    Obj02  => engine_a.vram.obj_slot_02.take().unwrap(),
+                    Obj03  => engine_a.vram.obj_slot_03.take().unwrap(),
+                    Obj1   => engine_a.vram.obj_slot_1.take().unwrap(),
                 
-                    BG_EXT_PALETTE_0 => engine_a.vram.ext_bg_palette_0.take().unwrap(),
-                    BG_EXT_PALETTE_2 => engine_a.vram.ext_bg_palette_2.take().unwrap(),
+                    BgExtPalette0 => engine_a.vram.ext_bg_palette_0.take().unwrap(),
+                    BgExtPalette2 => engine_a.vram.ext_bg_palette_2.take().unwrap(),
                 
-                    OBJ_EXT_PALETTE => engine_a.vram.ext_obj_palette.take().unwrap()
+                    ObjExtPalette => engine_a.vram.ext_obj_palette.take().unwrap()
                 }
             },
             Slot::EngineB(slot) => {
                 use EngineB::*;
-                let engine_b = self.engine_b_mem.lock().unwrap();
+                let mut engine_b = self.engine_b_mem.lock().unwrap();
                 match slot {
-                    BG_0    => engine_b.vram.bg_slot_0.take().unwrap(),
-                    BG_01   => engine_b.vram.bg_slot_01.take().unwrap(),
+                    Bg0    => engine_b.vram.bg_slot_0.take().unwrap(),
+                    Bg01   => engine_b.vram.bg_slot_01.take().unwrap(),
                 
-                    OBJ   => engine_b.vram.obj_slot.take().unwrap(),
+                    Obj   => engine_b.vram.obj_slot.take().unwrap(),
                 
-                    BG_EXT_PALETTE  => engine_b.vram.ext_bg_palette.take().unwrap(),
-                    OBJ_EXT_PALETTE => engine_b.vram.ext_obj_palette.take().unwrap()
+                    BgExtPalette  => engine_b.vram.ext_bg_palette.take().unwrap(),
+                    ObjExtPalette => engine_b.vram.ext_obj_palette.take().unwrap()
                 }
             },
             Slot::Texture(_) => panic!("TEX unsupported right now"),
@@ -256,44 +380,44 @@ impl DSVideoMemory {
                 LCDC::I => self.vram.i = Some(mem),
             },
             Slot::ARM7(arm7) => match arm7 {
-                ARM7::LO => self.arm7_mem.lock().unwrap().c = Some(mem),
-                ARM7::HI => self.arm7_mem.lock().unwrap().d = Some(mem),
+                ARM7::Lo => self.arm7_mem.lock().unwrap().c = Some(mem),
+                ARM7::Hi => self.arm7_mem.lock().unwrap().d = Some(mem),
             },
             Slot::EngineA(slot) => {
                 use EngineA::*;
-                let engine_a = self.engine_a_mem.lock().unwrap();
+                let mut engine_a = self.engine_a_mem.lock().unwrap();
                 match slot {
-                    BG_0    => engine_a.vram.bg_slot_0 = Some(mem),
-                    BG_01   => engine_a.vram.bg_slot_01 = Some(mem),
-                    BG_02   => engine_a.vram.bg_slot_02 = Some(mem),
-                    BG_03   => engine_a.vram.bg_slot_03 = Some(mem),
-                    BG_1    => engine_a.vram.bg_slot_1 = Some(mem),
-                    BG_2    => engine_a.vram.bg_slot_2 = Some(mem),
-                    BG_3    => engine_a.vram.bg_slot_3 = Some(mem),
+                    Bg0    => engine_a.vram.bg_slot_0 = Some(mem),
+                    Bg01   => engine_a.vram.bg_slot_01 = Some(mem),
+                    Bg02   => engine_a.vram.bg_slot_02 = Some(mem),
+                    Bg03   => engine_a.vram.bg_slot_03 = Some(mem),
+                    Bg1    => engine_a.vram.bg_slot_1 = Some(mem),
+                    Bg2    => engine_a.vram.bg_slot_2 = Some(mem),
+                    Bg3    => engine_a.vram.bg_slot_3 = Some(mem),
                 
-                    OBJ_0   => engine_a.vram.obj_slot_0 = Some(mem),
-                    OBJ_01  => engine_a.vram.obj_slot_01 = Some(mem),
-                    OBJ_02  => engine_a.vram.obj_slot_02 = Some(mem),
-                    OBJ_03  => engine_a.vram.obj_slot_03 = Some(mem),
-                    OBJ_1   => engine_a.vram.obj_slot_1 = Some(mem),
+                    Obj0   => engine_a.vram.obj_slot_0 = Some(mem),
+                    Obj01  => engine_a.vram.obj_slot_01 = Some(mem),
+                    Obj02  => engine_a.vram.obj_slot_02 = Some(mem),
+                    Obj03  => engine_a.vram.obj_slot_03 = Some(mem),
+                    Obj1   => engine_a.vram.obj_slot_1 = Some(mem),
                 
-                    BG_EXT_PALETTE_0 => engine_a.vram.ext_bg_palette_0 = Some(mem),
-                    BG_EXT_PALETTE_2 => engine_a.vram.ext_bg_palette_2 = Some(mem),
+                    BgExtPalette0 => engine_a.vram.ext_bg_palette_0 = Some(mem),
+                    BgExtPalette2 => engine_a.vram.ext_bg_palette_2 = Some(mem),
                 
-                    OBJ_EXT_PALETTE => engine_a.vram.ext_obj_palette = Some(mem)
+                    ObjExtPalette => engine_a.vram.ext_obj_palette = Some(mem)
                 }
             },
             Slot::EngineB(slot) => {
                 use EngineB::*;
-                let engine_b = self.engine_b_mem.lock().unwrap();
+                let mut engine_b = self.engine_b_mem.lock().unwrap();
                 match slot {
-                    BG_0    => engine_b.vram.bg_slot_0 = Some(mem),
-                    BG_01   => engine_b.vram.bg_slot_01 = Some(mem),
+                    Bg0    => engine_b.vram.bg_slot_0 = Some(mem),
+                    Bg01   => engine_b.vram.bg_slot_01 = Some(mem),
                 
-                    OBJ   => engine_b.vram.obj_slot = Some(mem),
+                    Obj   => engine_b.vram.obj_slot = Some(mem),
                 
-                    BG_EXT_PALETTE  => engine_b.vram.ext_bg_palette = Some(mem),
-                    OBJ_EXT_PALETTE => engine_b.vram.ext_obj_palette = Some(mem)
+                    BgExtPalette  => engine_b.vram.ext_bg_palette = Some(mem),
+                    ObjExtPalette => engine_b.vram.ext_obj_palette = Some(mem)
                 }
             },
             Slot::Texture(_) => panic!("TEX unsupported right now"),
@@ -301,34 +425,34 @@ impl DSVideoMemory {
     }
 
     fn set_a_cnt(&mut self, data: u8) {
-        let from_slot = self.a_cnt.slot_ab();
+        let from_slot = self.a_cnt.slot_ab(LCDC::A);
         let mem = self.get_mem(from_slot);
         self.a_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.a_cnt.slot_ab();
+        let to_slot = self.a_cnt.slot_ab(LCDC::A);
         self.set_mem(to_slot, mem);
     }
 
     fn set_b_cnt(&mut self, data: u8) {
-        let from_slot = self.b_cnt.slot_ab();
+        let from_slot = self.b_cnt.slot_ab(LCDC::B);
         let mem = self.get_mem(from_slot);
         self.b_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.b_cnt.slot_ab();
+        let to_slot = self.b_cnt.slot_ab(LCDC::B);
         self.set_mem(to_slot, mem);
     }
 
     fn set_c_cnt(&mut self, data: u8) {
-        let from_slot = self.c_cnt.slot_cd();
+        let from_slot = self.c_cnt.slot_c();
         let mem = self.get_mem(from_slot);
         self.c_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.c_cnt.slot_cd();
+        let to_slot = self.c_cnt.slot_c();
         self.set_mem(to_slot, mem);
     }
 
     fn set_d_cnt(&mut self, data: u8) {
-        let from_slot = self.d_cnt.slot_cd();
+        let from_slot = self.d_cnt.slot_d();
         let mem = self.get_mem(from_slot);
         self.d_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.d_cnt.slot_cd();
+        let to_slot = self.d_cnt.slot_d();
         self.set_mem(to_slot, mem);
     }
 
@@ -341,18 +465,18 @@ impl DSVideoMemory {
     }
 
     fn set_f_cnt(&mut self, data: u8) {
-        let from_slot = self.f_cnt.slot_fg();
+        let from_slot = self.f_cnt.slot_fg(LCDC::F);
         let mem = self.get_mem(from_slot);
         self.f_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.f_cnt.slot_fg();
+        let to_slot = self.f_cnt.slot_fg(LCDC::F);
         self.set_mem(to_slot, mem);
     }
 
     fn set_g_cnt(&mut self, data: u8) {
-        let from_slot = self.g_cnt.slot_fg();
+        let from_slot = self.g_cnt.slot_fg(LCDC::G);
         let mem = self.get_mem(from_slot);
         self.g_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.g_cnt.slot_fg();
+        let to_slot = self.g_cnt.slot_fg(LCDC::G);
         self.set_mem(to_slot, mem);
     }
 
@@ -370,5 +494,21 @@ impl DSVideoMemory {
         self.i_cnt = VRAMControl::from_bits_truncate(data);
         let to_slot = self.i_cnt.slot_i();
         self.set_mem(to_slot, mem);
+    }
+
+    /// Get a reference to the relevant lcdc memory region.
+    fn ref_lcdc_vram<'a>(&'a mut self, addr: u32) -> (Option<&'a mut Box<WRAM>>, u32) {
+        match addr {
+            0x0680_0000..=0x0681_FFFF => (self.vram.a.as_mut(), 0x0680_0000),
+            0x0682_0000..=0x0683_FFFF => (self.vram.b.as_mut(), 0x0682_0000),
+            0x0684_0000..=0x0685_FFFF => (self.vram.c.as_mut(), 0x0684_0000),
+            0x0686_0000..=0x0687_FFFF => (self.vram.d.as_mut(), 0x0686_0000),
+            0x0688_0000..=0x0688_FFFF => (self.vram.e.as_mut(), 0x0688_0000),
+            0x0689_0000..=0x0689_3FFF => (self.vram.f.as_mut(), 0x0689_0000),
+            0x0689_4000..=0x0689_7FFF => (self.vram.g.as_mut(), 0x0689_4000),
+            0x0689_8000..=0x0689_FFFF => (self.vram.h.as_mut(), 0x0689_8000),
+            0x068A_0000..=0x068A_3FFF => (self.vram.i.as_mut(), 0x068A_0000),
+            _ => panic!("accessing LCDC image"),
+        }
     }
 }
