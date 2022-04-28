@@ -65,38 +65,113 @@ impl DSVideoMemory {
     }
 }
 
-// Registers
-impl MemInterface8 for DSVideoMemory {
-    fn read_byte(&mut self, addr: u32) -> u8 {
-        match addr {
-            0 => self.a_cnt.bits(),
-            1 => self.b_cnt.bits(),
-            2 => self.c_cnt.bits(),
-            3 => self.d_cnt.bits(),
-            4 => self.e_cnt.bits(),
-            5 => self.f_cnt.bits(),
-            6 => self.g_cnt.bits(),
-
-            8 => self.h_cnt.bits(),
-            9 => self.i_cnt.bits(),
-            _ => 0,
-        }
+impl DSVideoMemory {
+    pub fn get_a_cnt(&self) -> u8 {
+        self.a_cnt.bits()
     }
 
-    fn write_byte(&mut self, addr: u32, data: u8) {
-        match addr {
-            0 => self.set_a_cnt(data),
-            1 => self.set_b_cnt(data),
-            2 => self.set_c_cnt(data),
-            3 => self.set_d_cnt(data),
-            4 => self.set_e_cnt(data),
-            5 => self.set_f_cnt(data),
-            6 => self.set_g_cnt(data),
+    pub fn get_b_cnt(&self) -> u8 {
+        self.b_cnt.bits()
+    }
 
-            8 => self.set_h_cnt(data),
-            9 => self.set_i_cnt(data),
-            _ => {},
-        }
+    pub fn get_c_cnt(&self) -> u8 {
+        self.c_cnt.bits()
+    }
+
+    pub fn get_d_cnt(&self) -> u8 {
+        self.d_cnt.bits()
+    }
+
+    pub fn get_e_cnt(&self) -> u8 {
+        self.e_cnt.bits()
+    }
+
+    pub fn get_f_cnt(&self) -> u8 {
+        self.f_cnt.bits()
+    }
+
+    pub fn get_g_cnt(&self) -> u8 {
+        self.g_cnt.bits()
+    }
+
+    pub fn get_h_cnt(&self) -> u8 {
+        self.h_cnt.bits()
+    }
+
+    pub fn get_i_cnt(&self) -> u8 {
+        self.i_cnt.bits()
+    }
+
+    pub fn set_a_cnt(&mut self, data: u8) {
+        let from_slot = self.a_cnt.slot_ab(LCDC::A);
+        let mem = self.get_mem(from_slot);
+        self.a_cnt = VRAMControl::from_bits_truncate(data);
+        let to_slot = self.a_cnt.slot_ab(LCDC::A);
+        self.set_mem(to_slot, mem);
+    }
+
+    pub fn set_b_cnt(&mut self, data: u8) {
+        let from_slot = self.b_cnt.slot_ab(LCDC::B);
+        let mem = self.get_mem(from_slot);
+        self.b_cnt = VRAMControl::from_bits_truncate(data);
+        let to_slot = self.b_cnt.slot_ab(LCDC::B);
+        self.set_mem(to_slot, mem);
+    }
+
+    pub fn set_c_cnt(&mut self, data: u8) {
+        let from_slot = self.c_cnt.slot_c();
+        let mem = self.get_mem(from_slot);
+        self.c_cnt = VRAMControl::from_bits_truncate(data);
+        let to_slot = self.c_cnt.slot_c();
+        self.set_mem(to_slot, mem);
+    }
+
+    pub fn set_d_cnt(&mut self, data: u8) {
+        let from_slot = self.d_cnt.slot_d();
+        let mem = self.get_mem(from_slot);
+        self.d_cnt = VRAMControl::from_bits_truncate(data);
+        let to_slot = self.d_cnt.slot_d();
+        self.set_mem(to_slot, mem);
+    }
+
+    pub fn set_e_cnt(&mut self, data: u8) {
+        let from_slot = self.e_cnt.slot_e();
+        let mem = self.get_mem(from_slot);
+        self.e_cnt = VRAMControl::from_bits_truncate(data);
+        let to_slot = self.e_cnt.slot_e();
+        self.set_mem(to_slot, mem);
+    }
+
+    pub fn set_f_cnt(&mut self, data: u8) {
+        let from_slot = self.f_cnt.slot_fg(LCDC::F);
+        let mem = self.get_mem(from_slot);
+        self.f_cnt = VRAMControl::from_bits_truncate(data);
+        let to_slot = self.f_cnt.slot_fg(LCDC::F);
+        self.set_mem(to_slot, mem);
+    }
+
+    pub fn set_g_cnt(&mut self, data: u8) {
+        let from_slot = self.g_cnt.slot_fg(LCDC::G);
+        let mem = self.get_mem(from_slot);
+        self.g_cnt = VRAMControl::from_bits_truncate(data);
+        let to_slot = self.g_cnt.slot_fg(LCDC::G);
+        self.set_mem(to_slot, mem);
+    }
+
+    pub fn set_h_cnt(&mut self, data: u8) {
+        let from_slot = self.h_cnt.slot_h();
+        let mem = self.get_mem(from_slot);
+        self.h_cnt = VRAMControl::from_bits_truncate(data);
+        let to_slot = self.h_cnt.slot_h();
+        self.set_mem(to_slot, mem);
+    }
+
+    pub fn set_i_cnt(&mut self, data: u8) {
+        let from_slot = self.i_cnt.slot_i();
+        let mem = self.get_mem(from_slot);
+        self.i_cnt = VRAMControl::from_bits_truncate(data);
+        let to_slot = self.i_cnt.slot_i();
+        self.set_mem(to_slot, mem);
     }
 }
 
@@ -508,78 +583,6 @@ impl DSVideoMemory {
             },
             Slot::Texture(_) => panic!("TEX unsupported right now"),
         }
-    }
-
-    fn set_a_cnt(&mut self, data: u8) {
-        let from_slot = self.a_cnt.slot_ab(LCDC::A);
-        let mem = self.get_mem(from_slot);
-        self.a_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.a_cnt.slot_ab(LCDC::A);
-        self.set_mem(to_slot, mem);
-    }
-
-    fn set_b_cnt(&mut self, data: u8) {
-        let from_slot = self.b_cnt.slot_ab(LCDC::B);
-        let mem = self.get_mem(from_slot);
-        self.b_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.b_cnt.slot_ab(LCDC::B);
-        self.set_mem(to_slot, mem);
-    }
-
-    fn set_c_cnt(&mut self, data: u8) {
-        let from_slot = self.c_cnt.slot_c();
-        let mem = self.get_mem(from_slot);
-        self.c_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.c_cnt.slot_c();
-        self.set_mem(to_slot, mem);
-    }
-
-    fn set_d_cnt(&mut self, data: u8) {
-        let from_slot = self.d_cnt.slot_d();
-        let mem = self.get_mem(from_slot);
-        self.d_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.d_cnt.slot_d();
-        self.set_mem(to_slot, mem);
-    }
-
-    fn set_e_cnt(&mut self, data: u8) {
-        let from_slot = self.e_cnt.slot_e();
-        let mem = self.get_mem(from_slot);
-        self.e_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.e_cnt.slot_e();
-        self.set_mem(to_slot, mem);
-    }
-
-    fn set_f_cnt(&mut self, data: u8) {
-        let from_slot = self.f_cnt.slot_fg(LCDC::F);
-        let mem = self.get_mem(from_slot);
-        self.f_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.f_cnt.slot_fg(LCDC::F);
-        self.set_mem(to_slot, mem);
-    }
-
-    fn set_g_cnt(&mut self, data: u8) {
-        let from_slot = self.g_cnt.slot_fg(LCDC::G);
-        let mem = self.get_mem(from_slot);
-        self.g_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.g_cnt.slot_fg(LCDC::G);
-        self.set_mem(to_slot, mem);
-    }
-
-    fn set_h_cnt(&mut self, data: u8) {
-        let from_slot = self.h_cnt.slot_h();
-        let mem = self.get_mem(from_slot);
-        self.h_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.h_cnt.slot_h();
-        self.set_mem(to_slot, mem);
-    }
-
-    fn set_i_cnt(&mut self, data: u8) {
-        let from_slot = self.i_cnt.slot_i();
-        let mem = self.get_mem(from_slot);
-        self.i_cnt = VRAMControl::from_bits_truncate(data);
-        let to_slot = self.i_cnt.slot_i();
-        self.set_mem(to_slot, mem);
     }
 
     /// Get a reference to the relevant lcdc memory region.

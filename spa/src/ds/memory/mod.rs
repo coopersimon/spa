@@ -150,30 +150,68 @@ impl<R: Renderer> DS9MemoryBus<R> {
 
 // Internal
 impl <R: Renderer> DS9MemoryBus<R> {
-    /*fn read_mem_control_abcd(&self) -> u32 {
-        0 // TODO
+    fn read_mem_control_byte(&self, addr: u32) -> u8 {
+        match addr {
+            0 => self.video.mem.get_a_cnt(),
+            1 => self.video.mem.get_b_cnt(),
+            2 => self.video.mem.get_c_cnt(),
+            3 => self.video.mem.get_d_cnt(),
+            4 => self.video.mem.get_e_cnt(),
+            5 => self.video.mem.get_f_cnt(),
+            6 => self.video.mem.get_g_cnt(),
+            7 => self.shared_wram.get_bank_control(),
+            8 => self.video.mem.get_h_cnt(),
+            9 => self.video.mem.get_i_cnt(),
+            _ => 0,
+        }
     }
-    fn read_mem_control_efg(&self) -> u32 {
+
+    fn write_mem_control_byte(&mut self, addr: u32, data: u8) {
+        match addr {
+            0 => self.video.mem.set_a_cnt(data),
+            1 => self.video.mem.set_b_cnt(data),
+            2 => self.video.mem.set_c_cnt(data),
+            3 => self.video.mem.set_d_cnt(data),
+            4 => self.video.mem.set_e_cnt(data),
+            5 => self.video.mem.set_f_cnt(data),
+            6 => self.video.mem.set_g_cnt(data),
+            7 => self.shared_wram.set_bank_control(data),
+            8 => self.video.mem.set_h_cnt(data),
+            9 => self.video.mem.set_i_cnt(data),
+            _ => {},
+        }
+    }
+
+    fn read_mem_control_halfword(&self, addr: u32) -> u16 {
+        use crate::utils::bytes::u16;
+        u16::make(
+            self.read_mem_control_byte(addr),
+            self.read_mem_control_byte(addr + 1),
+        )
+    }
+
+    fn write_mem_control_halfword(&mut self, addr: u32, data: u16) {
+        use crate::utils::bytes::u16;
+        self.write_mem_control_byte(addr, u16::lo(data));
+        self.write_mem_control_byte(addr + 1, u16::hi(data));
+    }
+
+    fn read_mem_control_word(&self, addr: u32) -> u32 {
         u32::from_le_bytes([
-            0,
-            0,
-            0,
-            self.shared_wram.get_bank_control()
+            self.read_mem_control_byte(addr),
+            self.read_mem_control_byte(addr + 1),
+            self.read_mem_control_byte(addr + 2),
+            self.read_mem_control_byte(addr + 3)
         ])
     }
-    fn read_mem_control_hi(&self) -> u32 {
-        0 // TODO
+
+    fn write_mem_control_word(&mut self, addr: u32, data: u32) {
+        let bytes = data.to_le_bytes();
+        self.write_mem_control_byte(addr, bytes[0]);
+        self.write_mem_control_byte(addr + 1, bytes[1]);
+        self.write_mem_control_byte(addr + 2, bytes[2]);
+        self.write_mem_control_byte(addr + 3, bytes[3]);
     }
-    fn write_mem_control_abcd(&mut self, data: u32) {
-        // TODO
-    }
-    fn write_mem_control_efg(&mut self, data: u32) {
-        let bytes = u32::to_le_bytes(data);
-        self.shared_wram.set_bank_control(bytes[3]);
-    }
-    fn write_mem_control_hi(&mut self, data: u32) {
-        // TODO
-    }*/
 
     /// Do a DMA transfer if possible.
     /// 
@@ -331,7 +369,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             ),
 
             // I/O
-            0x0400_0247 => (self.shared_wram.get_bank_control(), if cycle.is_non_seq() {8} else {2}),
+            0x0400_0240..=0x0400_024B => (self.read_mem_control_byte(addr & 0xF), if cycle.is_non_seq() {8} else {2}),
             0x0400_1000..=0x0400_106F => (self.video.mem.mut_engine_b().registers.read_byte(addr & 0xFF), if cycle.is_non_seq() {8} else {2}),
             0x0410_0000..=0x0410_0003 => (self.ipc.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
             0x0410_0010..=0x0410_0013 => (self.card.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
@@ -364,8 +402,8 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
                 if cycle.is_non_seq() {8} else {2}
             },
             // I/O
-            0x0400_0247 => {
-                self.shared_wram.set_bank_control(data);
+            0x0400_0240..=0x0400_024B => {
+                self.write_mem_control_byte(addr, data);
                 if cycle.is_non_seq() {8} else {2}
             },
             0x0400_1000..=0x0400_106F => {
@@ -415,6 +453,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
             // I/O
             // TODO: mem ctl
+            0x0400_0240..=0x0400_024B => (self.read_mem_control_halfword(addr & 0xF), if cycle.is_non_seq() {8} else {2}),
             0x0400_1000..=0x0400_106F => (self.video.mem.mut_engine_b().registers.read_halfword(addr & 0xFF), 2),
             0x0410_0000..=0x0410_0003 => (self.ipc.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
             0x0410_0010..=0x0410_0013 => (self.card.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
@@ -448,6 +487,10 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             },
 
             // I/O
+            0x0400_0240..=0x0400_024B => {
+                self.write_mem_control_halfword(addr, data);
+                if cycle.is_non_seq() {8} else {2}
+            },
             0x0400_1000..=0x0400_106F => {
                 self.video.mem.mut_engine_b().registers.write_halfword(addr & 0xFF, data);
                 if cycle.is_non_seq() {8} else {2}
@@ -494,6 +537,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
+            0x0400_0240..=0x0400_024B => (self.read_mem_control_word(addr & 0xF), if cycle.is_non_seq() {8} else {2}),
             0x0400_1000..=0x0400_106F => (self.video.mem.mut_engine_b().registers.read_word(addr & 0xFF), 2),
             0x0410_0000..=0x0410_0003 => (self.ipc.read_word(addr), if cycle.is_non_seq() {8} else {2}),
             0x0410_0010..=0x0410_0013 => (self.card.read_word(addr), if cycle.is_non_seq() {8} else {2}),
@@ -527,6 +571,10 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             },
 
             // I/O
+            0x0400_0240..=0x0400_024B => {
+                self.write_mem_control_word(addr, data);
+                if cycle.is_non_seq() {8} else {2}
+            },
             0x0400_1000..=0x0400_106F => {
                 self.video.mem.mut_engine_b().registers.write_word(addr & 0xFF, data);
                 if cycle.is_non_seq() {8} else {2}
