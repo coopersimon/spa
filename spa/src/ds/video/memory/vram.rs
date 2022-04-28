@@ -69,22 +69,6 @@ impl ARM9VRAM {
     }
 }
 
-impl MemInterface16 for ARM9VRAM {
-    fn read_halfword(&mut self, addr: u32) -> u16 {
-        /*match addr {
-            0x0600_0000 => {
-                // A BG-VRAM
-            },
-            0x20_0000..=
-        }*/
-        0
-    }
-
-    fn write_halfword(&mut self, addr: u32, data: u16) {
-        
-    }
-}
-
 /// Interface for ARM7 to access regions C and D.
 #[derive(Default)]
 pub struct ARM7VRAM {

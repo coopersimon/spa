@@ -332,12 +332,15 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
             // I/O
             0x0400_0247 => (self.shared_wram.get_bank_control(), if cycle.is_non_seq() {8} else {2}),
+            0x0400_1000..=0x0400_106F => (self.video.mem.mut_engine_b().registers.read_byte(addr & 0xFF), if cycle.is_non_seq() {8} else {2}),
             0x0410_0000..=0x0410_0003 => (self.ipc.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
             0x0410_0010..=0x0410_0013 => (self.card.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), if cycle.is_non_seq() {8} else {2}),
 
-            // TODO: VRAM
-            //0x0500_0000..=0x07FF_FFFF => (self.video.read_byte(addr), 1),
+            // VRAM
+            0x0500_0000..=0x05FF_FFFF => (self.video.mem.read_byte_palette(addr & 0x7FF), 2),
+            0x0600_0000..=0x06FF_FFFF => (self.video.mem.read_byte_vram(addr), 2),
+            0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_byte_oam(addr & 0x7FF), 2),
 
             // TODO: GBA slot
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_0(cycle)),
@@ -365,6 +368,10 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
                 self.shared_wram.set_bank_control(data);
                 if cycle.is_non_seq() {8} else {2}
             },
+            0x0400_1000..=0x0400_106F => {
+                self.video.mem.mut_engine_b().registers.write_byte(addr & 0xFF, data);
+                if cycle.is_non_seq() {8} else {2}
+            },
             0x0410_0010..=0x0410_0013 => {
                 self.card.write_byte(addr, data);
                 if cycle.is_non_seq() {8} else {2}
@@ -375,10 +382,18 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             },
 
             // VRAM
-            //0x0500_0000..=0x07FF_FFFF => {
-            //    self.video.write_byte(addr, data);
-            //    1
-            //},
+            0x0500_0000..=0x05FF_FFFF => {
+                self.video.mem.write_byte_palette(addr, data);
+                2
+            },
+            0x0600_0000..=0x06FF_FFFF => {
+                self.video.mem.write_byte_vram(addr, data);
+                2
+            },
+            0x0700_0000..=0x07FF_FFFF => {
+                self.video.mem.write_byte_oam(addr, data);
+                2
+            },
 
             // TODO: GBA slot
             //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
@@ -400,12 +415,15 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
             // I/O
             // TODO: mem ctl
+            0x0400_1000..=0x0400_106F => (self.video.mem.mut_engine_b().registers.read_halfword(addr & 0xFF), 2),
             0x0410_0000..=0x0410_0003 => (self.ipc.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
             0x0410_0010..=0x0410_0013 => (self.card.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
-            //0x0500_0000..=0x07FF_FFFF => (self.video.read_halfword(addr), 1),
+            0x0500_0000..=0x05FF_FFFF => (self.video.mem.read_halfword_palette(addr & 0x7FF), 2),
+            0x0600_0000..=0x06FF_FFFF => (self.video.mem.read_halfword_vram(addr), 2),
+            0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_halfword_oam(addr & 0x7FF), 2),
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_0(cycle)),
@@ -430,6 +448,10 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             },
 
             // I/O
+            0x0400_1000..=0x0400_106F => {
+                self.video.mem.mut_engine_b().registers.write_halfword(addr & 0xFF, data);
+                if cycle.is_non_seq() {8} else {2}
+            },
             0x0410_0010..=0x0410_0013 => {
                 self.card.write_halfword(addr, data);
                 if cycle.is_non_seq() {8} else {2}
@@ -440,10 +462,18 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             },
 
             // VRAM
-            //0x0500_0000..=0x07FF_FFFF => {
-            //    self.video.write_halfword(addr, data);
-            //    1
-            //},
+            0x0500_0000..=0x05FF_FFFF => {
+                self.video.mem.write_halfword_palette(addr, data);
+                2
+            },
+            0x0600_0000..=0x06FF_FFFF => {
+                self.video.mem.write_halfword_vram(addr, data);
+                2
+            },
+            0x0700_0000..=0x07FF_FFFF => {
+                self.video.mem.write_halfword_oam(addr, data);
+                2
+            },
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
@@ -464,13 +494,15 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
+            0x0400_1000..=0x0400_106F => (self.video.mem.mut_engine_b().registers.read_word(addr & 0xFF), 2),
             0x0410_0000..=0x0410_0003 => (self.ipc.read_word(addr), if cycle.is_non_seq() {8} else {2}),
             0x0410_0010..=0x0410_0013 => (self.card.read_word(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
-            //0x0500_0000..=0x06FF_FFFF => (self.video.read_word(addr), 2),   // VRAM & Palette
-            //0x0700_0000..=0x0700_03FF => (self.video.read_word(addr), 1),   // OAM
+            0x0500_0000..=0x05FF_FFFF => (self.video.mem.read_word_palette(addr & 0x7FF), 4),
+            0x0600_0000..=0x06FF_FFFF => (self.video.mem.read_word_vram(addr), 4),
+            0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_word_oam(addr & 0x7FF), 2),
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_0(cycle) << 1),
@@ -495,6 +527,10 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             },
 
             // I/O
+            0x0400_1000..=0x0400_106F => {
+                self.video.mem.mut_engine_b().registers.write_word(addr & 0xFF, data);
+                if cycle.is_non_seq() {8} else {2}
+            },
             0x0410_0010..=0x0410_0013 => {
                 self.card.write_word(addr, data);
                 if cycle.is_non_seq() {8} else {2}
@@ -504,16 +540,19 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
                 if cycle.is_non_seq() {8} else {2}
             },
 
-            // VRAM & Palette
-            //0x0500_0000..=0x06FF_FFFF => {
-            //    self.video.write_word(addr, data);
-            //    2
-            //},
-            //// OAM
-            //0x0700_0000..=0x0700_03FF => {
-            //    self.video.write_word(addr, data);
-            //    1
-            //},
+            // VRAM
+            0x0500_0000..=0x05FF_FFFF => {
+                self.video.mem.write_word_palette(addr, data);
+                4
+            },
+            0x0600_0000..=0x06FF_FFFF => {
+                self.video.mem.write_word_vram(addr, data);
+                4
+            },
+            0x0700_0000..=0x07FF_FFFF => {
+                self.video.mem.write_word_oam(addr, data);
+                2
+            },
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle) << 1,
@@ -531,6 +570,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
 impl<R: Renderer> DS9MemoryBus<R> {
     MemoryBusIO!{
+        (0x0400_0000, 0x0400_006F, video),
         (0x0400_00B0, 0x0400_00EF, dma),
         (0x0400_0100, 0x0400_010F, timers),
         (0x0400_0130, 0x0400_0133, joypad),

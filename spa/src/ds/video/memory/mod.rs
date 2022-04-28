@@ -102,6 +102,70 @@ impl MemInterface8 for DSVideoMemory {
 
 // Mem interface: VRAM
 impl DSVideoMemory {
+
+    pub fn read_byte_vram(&mut self, addr: u32) -> u8 {
+        (match addr {
+            0x0600_0000..=0x061F_FFFF => {
+                let addr = addr & 0x7_FFFF;
+                let engine_a = self.engine_a_mem.lock().unwrap();
+                engine_a.vram.lookup_bg(addr)
+                    .map(|(vram, offset)| vram.read_byte(addr - offset))
+            },
+            0x0620_0000..=0x063F_FFFF => {
+                let addr = addr & 0x1_FFFF;
+                let engine_b = self.engine_b_mem.lock().unwrap();
+                engine_b.vram.lookup_bg(addr)
+                    .map(|(vram, offset)| vram.read_byte(addr - offset))
+            },
+            0x0640_0000..=0x065F_FFFF => {
+                let addr = addr & 0x3_FFFF;
+                let engine_a = self.engine_a_mem.lock().unwrap();
+                engine_a.vram.lookup_obj(addr)
+                    .map(|(vram, offset)| vram.read_byte(addr - offset))
+            },
+            0x0660_0000..=0x067F_FFFF => {
+                let addr = addr & 0x1_FFFF;
+                let mut engine_b = self.engine_b_mem.lock().unwrap();
+                engine_b.vram.obj_slot.as_mut().map(|v| v.read_byte(addr))
+            },
+            _ => {
+                let (vram, offset) = self.ref_lcdc_vram(addr);
+                vram.map(|v| v.read_byte(addr - offset))
+            }
+        }).unwrap_or(0)
+    }
+    pub fn write_byte_vram(&mut self, addr: u32, data: u8) {
+        match addr {
+            0x0600_0000..=0x061F_FFFF => {
+                let addr = addr & 0x7_FFFF;
+                let mut engine_a = self.engine_a_mem.lock().unwrap();
+                engine_a.vram.lookup_bg_mut(addr)
+                    .map(|(vram, offset)| vram.write_byte(addr - offset, data));
+            },
+            0x0620_0000..=0x063F_FFFF => {
+                let addr = addr & 0x1_FFFF;
+                let mut engine_b = self.engine_b_mem.lock().unwrap();
+                engine_b.vram.lookup_bg_mut(addr)
+                    .map(|(vram, offset)| vram.write_byte(addr - offset, data));
+            },
+            0x0640_0000..=0x065F_FFFF => {
+                let addr = addr & 0x3_FFFF;
+                let mut engine_a = self.engine_a_mem.lock().unwrap();
+                engine_a.vram.lookup_obj_mut(addr)
+                    .map(|(vram, offset)| vram.write_byte(addr - offset, data));
+            },
+            0x0660_0000..=0x067F_FFFF => {
+                let addr = addr & 0x1_FFFF;
+                let mut engine_b = self.engine_b_mem.lock().unwrap();
+                engine_b.vram.obj_slot.as_mut().map(|v| v.write_byte(addr, data));
+            },
+            _ => {
+                let (vram, offset) = self.ref_lcdc_vram(addr);
+                vram.map(|v| v.write_byte(addr - offset, data));
+            }
+        }
+    }
+
     pub fn read_halfword_vram(&mut self, addr: u32) -> u16 {
         (match addr {
             0x0600_0000..=0x061F_FFFF => {
@@ -238,17 +302,30 @@ impl DSVideoMemory {
         self.engine_b_mem.lock().unwrap()
     }
 
+    pub fn read_byte_palette(&mut self, addr: u32) -> u8 {
+        if addr < 0x400 {
+            self.engine_a_mem.lock().unwrap().palette.read_byte(addr)
+        } else {
+            self.engine_b_mem.lock().unwrap().palette.read_byte(addr & 0x3FF)
+        }
+    }
+    pub fn write_byte_palette(&mut self, addr: u32, data: u8) {
+        if addr < 0x400 {
+            self.engine_a_mem.lock().unwrap().palette.write_byte(addr, data);
+        } else {
+            self.engine_b_mem.lock().unwrap().palette.write_byte(addr & 0x3FF, data);
+        }
+    }
+
     pub fn read_halfword_palette(&mut self, addr: u32) -> u16 {
-        let mod_addr = addr & 0x7FF;
-        if mod_addr < 0x400 {
+        if addr < 0x400 {
             self.engine_a_mem.lock().unwrap().palette.read_halfword(addr)
         } else {
             self.engine_b_mem.lock().unwrap().palette.read_halfword(addr & 0x3FF)
         }
     }
     pub fn write_halfword_palette(&mut self, addr: u32, data: u16) {
-        let mod_addr = addr & 0x7FF;
-        if mod_addr < 0x400 {
+        if addr < 0x400 {
             self.engine_a_mem.lock().unwrap().palette.write_halfword(addr, data);
         } else {
             self.engine_b_mem.lock().unwrap().palette.write_halfword(addr & 0x3FF, data);
@@ -256,33 +333,44 @@ impl DSVideoMemory {
     }
 
     pub fn read_word_palette(&mut self, addr: u32) -> u32 {
-        let mod_addr = addr & 0x7FF;
-        if mod_addr < 0x400 {
+        if addr < 0x400 {
             self.engine_a_mem.lock().unwrap().palette.read_word(addr)
         } else {
             self.engine_b_mem.lock().unwrap().palette.read_word(addr & 0x3FF)
         }
     }
     pub fn write_word_palette(&mut self, addr: u32, data: u32) {
-        let mod_addr = addr & 0x7FF;
-        if mod_addr < 0x400 {
+        if addr < 0x400 {
             self.engine_a_mem.lock().unwrap().palette.write_word(addr, data);
         } else {
             self.engine_b_mem.lock().unwrap().palette.write_word(addr & 0x3FF, data);
         }
     }
 
+    pub fn read_byte_oam(&mut self, addr: u32) -> u8 {
+        if addr < 0x400 {
+            self.engine_a_mem.lock().unwrap().oam.read_byte(addr)
+        } else {
+            self.engine_b_mem.lock().unwrap().oam.read_byte(addr & 0x3FF)
+        }
+    }
+    pub fn write_byte_oam(&mut self, addr: u32, data: u8) {
+        if addr < 0x400 {
+            self.engine_a_mem.lock().unwrap().oam.write_byte(addr, data);
+        } else {
+            self.engine_b_mem.lock().unwrap().oam.write_byte(addr & 0x3FF, data);
+        }
+    }
+
     pub fn read_halfword_oam(&mut self, addr: u32) -> u16 {
-        let mod_addr = addr & 0x7FF;
-        if mod_addr < 0x400 {
+        if addr < 0x400 {
             self.engine_a_mem.lock().unwrap().oam.read_halfword(addr)
         } else {
             self.engine_b_mem.lock().unwrap().oam.read_halfword(addr & 0x3FF)
         }
     }
     pub fn write_halfword_oam(&mut self, addr: u32, data: u16) {
-        let mod_addr = addr & 0x7FF;
-        if mod_addr < 0x400 {
+        if addr < 0x400 {
             self.engine_a_mem.lock().unwrap().oam.write_halfword(addr, data);
         } else {
             self.engine_b_mem.lock().unwrap().oam.write_halfword(addr & 0x3FF, data);
@@ -290,16 +378,14 @@ impl DSVideoMemory {
     }
 
     pub fn read_word_oam(&mut self, addr: u32) -> u32 {
-        let mod_addr = addr & 0x7FF;
-        if mod_addr < 0x400 {
+        if addr < 0x400 {
             self.engine_a_mem.lock().unwrap().oam.read_word(addr)
         } else {
             self.engine_b_mem.lock().unwrap().oam.read_word(addr & 0x3FF)
         }
     }
     pub fn write_word_oam(&mut self, addr: u32, data: u32) {
-        let mod_addr = addr & 0x7FF;
-        if mod_addr < 0x400 {
+        if addr < 0x400 {
             self.engine_a_mem.lock().unwrap().oam.write_word(addr, data);
         } else {
             self.engine_b_mem.lock().unwrap().oam.write_word(addr & 0x3FF, data);
