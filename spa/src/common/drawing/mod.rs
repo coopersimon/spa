@@ -10,7 +10,6 @@ use crate::common::videomem::{
 use colour::*;
 use background::*;
 
-const VRAM_TILE_BLOCK: u32 = 16 * 1024;
 const TILE_SIZE: u32 = 8;
 const TILE_BYTES_4BPP: u32 = 32;
 const TILE_BYTES_8BPP: u32 = 64;
@@ -63,7 +62,6 @@ impl SoftwareRenderer {
 impl SoftwareRenderer {
     /// Draw object pixels to a target line.
     fn draw_obj_line<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [Option<ObjectPixel>], obj_window: &mut [bool], y: u8) {
-        const OBJECT_VRAM_BASE: u32 = VRAM_TILE_BLOCK * 4;
         let use_1d_tile_mapping = mem.registers.obj_1d_tile_mapping();
         let mosaic_x = mem.registers.obj_mosaic_x();
         let mosaic_y = mem.registers.obj_mosaic_y();
@@ -148,11 +146,11 @@ impl SoftwareRenderer {
                     target_tile_x + (target_tile_y * TILE_GRID_WIDTH)
                 };
                 
-                let tile_addr = OBJECT_VRAM_BASE + (tile_num * TILE_BYTES_4BPP);
+                let tile_addr = tile_num * TILE_BYTES_4BPP;
                 let texel = if use_8bpp {
-                    mem.vram.tile_texel_8bpp(tile_addr, index_x % 8, index_y % 8)
+                    mem.vram.obj_tile_texel_8bpp(tile_addr, index_x % 8, index_y % 8)
                 } else {
-                    mem.vram.tile_texel_4bpp(tile_addr, index_x % 8, index_y % 8)
+                    mem.vram.obj_tile_texel_4bpp(tile_addr, index_x % 8, index_y % 8)
                 };
                 // Transparent.
                 if texel == 0 {
@@ -220,10 +218,10 @@ impl SoftwareRenderer {
         }
         let texel = if bg.use_8bpp {
             let tile_addr = bg.tile_data_addr + (attrs.tile_num() * TILE_BYTES_8BPP);
-            vram.tile_texel_8bpp(tile_addr, tile_x, tile_y)
+            vram.bg_tile_texel_8bpp(tile_addr, tile_x, tile_y)
         } else {
             let tile_addr = bg.tile_data_addr + (attrs.tile_num() * TILE_BYTES_4BPP);
-            vram.tile_texel_4bpp(tile_addr, tile_x, tile_y)
+            vram.bg_tile_texel_4bpp(tile_addr, tile_x, tile_y)
         };
         if texel == 0 {
             None
@@ -278,7 +276,7 @@ impl SoftwareRenderer {
         let tile_x = (bg_x % TILE_SIZE) as u8;
         let tile_y = (bg_y % TILE_SIZE) as u8;
         let tile_addr = bg.tile_data_addr + (tile_num * TILE_BYTES_8BPP);
-        let texel = vram.tile_texel_8bpp(tile_addr, tile_x, tile_y);
+        let texel = vram.bg_tile_texel_8bpp(tile_addr, tile_x, tile_y);
         if texel == 0 {
             None
         } else {
@@ -477,7 +475,7 @@ impl SoftwareRenderer {
                 let tile_col = x / 8;
                 let tile_x = x % 8;
                 // Rows of 16 tiles.
-                let texel = mem.vram.tile_texel_8bpp((tile_row * 1024) + (tile_col * 64), tile_x as u8, tile_y as u8);
+                let texel = mem.vram.bg_tile_texel_8bpp((tile_row * 1024) + (tile_col * 64), tile_x as u8, tile_y as u8);
                 let colour = self.palette_cache.get_bg(texel);
                 let pixel_num = (((y * 256) + x) * 4) as usize;
                 target[pixel_num] = colour.r;
@@ -490,7 +488,7 @@ impl SoftwareRenderer {
                 let tile_col = (x / 8) - 16;
                 let tile_x = x % 8;
                 // Rows of 16 tiles.
-                let texel = mem.vram.tile_texel_8bpp((tile_row * 1024) + (tile_col * 64), tile_x as u8, tile_y as u8);
+                let texel = mem.vram.bg_tile_texel_8bpp((tile_row * 1024) + (tile_col * 64), tile_x as u8, tile_y as u8);
                 let colour = if tile_row >= 64 {
                     self.palette_cache.get_obj(texel)
                 } else {

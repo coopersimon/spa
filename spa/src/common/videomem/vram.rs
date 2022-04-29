@@ -35,32 +35,30 @@ impl TileMapAttrs {
 /// Contains tile data, background maps, and bitmaps.
 pub trait VRAM2D {
 
-    /// Read a byte from VRAM.
-    fn get_byte(&self, addr: u32) -> u8;
+    /// Read a byte from background VRAM.
+    fn get_bg_byte(&self, addr: u32) -> u8;
 
-    /// Read a halfword from VRAM.
-    fn get_halfword(&self, addr: u32) -> u16;
+    /// Read a byte from object VRAM.
+    fn get_obj_byte(&self, addr: u32) -> u8;
+
+    /// Read a halfword from background VRAM.
+    fn get_bg_halfword(&self, addr: u32) -> u16;
 
     /// Get a set of tile map attributes for a regular background.
     fn tile_map_attrs(&self, addr: u32) -> TileMapAttrs {
-        //let start = addr as usize;
-        //let end = start + 2;
-        //let data = (self.data[start..end]).try_into().unwrap();
-        //TileMapAttrs::from_bits_truncate(u16::from_le_bytes(data))
-        TileMapAttrs::from_bits_truncate(self.get_halfword(addr))
+        TileMapAttrs::from_bits_truncate(self.get_bg_halfword(addr))
     }
 
     /// Get the tile number for an affine background.
     fn affine_map_tile_num(&self, addr: u32) -> u32 {
-        self.get_byte(addr) as u32
-        //self.data[addr as usize] as u32
+        self.get_bg_byte(addr) as u32
     }
 
-    /// Get a texel for a particular tile, using 16-colour palette.
-    fn tile_texel_4bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
+    /// Get a texel for a particular background tile, using 16-colour palette.
+    fn bg_tile_texel_4bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
         let y_offset = (4 * y) as u32;
         let x_offset = (x / 2) as u32;
-        let data = self.get_byte(addr + y_offset + x_offset);
+        let data = self.get_bg_byte(addr + y_offset + x_offset);
         if u8::test_bit(x, 0) {
             data >> 4
         } else {
@@ -68,18 +66,37 @@ pub trait VRAM2D {
         }
     }
 
-    /// Get a texel for a particular tile, using 256-colour palette.
-    fn tile_texel_8bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
+    /// Get a texel for a particular background tile, using 256-colour palette.
+    fn bg_tile_texel_8bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
         let y_offset = (8 * y) as u32;
         let x_offset = x as u32;
-        self.get_byte(addr + y_offset + x_offset)
+        self.get_bg_byte(addr + y_offset + x_offset)
+    }
+
+    /// Get a texel for a particular object tile, using 16-colour palette.
+    fn obj_tile_texel_4bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
+        let y_offset = (4 * y) as u32;
+        let x_offset = (x / 2) as u32;
+        let data = self.get_obj_byte(addr + y_offset + x_offset);
+        if u8::test_bit(x, 0) {
+            data >> 4
+        } else {
+            data & 0xF
+        }
+    }
+
+    /// Get a texel for a particular object tile, using 256-colour palette.
+    fn obj_tile_texel_8bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
+        let y_offset = (8 * y) as u32;
+        let x_offset = x as u32;
+        self.get_obj_byte(addr + y_offset + x_offset)
     }
 
     /// Get a bitmap texel, using 256-colour palette.
     fn bitmap_texel_8bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
         let y_offset = (y as u32) * 240;
         let x_offset = x as u32;
-        self.get_byte(addr + y_offset + x_offset)
+        self.get_bg_byte(addr + y_offset + x_offset)
     }
 
     /// Get a bitmap texel, using direct colour.
@@ -88,11 +105,7 @@ pub trait VRAM2D {
         let y_offset = (y as u32) * 480;
         let x_offset = (x as u32) * 2;
         let texel_addr = addr + y_offset + x_offset;
-        self.get_halfword(texel_addr)
-        //let start = texel_addr;
-        //let end = start + 2;
-        //let data = (self.data[start..end]).try_into().unwrap();
-        //u16::from_le_bytes(data)
+        self.get_bg_halfword(texel_addr)
     }
 
     /// Get a bitmap texel, using direct colour.
@@ -101,11 +114,6 @@ pub trait VRAM2D {
         let y_offset = (y as u32) * 320;
         let x_offset = (x as u32) * 2;
         let texel_addr = addr + y_offset + x_offset;
-        self.get_halfword(texel_addr)
-
-        //let start = texel_addr;
-        //let end = start + 2;
-        //let data = (self.data[start..end]).try_into().unwrap();
-        //u16::from_le_bytes(data)
+        self.get_bg_halfword(texel_addr)
     }
 }

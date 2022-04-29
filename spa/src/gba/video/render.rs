@@ -82,7 +82,7 @@ impl Renderer for DebugTileRenderer {
         }
     }
 
-    fn start_frame(&mut self, mem: &mut VideoMemory<VRAMRenderRef>) {
+    fn start_frame(&mut self, _mem: &mut VideoMemory<VRAMRenderRef>) {
         //println!("Start frame");
     }
 
