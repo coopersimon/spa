@@ -152,32 +152,32 @@ impl<R: Renderer> DS9MemoryBus<R> {
 impl <R: Renderer> DS9MemoryBus<R> {
     fn read_mem_control_byte(&self, addr: u32) -> u8 {
         match addr {
-            0 => self.video.mem.get_a_cnt(),
-            1 => self.video.mem.get_b_cnt(),
-            2 => self.video.mem.get_c_cnt(),
-            3 => self.video.mem.get_d_cnt(),
-            4 => self.video.mem.get_e_cnt(),
-            5 => self.video.mem.get_f_cnt(),
-            6 => self.video.mem.get_g_cnt(),
+            0 => self.video.mem.get_cnt(VRAMRegion::A),
+            1 => self.video.mem.get_cnt(VRAMRegion::B),
+            2 => self.video.mem.get_cnt(VRAMRegion::C),
+            3 => self.video.mem.get_cnt(VRAMRegion::D),
+            4 => self.video.mem.get_cnt(VRAMRegion::E),
+            5 => self.video.mem.get_cnt(VRAMRegion::F),
+            6 => self.video.mem.get_cnt(VRAMRegion::G),
             7 => self.shared_wram.get_bank_control(),
-            8 => self.video.mem.get_h_cnt(),
-            9 => self.video.mem.get_i_cnt(),
+            8 => self.video.mem.get_cnt(VRAMRegion::H),
+            9 => self.video.mem.get_cnt(VRAMRegion::I),
             _ => 0,
         }
     }
 
     fn write_mem_control_byte(&mut self, addr: u32, data: u8) {
         match addr {
-            0 => self.video.mem.set_a_cnt(data),
-            1 => self.video.mem.set_b_cnt(data),
-            2 => self.video.mem.set_c_cnt(data),
-            3 => self.video.mem.set_d_cnt(data),
-            4 => self.video.mem.set_e_cnt(data),
-            5 => self.video.mem.set_f_cnt(data),
-            6 => self.video.mem.set_g_cnt(data),
+            0 => self.video.mem.set_cnt(VRAMRegion::A, data),
+            1 => self.video.mem.set_cnt(VRAMRegion::B, data),
+            2 => self.video.mem.set_cnt(VRAMRegion::C, data),
+            3 => self.video.mem.set_cnt(VRAMRegion::D, data),
+            4 => self.video.mem.set_cnt(VRAMRegion::E, data),
+            5 => self.video.mem.set_cnt(VRAMRegion::F, data),
+            6 => self.video.mem.set_cnt(VRAMRegion::G, data),
             7 => self.shared_wram.set_bank_control(data),
-            8 => self.video.mem.set_h_cnt(data),
-            9 => self.video.mem.set_i_cnt(data),
+            8 => self.video.mem.set_cnt(VRAMRegion::H, data),
+            9 => self.video.mem.set_cnt(VRAMRegion::I, data),
             _ => {},
         }
     }

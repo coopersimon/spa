@@ -13,7 +13,7 @@ use crate::utils::{
 use crate::ds::interrupt::Interrupts;
 pub use render::*;
 use memory::DSVideoMemory;
-pub use memory::ARM7VRAM;
+pub use memory::{ARM7VRAM, VRAMRegion};
 
 use constants::*;
 
@@ -83,6 +83,7 @@ impl<R: Renderer> DSVideo<R> {
     }
 }
 
+// Interface refers to engine A registers + LCD status
 impl<R: Renderer> MemInterface16 for DSVideo<R> {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {

@@ -29,15 +29,7 @@ bitflags!{
 /// This struct represents the ARM9 side of the VRAM.
 pub struct ARM9VRAM {
     // Memory blocks
-    pub a:  VRAMSlot,
-    pub b:  VRAMSlot,
-    pub c:  VRAMSlot,
-    pub d:  VRAMSlot,
-    pub e:  VRAMSlot,
-    pub f:  VRAMSlot,
-    pub g:  VRAMSlot,
-    pub h:  VRAMSlot,
-    pub i:  VRAMSlot,
+    pub lcdc:   [VRAMSlot; 9]
 }
 
 type VRAMSlot = Option<Box<WRAM>>; // TODO: does this need to be boxed even?
@@ -48,15 +40,17 @@ impl ARM9VRAM {
         let engine_a_vram = EngineAVRAM::default();
         let engine_b_vram = EngineBVRAM::default();
         let arm9_vram = Self {
-            a:  Some(Box::new(WRAM::new(128 * 1024))),
-            b:  Some(Box::new(WRAM::new(128 * 1024))),
-            c:  Some(Box::new(WRAM::new(128 * 1024))),
-            d:  Some(Box::new(WRAM::new(128 * 1024))),
-            e:  Some(Box::new(WRAM::new(64 * 1024))),
-            f:  Some(Box::new(WRAM::new(16 * 1024))),
-            g:  Some(Box::new(WRAM::new(16 * 1024))),
-            h:  Some(Box::new(WRAM::new(32 * 1024))),
-            i:  Some(Box::new(WRAM::new(16 * 1024))),
+            lcdc: [
+                Some(Box::new(WRAM::new(128 * 1024))),
+                Some(Box::new(WRAM::new(128 * 1024))),
+                Some(Box::new(WRAM::new(128 * 1024))),
+                Some(Box::new(WRAM::new(128 * 1024))),
+                Some(Box::new(WRAM::new(64 * 1024))),
+                Some(Box::new(WRAM::new(16 * 1024))),
+                Some(Box::new(WRAM::new(16 * 1024))),
+                Some(Box::new(WRAM::new(32 * 1024))),
+                Some(Box::new(WRAM::new(16 * 1024))),
+            ]
 
             //arm7_status:    Arc::new(AtomicU8::new(VRAMStatus::default().bits()))
         };

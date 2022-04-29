@@ -1,6 +1,7 @@
 
 use bitflags::bitflags;
 use crate::utils::bits::u8;
+use super::VRAMRegion;
 
 bitflags!{
     #[derive(Default)]
@@ -11,31 +12,22 @@ bitflags!{
     }
 }
 
+#[derive(PartialEq, Clone, Copy)]
 pub enum Slot {
-    LCDC(LCDC),
+    LCDC(VRAMRegion),
     ARM7(ARM7),
     EngineA(EngineA),
     EngineB(EngineB),
     Texture(Texture)
 }
 
-pub enum LCDC {
-    A,
-    B,
-    C,
-    D,
-    E,
-    F,
-    G,
-    H,
-    I
-}
-
+#[derive(PartialEq, Clone, Copy)]
 pub enum ARM7 {
     Lo,
     Hi
 }
 
+#[derive(PartialEq, Clone, Copy)]
 pub enum EngineA {
     Bg0,
     Bg01,
@@ -57,6 +49,7 @@ pub enum EngineA {
     ObjExtPalette,
 }
 
+#[derive(PartialEq, Clone, Copy)]
 pub enum EngineB {
     Bg0,
     Bg01,
@@ -67,6 +60,7 @@ pub enum EngineB {
     ObjExtPalette,
 }
 
+#[derive(PartialEq, Clone, Copy)]
 pub enum Texture {
     Tex0,
     Tex1,
@@ -80,7 +74,23 @@ pub enum Texture {
 }
 
 impl VRAMControl {
-    pub fn slot_ab(self, lcdc: LCDC) -> Slot {
+    /// Get the slot that this region should be mapped to.
+    /// 
+    /// Region 0-8 corresponds to region A-I.
+    pub fn get_slot(self, region: VRAMRegion) -> Slot {
+        use VRAMRegion::*;
+        match region {
+            A | B   => self.slot_ab(region),
+            C       => self.slot_c(),
+            D       => self.slot_d(),
+            E       => self.slot_e(),
+            F | G   => self.slot_fg(region),
+            H       => self.slot_h(),
+            I       => self.slot_i(),
+        }
+    }
+
+    pub fn slot_ab(self, lcdc: VRAMRegion) -> Slot {
         match (self & VRAMControl::MST).bits() {
             0b01 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
                 0b00 => EngineA::Bg0,
@@ -121,7 +131,7 @@ impl VRAMControl {
                 _    => Texture::Tex3,
             }),
             0b100 => Slot::EngineB(EngineB::Bg0),
-            _ => Slot::LCDC(LCDC::C),
+            _ => Slot::LCDC(VRAMRegion::C),
         }
     }
 
@@ -144,7 +154,7 @@ impl VRAMControl {
                 _    => Texture::Tex3,
             }),
             0b100 => Slot::EngineB(EngineB::Obj),
-            _ => Slot::LCDC(LCDC::D),
+            _ => Slot::LCDC(VRAMRegion::D),
         }
     }
 
@@ -154,11 +164,11 @@ impl VRAMControl {
             0b010 => Slot::EngineA(EngineA::Obj0),
             0b011 => Slot::Texture(Texture::Palette0),
             0b100 => Slot::EngineA(EngineA::BgExtPalette0),
-            _ => Slot::LCDC(LCDC::E),
+            _ => Slot::LCDC(VRAMRegion::E),
         }
     }
 
-    pub fn slot_fg(self, lcdc: LCDC) -> Slot {
+    pub fn slot_fg(self, lcdc: VRAMRegion) -> Slot {
         match (self & VRAMControl::MST).bits() {
             0b001 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
                 0b00 => EngineA::Bg0,
@@ -191,7 +201,7 @@ impl VRAMControl {
         match (self & VRAMControl::MST).bits() {
             0b01 => Slot::EngineB(EngineB::Bg0),
             0b10 => Slot::EngineB(EngineB::BgExtPalette),
-            _ => Slot::LCDC(LCDC::H),
+            _ => Slot::LCDC(VRAMRegion::H),
         }
     }
 
@@ -200,7 +210,7 @@ impl VRAMControl {
             0b01 => Slot::EngineB(EngineB::Bg01),
             0b10 => Slot::EngineB(EngineB::Obj),
             0b11 => Slot::EngineB(EngineB::ObjExtPalette),
-            _ => Slot::LCDC(LCDC::I),
+            _ => Slot::LCDC(VRAMRegion::I),
         }
     }
 }
