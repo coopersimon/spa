@@ -252,6 +252,10 @@ impl SoftwareRenderer {
                         (base + offset_x + offset_y) * 2
                     };
                     let colour = mem.vram.get_obj_halfword(addr);
+                    // Transparent.
+                    if !u16::test_bit(colour, 15) {
+                        continue;
+                    }
                     ColType::Direct(colour)
                 } else {
                     let tile_x = (index_x / 8) as u32;
@@ -295,9 +299,15 @@ impl SoftwareRenderer {
                 if in_obj_window {
                     obj_window[x as usize] = true;
                 } else {
-                    // Palette lookup.
+                    let obj_type = if bitmap {
+                        ObjType::Bitmap(object.palette_bank() as u16)
+                    } else if semi_transparent {
+                        ObjType::SemiTransparent
+                    } else {
+                        ObjType::None
+                    };
                     target[x as usize] = Some(ObjectPixel{
-                        colour, priority, semi_transparent
+                        colour, priority, obj_type
                     });
                 }
             }
@@ -591,7 +601,7 @@ impl SoftwareRenderer {
         let colour_window = || {
             self.window_pixel(&mem.registers, mem.registers.colour_window_mask(), obj_window, x, y)
         };
-        let mut target_1 = None;
+        let mut target_1: Option<BlendTarget1> = None;
         for priority in 0..4 {
             if let Some(obj) = obj_pixel {
                 if obj.priority == priority {
@@ -602,7 +612,7 @@ impl SoftwareRenderer {
                             ColType::Direct(c) => Colour::from_555(c),
                         };
                         if colour_window() {
-                            match self.colour_effect(&mem.registers, mem.registers.obj_blend_mask(), col, target_1, obj.semi_transparent) {
+                            match self.colour_effect(&mem.registers, mem.registers.obj_blend_mask(), col, target_1, obj.obj_type) {
                                 Blended::Colour(c) => return c,
                                 Blended::AlphaTarget1(a) => target_1 = Some(a),
                             }
@@ -616,7 +626,7 @@ impl SoftwareRenderer {
                 if bg.priority == priority {
                     if let Some(col) = self.bg_pixel(mem, bg, obj_window, x, y) {
                         if colour_window() {
-                            match self.colour_effect(&mem.registers, bg.blend_mask, col, target_1, false) {
+                            match self.colour_effect(&mem.registers, bg.blend_mask, col, target_1, ObjType::None) {
                                 Blended::Colour(c) => return c,
                                 Blended::AlphaTarget1(a) => target_1 = Some(a),
                             }
@@ -629,9 +639,9 @@ impl SoftwareRenderer {
         }
         let col = self.palette_cache.get_backdrop();
         if colour_window() {
-            match self.colour_effect(&mem.registers, mem.registers.backdrop_blend_mask(), col, target_1, false) {
+            match self.colour_effect(&mem.registers, mem.registers.backdrop_blend_mask(), col, target_1, ObjType::None) {
                 Blended::Colour(c) => c,
-                Blended::AlphaTarget1(a) => a,
+                Blended::AlphaTarget1(a) => a.colour,
             }
         } else {
             col
@@ -686,42 +696,52 @@ impl SoftwareRenderer {
     }
 
     /// Apply colour effects.
-    fn colour_effect(&self, regs: &VideoRegisters, mask: BlendMask, colour: Colour, target_1: Option<Colour>, semi_transparent: bool) -> Blended {
+    fn colour_effect(&self, regs: &VideoRegisters, mask: BlendMask, colour: Colour, target_1: Option<BlendTarget1>, obj_type: ObjType) -> Blended {
         use Blended::*;
         if let Some(target_1) = target_1 {
             if mask.contains(BlendMask::LAYER_2) {
-                let alpha_coeffs = regs.get_alpha_coeffs();
-                Colour(apply_alpha_blend(alpha_coeffs.0, alpha_coeffs.1, target_1, colour))
+                Colour(apply_alpha_blend(target_1.alpha, regs.get_alpha_coeff_b(), target_1.colour, colour))
             } else {
-                Colour(target_1)
+                Colour(target_1.colour)
             }
-        } else if semi_transparent {
-            AlphaTarget1(colour)
         } else {
-            match regs.colour_effect() {
-                ColourEffect::AlphaBlend => if mask.contains(BlendMask::LAYER_1) {
-                    AlphaTarget1(colour)
-                } else {
-                    Colour(colour)
-                },
-                ColourEffect::Brighten => if mask.contains(BlendMask::LAYER_1) {
-                    Colour(apply_brighten(regs.get_brightness_coeff(), colour))
-                } else {
-                    Colour(colour)
-                },
-                ColourEffect::Darken => if mask.contains(BlendMask::LAYER_1) {
-                    Colour(apply_darken(regs.get_brightness_coeff(), colour))
-                } else {
-                    Colour(colour)
-                },
-                _ => Colour(colour)
+            match obj_type {
+                ObjType::SemiTransparent => AlphaTarget1(BlendTarget1 {colour, alpha: regs.get_alpha_coeff_a()}),
+                ObjType::Bitmap(alpha)  => AlphaTarget1(BlendTarget1 {colour, alpha}),
+                ObjType::None           => match regs.colour_effect() {
+                    ColourEffect::AlphaBlend => if mask.contains(BlendMask::LAYER_1) {
+                        AlphaTarget1(BlendTarget1 {colour, alpha: regs.get_alpha_coeff_a()})
+                    } else {
+                        Colour(colour)
+                    },
+                    ColourEffect::Brighten => if mask.contains(BlendMask::LAYER_1) {
+                        Colour(apply_brighten(regs.get_brightness_coeff(), colour))
+                    } else {
+                        Colour(colour)
+                    },
+                    ColourEffect::Darken => if mask.contains(BlendMask::LAYER_1) {
+                        Colour(apply_darken(regs.get_brightness_coeff(), colour))
+                    } else {
+                        Colour(colour)
+                    },
+                    _ => Colour(colour)
+                }
             }
         }
     }
 }
 
+/// The components of alpha blend "target 1".
+/// (The top layer of a blend.)
+struct BlendTarget1 {
+    /// The colour to blend.
+    colour: Colour,
+    /// Alpha of this colour.
+    alpha:  u16,
+}
+
 enum Blended {
-    AlphaTarget1(Colour),
+    AlphaTarget1(BlendTarget1),
     Colour(Colour)
 }
 

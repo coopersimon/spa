@@ -3,9 +3,9 @@
 /// An object pixel.
 #[derive(Clone, Copy)]
 pub struct ObjectPixel {
-    pub colour:             ColType,
-    pub priority:           u8,
-    pub semi_transparent:   bool,
+    pub colour:     ColType,
+    pub priority:   u8,
+    pub obj_type:   ObjType,
 }
 
 /// A variable colour.
@@ -16,7 +16,18 @@ pub enum ColType {
     /// One of the 4096 extended colours
     Extended(u16),
     /// A direct colour (in 5,5,5 format)
-    Direct(u16) // TODO: alpha
+    Direct(u16)
+}
+
+/// Type of object for blending.
+#[derive(Clone, Copy)]
+pub enum ObjType {
+    /// Not an object, or not for blending.
+    None,
+    /// For blending.
+    SemiTransparent,
+    /// NDS bitmap object, with alpha coefficient.
+    Bitmap(u16)
 }
 
 /// A colour in R8G8B8 format.

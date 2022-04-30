@@ -865,10 +865,13 @@ impl VideoRegisters {
         )
     }
     
-    pub fn get_alpha_coeffs(&self) -> (u16, u16) {
+    pub fn get_alpha_coeff_a(&self) -> u16 {
         let eva = self.alpha_coeffs & 0x1F;
+        std::cmp::min(0x10, eva)
+    }
+    pub fn get_alpha_coeff_b(&self) -> u16 {
         let evb = (self.alpha_coeffs >> 8) & 0x1F;
-        (std::cmp::min(0x10, eva), std::cmp::min(0x10, evb))
+        std::cmp::min(0x10, evb)
     }
     pub fn get_brightness_coeff(&self) -> u16 {
         let evy = (self.brightness & 0x1F) as u16;
