@@ -360,8 +360,8 @@ impl VRAM2D for EngineBVRAM {
             [
                 self.ext_bg_palette.as_ref().map(|v| &v.ref_mem()[0..0x2000]),
                 self.ext_bg_palette.as_ref().map(|v| &v.ref_mem()[0x2000..0x4000]),
-                self.ext_bg_palette.as_ref().map(|v| &v.ref_mem()[0..0x2000]),
-                self.ext_bg_palette.as_ref().map(|v| &v.ref_mem()[0x2000..0x4000])
+                self.ext_bg_palette.as_ref().map(|v| &v.ref_mem()[0x4000..0x6000]),
+                self.ext_bg_palette.as_ref().map(|v| &v.ref_mem()[0x6000..0x8000])
             ]
         } else {
             [None; 4]

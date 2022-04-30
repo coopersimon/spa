@@ -430,6 +430,11 @@ impl VideoRegisters {
                 scroll_x:       self.bg0_x_offset,
                 scroll_y:       self.bg0_y_offset,
                 layout:         self.bg0_control.layout(),
+                ext_palette:    if self.bg_ext_palette() {
+                    Some(if self.bg0_control.affine_wraparound() {2} else {0})
+                } else {
+                    None
+                }
             };
             Some(BackgroundData {
                 priority:       self.bg0_control.priority(),
@@ -460,6 +465,11 @@ impl VideoRegisters {
                 scroll_x:       self.bg1_x_offset,
                 scroll_y:       self.bg1_y_offset,
                 layout:         self.bg1_control.layout(),
+                ext_palette:    if self.bg_ext_palette() {
+                    Some(if self.bg1_control.affine_wraparound() {3} else {1})
+                } else {
+                    None
+                }
             };
             Some(BackgroundData {
                 priority:       self.bg1_control.priority(),
@@ -490,6 +500,7 @@ impl VideoRegisters {
                 scroll_x:       self.bg2_x_offset,
                 scroll_y:       self.bg2_y_offset,
                 layout:         self.bg2_control.layout(),
+                ext_palette:    if self.bg_ext_palette() {Some(2)} else {None},
             };
             Some(BackgroundData {
                 priority:       self.bg2_control.priority(),
@@ -520,6 +531,7 @@ impl VideoRegisters {
                 scroll_x:       self.bg3_x_offset,
                 scroll_y:       self.bg3_y_offset,
                 layout:         self.bg3_control.layout(),
+                ext_palette:    if self.bg_ext_palette() {Some(3)} else {None},
             };
             Some(BackgroundData {
                 priority:       self.bg3_control.priority(),
@@ -554,6 +566,7 @@ impl VideoRegisters {
                 matrix_d:       self.bg2_internal_d,
                 wrap:           self.bg2_control.affine_wraparound(),
                 size:           self.bg2_control.affine_size(),
+                ext_palette:    None,
             };
             Some(BackgroundData {
                 priority:       self.bg2_control.priority(),
@@ -588,6 +601,7 @@ impl VideoRegisters {
                 matrix_d:       self.bg3_internal_d,
                 wrap:           self.bg3_control.affine_wraparound(),
                 size:           self.bg3_control.affine_size(),
+                ext_palette:    None,
             };
             Some(BackgroundData {
                 priority:       self.bg3_control.priority(),
@@ -651,6 +665,8 @@ impl VideoRegisters {
                     matrix_d:       self.bg2_internal_d,
                     wrap:           self.bg2_control.affine_wraparound(),
                     size:           self.bg2_control.affine_size(),
+
+                    ext_palette:    if self.bg_ext_palette() {Some(2)} else {None},
                 })
             } else {
                 BackgroundTypeData::ExtBitmapAffine(BitmapAffineBackgroundData{
@@ -702,6 +718,8 @@ impl VideoRegisters {
                     matrix_d:       self.bg3_internal_d,
                     wrap:           self.bg3_control.affine_wraparound(),
                     size:           self.bg3_control.affine_size(),
+
+                    ext_palette:    if self.bg_ext_palette() {Some(3)} else {None},
                 })
             } else {
                 BackgroundTypeData::ExtBitmapAffine(BitmapAffineBackgroundData{

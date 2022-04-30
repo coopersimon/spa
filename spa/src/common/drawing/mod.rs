@@ -4,6 +4,7 @@ pub mod colour;
 pub mod background;
 
 use fixed::types::I24F8;
+use crate::utils::bits::u16;
 use crate::common::videomem::{
     VideoMemory, VideoRegisters, VRAM2D
 };
@@ -361,7 +362,12 @@ impl SoftwareRenderer {
         if texel == 0 {
             None
         } else {
-            Some(self.palette_cache.get_bg((attrs.palette_num() * 16) + texel))
+            if let Some(slot) = bg.ext_palette {
+                let palette_offset = (attrs.palette_num() as u16) * 256;
+                Some(self.palette_cache.get_ext_bg(slot, palette_offset + (texel as u16)))
+            } else {
+                Some(self.palette_cache.get_bg((attrs.palette_num() * 16) + texel))
+            }
         }
     }
 
@@ -470,13 +476,16 @@ impl SoftwareRenderer {
             tile_y = 7 - tile_y;
         }
         let tile_addr = bg.tile_data_addr + (attrs.tile_num() * TILE_BYTES_8BPP);
-        let texel = vram.bg_tile_texel_8bpp(tile_addr, tile_x, tile_y) as u16;
+        let texel = vram.bg_tile_texel_8bpp(tile_addr, tile_x, tile_y);
         if texel == 0 {
             None
         } else {
-            let palette_offset = (attrs.palette_num() as u16) * 256;
-            // TODO: slot
-            Some(self.palette_cache.get_ext_bg(0, palette_offset + texel))
+            if let Some(slot) = bg.ext_palette {
+                let palette_offset = (attrs.palette_num() as u16) * 256;
+                Some(self.palette_cache.get_ext_bg(slot, palette_offset + (texel as u16)))
+            } else {
+                Some(self.palette_cache.get_bg((attrs.palette_num() * 16) + texel))
+            }
         }
     }
 
@@ -536,7 +545,11 @@ impl SoftwareRenderer {
 
         if bg.use_15bpp {
             let colour = vram.bg_bitmap_texel_15bpp(bg.data_addr, bg_x, bg_y, bg.size.1);
-            Some(Colour::from_555(colour))
+            if u16::test_bit(colour, 15) {
+                None
+            } else {
+                Some(Colour::from_555(colour))
+            }
         } else {
             let texel = vram.bg_bitmap_texel_8bpp(bg.data_addr, bg_x, bg_y, bg.size.1);
             if texel == 0 {

@@ -86,6 +86,8 @@ pub struct TiledBackgroundData {
     pub scroll_x:   u16,
     pub scroll_y:   u16,
     pub layout:     BackgroundMapLayout,
+
+    pub ext_palette:    Option<usize>
 }
 
 /// Data for a tiled background.
@@ -102,6 +104,8 @@ pub struct AffineBackgroundData {
     pub matrix_d:       I24F8,
     pub wrap:           bool,
     pub size:           u32,
+
+    pub ext_palette:    Option<usize>
 }
 
 /// Data for a bitmap background.
