@@ -87,26 +87,17 @@ pub trait VRAM2D {
     }
 
     /// Get a bitmap texel, using 256-colour palette.
-    fn bg_bitmap_texel_8bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
-        let y_offset = (y as u32) * 240;
-        let x_offset = x as u32;
+    fn bg_bitmap_texel_8bpp(&self, addr: u32, x: u32, y: u32, width: u32) -> u8 {
+        let y_offset = y * width;
+        let x_offset = x;
         self.get_bg_byte(addr + y_offset + x_offset)
     }
 
     /// Get a bitmap texel, using direct colour.
     /// Bitmap size is 240x160.
-    fn bg_bitmap_texel_15bpp(&self, addr: u32, x: u8, y: u8) -> u16 {
-        let y_offset = (y as u32) * 480;
-        let x_offset = (x as u32) * 2;
-        let texel_addr = addr + y_offset + x_offset;
-        self.get_bg_halfword(texel_addr)
-    }
-
-    /// Get a bitmap texel, using direct colour.
-    /// Bitmap size is 160x128.
-    fn bg_small_bitmap_texel_15bpp(&self, addr: u32, x: u8, y: u8) -> u16 {
-        let y_offset = (y as u32) * 320;
-        let x_offset = (x as u32) * 2;
+    fn bg_bitmap_texel_15bpp(&self, addr: u32, x: u32, y: u32, width: u32) -> u16 {
+        let y_offset = y * width * 2;
+        let x_offset = x * 2;
         let texel_addr = addr + y_offset + x_offset;
         self.get_bg_halfword(texel_addr)
     }

@@ -54,6 +54,18 @@ bitflags! {
     }
 }
 
+impl NDSControl {
+    fn bg_map_base(self) -> u32 {
+        let base = ((self & NDSControl::BG_MAP_BASE_HI).bits() >> 11) as u32;
+        base * 64 * 1024
+    }
+
+    fn bg_tile_base(self) -> u32 {
+        let base = ((self & NDSControl::BG_TILE_BASE_HI).bits() >> 8) as u32;
+        base * 64 * 1024
+    }
+}
+
 bitflags! {
     #[derive(Default)]
     struct BGControl: u16 {
@@ -62,8 +74,10 @@ bitflags! {
         const MAP_BASE      = u16::bits(8, 12);
         const USE_8_BPP     = u16::bit(7);
         const MOSAIC        = u16::bit(6);
-        const TILE_BASE     = u16::bits(2, 3);
+        const TILE_BASE     = u16::bits(2, 5);  // 2,3 for GBA
         const PRIORITY      = u16::bits(0, 1);
+
+        const AFFINE_BMP_COL = u16::bit(2);
     }
 }
 
@@ -92,6 +106,10 @@ impl BGControl {
         self.contains(BGControl::OVERFLOW)
     }
 
+    fn affine_bitmap_direct_col(self) -> bool {
+        self.contains(BGControl::AFFINE_BMP_COL)
+    }
+
     fn layout(self) -> BackgroundMapLayout {
         const SMALL: u16 = 0 << 14;
         const WIDE: u16 = 1 << 14;
@@ -116,6 +134,20 @@ impl BGControl {
             MID => 256,
             LARGE => 512,
             XLARGE => 1024,
+            _ => unreachable!()
+        }
+    }
+
+    fn affine_bitmap_size(self) -> (u32, u32) {
+        const SMALL: u16 = 0 << 14;
+        const MID: u16 = 1 << 14;
+        const WIDE: u16 = 2 << 14;
+        const LARGE: u16 = 3 << 14;
+        match (self & BGControl::SCREEN_SIZE).bits() {
+            SMALL => (128, 128),
+            MID => (256, 256),
+            WIDE => (512, 256),
+            LARGE => (512, 512),
             _ => unreachable!()
         }
     }
@@ -284,7 +316,7 @@ impl VideoRegisters {
     /// 
     /// Will return data for each enabled background in the current mode,
     /// in priority order (high-low)
-    pub fn bg_data_for_mode(&self) -> Vec<BackgroundData> {
+    pub fn gba_bg_data_for_mode(&self) -> Vec<BackgroundData> {
         let mut backgrounds = Vec::<BackgroundData>::new();
         let mut insert = |bg: Option<BackgroundData>| {
             if let Some(bg_data) = bg {
@@ -327,11 +359,73 @@ impl VideoRegisters {
         backgrounds
     }
 
+    /// Get background data for the current mode.
+    /// 
+    /// Will return data for each enabled background in the current mode,
+    /// in priority order (high-low)
+    pub fn nds_bg_data_for_mode(&self) -> Vec<BackgroundData> {
+        let mut backgrounds = Vec::<BackgroundData>::new();
+        let mut insert = |bg: Option<BackgroundData>| {
+            if let Some(bg_data) = bg {
+                for i in 0..backgrounds.len() {
+                    if bg_data.priority < backgrounds[i].priority {
+                        backgrounds.insert(i, bg_data);
+                        return;
+                    }
+                }
+                backgrounds.push(bg_data);
+            }
+        };
+        match self.mode() {
+            0 => {
+                insert(self.get_tiled_bg0());
+                insert(self.get_tiled_bg1());
+                insert(self.get_tiled_bg2());
+                insert(self.get_tiled_bg3());
+            },
+            1 => {
+                insert(self.get_tiled_bg0());
+                insert(self.get_tiled_bg1());
+                insert(self.get_tiled_bg2());
+                insert(self.get_affine_bg3());
+            },
+            2 => {
+                insert(self.get_tiled_bg0());
+                insert(self.get_tiled_bg1());
+                insert(self.get_affine_bg2());
+                insert(self.get_affine_bg3());
+            },
+            3 => {
+                insert(self.get_tiled_bg0());
+                insert(self.get_tiled_bg1());
+                insert(self.get_tiled_bg2());
+                insert(self.get_ext_bg3());
+            },
+            4 => {
+                insert(self.get_tiled_bg0());
+                insert(self.get_tiled_bg1());
+                insert(self.get_affine_bg2());
+                insert(self.get_ext_bg3());
+            },
+            5 => {
+                insert(self.get_tiled_bg0());
+                insert(self.get_tiled_bg1());
+                insert(self.get_ext_bg2(false));
+                insert(self.get_ext_bg3());
+            },
+            6 => {
+                unimplemented!()
+            },
+            _ => unreachable!()
+        }
+        backgrounds
+    }
+
     fn get_tiled_bg0(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG0) {
             let tiled_data = TiledBackgroundData {
-                tile_map_addr:  self.bg0_control.tile_map_block() * 2 * 1024,
-                tile_data_addr: self.bg0_control.tile_data_block() * 16 * 1024,
+                tile_map_addr:  (self.bg0_control.tile_map_block() * 2 * 1024) + self.lcd_control_hi.bg_map_base(),
+                tile_data_addr: (self.bg0_control.tile_data_block() * 16 * 1024) + self.lcd_control_hi.bg_tile_base(),
                 use_8bpp:       self.bg0_control.use_8_bpp(),
                 scroll_x:       self.bg0_x_offset,
                 scroll_y:       self.bg0_y_offset,
@@ -360,8 +454,8 @@ impl VideoRegisters {
     fn get_tiled_bg1(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG1) {
             let tiled_data = TiledBackgroundData {
-                tile_map_addr:  self.bg1_control.tile_map_block() * 2 * 1024,
-                tile_data_addr: self.bg1_control.tile_data_block() * 16 * 1024,
+                tile_map_addr:  (self.bg1_control.tile_map_block() * 2 * 1024) + self.lcd_control_hi.bg_map_base(),
+                tile_data_addr: (self.bg1_control.tile_data_block() * 16 * 1024) + self.lcd_control_hi.bg_tile_base(),
                 use_8bpp:       self.bg1_control.use_8_bpp(),
                 scroll_x:       self.bg1_x_offset,
                 scroll_y:       self.bg1_y_offset,
@@ -390,8 +484,8 @@ impl VideoRegisters {
     fn get_tiled_bg2(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
             let tiled_data = TiledBackgroundData {
-                tile_map_addr:  self.bg2_control.tile_map_block() * 2 * 1024,
-                tile_data_addr: self.bg2_control.tile_data_block() * 16 * 1024,
+                tile_map_addr:  (self.bg2_control.tile_map_block() * 2 * 1024) + self.lcd_control_hi.bg_map_base(),
+                tile_data_addr: (self.bg2_control.tile_data_block() * 16 * 1024) + self.lcd_control_hi.bg_tile_base(),
                 use_8bpp:       self.bg2_control.use_8_bpp(),
                 scroll_x:       self.bg2_x_offset,
                 scroll_y:       self.bg2_y_offset,
@@ -420,8 +514,8 @@ impl VideoRegisters {
     fn get_tiled_bg3(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG3) {
             let tiled_data = TiledBackgroundData {
-                tile_map_addr:  self.bg3_control.tile_map_block() * 2 * 1024,
-                tile_data_addr: self.bg3_control.tile_data_block() * 16 * 1024,
+                tile_map_addr:  (self.bg3_control.tile_map_block() * 2 * 1024) + self.lcd_control_hi.bg_map_base(),
+                tile_data_addr: (self.bg3_control.tile_data_block() * 16 * 1024) + self.lcd_control_hi.bg_tile_base(),
                 use_8bpp:       self.bg3_control.use_8_bpp(),
                 scroll_x:       self.bg3_x_offset,
                 scroll_y:       self.bg3_y_offset,
@@ -450,8 +544,8 @@ impl VideoRegisters {
     fn get_affine_bg2(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
             let affine_data = AffineBackgroundData {
-                tile_map_addr:  self.bg2_control.tile_map_block() * 2 * 1024,
-                tile_data_addr: self.bg2_control.tile_data_block() * 16 * 1024,
+                tile_map_addr:  (self.bg2_control.tile_map_block() * 2 * 1024) + self.lcd_control_hi.bg_map_base(),
+                tile_data_addr: (self.bg2_control.tile_data_block() * 16 * 1024) + self.lcd_control_hi.bg_tile_base(),
                 bg_ref_point_x: self.bg2_internal_x,
                 bg_ref_point_y: self.bg2_internal_y,
                 matrix_a:       self.bg2_internal_a,
@@ -484,8 +578,8 @@ impl VideoRegisters {
     fn get_affine_bg3(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG3) {
             let affine_data = AffineBackgroundData {
-                tile_map_addr:  self.bg3_control.tile_map_block() * 2 * 1024,
-                tile_data_addr: self.bg3_control.tile_data_block() * 16 * 1024,
+                tile_map_addr:  (self.bg3_control.tile_map_block() * 2 * 1024) + self.lcd_control_hi.bg_map_base(),
+                tile_data_addr: (self.bg3_control.tile_data_block() * 16 * 1024) + self.lcd_control_hi.bg_tile_base(),
                 bg_ref_point_x: self.bg3_internal_x,
                 bg_ref_point_y: self.bg3_internal_y,
                 matrix_a:       self.bg3_internal_a,
@@ -536,6 +630,108 @@ impl VideoRegisters {
                 ),
                 mosaic:     self.bg2_control.is_mosaic(),
                 type_data:  BackgroundTypeData::Bitmap(bitmap_data)
+            })
+        } else {
+            None
+        }
+    }
+
+    fn get_ext_bg2(&self, large: bool) -> Option<BackgroundData> {
+        if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
+            let ext_data = if self.bg2_control.use_8_bpp() {
+                BackgroundTypeData::ExtTiledAffine(AffineBackgroundData {
+                    tile_map_addr:  (self.bg2_control.tile_map_block() * 2 * 1024) + self.lcd_control_hi.bg_map_base(),
+                    tile_data_addr: (self.bg2_control.tile_data_block() * 16 * 1024) + self.lcd_control_hi.bg_tile_base(),
+
+                    bg_ref_point_x: self.bg2_internal_x,
+                    bg_ref_point_y: self.bg2_internal_y,
+                    matrix_a:       self.bg2_internal_a,
+                    matrix_b:       self.bg2_internal_b,
+                    matrix_c:       self.bg2_internal_c,
+                    matrix_d:       self.bg2_internal_d,
+                    wrap:           self.bg2_control.affine_wraparound(),
+                    size:           self.bg2_control.affine_size(),
+                })
+            } else {
+                BackgroundTypeData::ExtBitmapAffine(BitmapAffineBackgroundData{
+                    data_addr:      self.bg2_control.tile_map_block() * 16 * 1024,
+                    use_15bpp:      self.bg2_control.affine_bitmap_direct_col(),
+                
+                    bg_ref_point_x: self.bg2_internal_x,
+                    bg_ref_point_y: self.bg2_internal_y,
+                    matrix_a:       self.bg2_internal_a,
+                    matrix_b:       self.bg2_internal_b,
+                    matrix_c:       self.bg2_internal_c,
+                    matrix_d:       self.bg2_internal_d,
+                    wrap:           self.bg2_control.affine_wraparound(),
+                    size:           self.bg2_control.affine_bitmap_size(),
+                })
+            };
+            Some(BackgroundData {
+                priority:       self.bg2_control.priority(),
+                window_mask:    WindowMask::make(
+                    self.win0_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win1_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win_obj_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win_outside.contains(WindowControl::BG2_ENABLE)
+                ),
+                blend_mask:     BlendMask::make(
+                    self.colour_special.contains(ColourSpecialControl::BG2_TARGET_1) && self.use_blend_layer_1(),
+                    self.colour_special.contains(ColourSpecialControl::BG2_TARGET_2)
+                ),
+                mosaic:     self.bg2_control.is_mosaic(),
+                type_data:  ext_data
+            })
+        } else {
+            None
+        }
+    }
+
+    fn get_ext_bg3(&self) -> Option<BackgroundData> {
+        if self.lcd_control.contains(LCDControl::DISPLAY_BG3) {
+            let ext_data = if self.bg3_control.use_8_bpp() {
+                BackgroundTypeData::ExtTiledAffine(AffineBackgroundData {
+                    tile_map_addr:  (self.bg3_control.tile_map_block() * 2 * 1024) + self.lcd_control_hi.bg_map_base(),
+                    tile_data_addr: (self.bg3_control.tile_data_block() * 16 * 1024) + self.lcd_control_hi.bg_tile_base(),
+
+                    bg_ref_point_x: self.bg3_internal_x,
+                    bg_ref_point_y: self.bg3_internal_y,
+                    matrix_a:       self.bg3_internal_a,
+                    matrix_b:       self.bg3_internal_b,
+                    matrix_c:       self.bg3_internal_c,
+                    matrix_d:       self.bg3_internal_d,
+                    wrap:           self.bg3_control.affine_wraparound(),
+                    size:           self.bg3_control.affine_size(),
+                })
+            } else {
+                BackgroundTypeData::ExtBitmapAffine(BitmapAffineBackgroundData{
+                    data_addr:      self.bg3_control.tile_map_block() * 16 * 1024,
+                    use_15bpp:      self.bg3_control.affine_bitmap_direct_col(),
+                
+                    bg_ref_point_x: self.bg3_internal_x,
+                    bg_ref_point_y: self.bg3_internal_y,
+                    matrix_a:       self.bg3_internal_a,
+                    matrix_b:       self.bg3_internal_b,
+                    matrix_c:       self.bg3_internal_c,
+                    matrix_d:       self.bg3_internal_d,
+                    wrap:           self.bg3_control.affine_wraparound(),
+                    size:           self.bg3_control.affine_bitmap_size(),
+                })
+            };
+            Some(BackgroundData {
+                priority:       self.bg3_control.priority(),
+                window_mask:    WindowMask::make(
+                    self.win0_inside.contains(WindowControl::BG3_ENABLE),
+                    self.win1_inside.contains(WindowControl::BG3_ENABLE),
+                    self.win_obj_inside.contains(WindowControl::BG3_ENABLE),
+                    self.win_outside.contains(WindowControl::BG3_ENABLE)
+                ),
+                blend_mask:     BlendMask::make(
+                    self.colour_special.contains(ColourSpecialControl::BG3_TARGET_1) && self.use_blend_layer_1(),
+                    self.colour_special.contains(ColourSpecialControl::BG3_TARGET_2)
+                ),
+                mosaic:     self.bg3_control.is_mosaic(),
+                type_data:  ext_data
             })
         } else {
             None

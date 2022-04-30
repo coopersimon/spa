@@ -22,9 +22,12 @@ pub struct BackgroundData {
 #[derive(Clone)]
 /// Background data for use by renderers
 pub enum BackgroundTypeData {
+    // TODO: 3d?
     Tiled(TiledBackgroundData),
     Affine(AffineBackgroundData),
-    Bitmap(BitmapBackgroundData)
+    Bitmap(BitmapBackgroundData),
+    ExtTiledAffine(AffineBackgroundData),
+    ExtBitmapAffine(BitmapAffineBackgroundData),
 }
 
 bitflags! {
@@ -107,4 +110,21 @@ pub struct BitmapBackgroundData {
     pub data_addr:      u32,
     pub use_15bpp:      bool,
     pub small:          bool,
+}
+
+/// NDS: Data for an extended background,
+/// in bitmap-affine mode.
+#[derive(Clone)]
+pub struct BitmapAffineBackgroundData {
+    pub data_addr:      u32,
+    pub use_15bpp:      bool,
+
+    pub bg_ref_point_x: I24F8,
+    pub bg_ref_point_y: I24F8,
+    pub matrix_a:       I24F8,
+    pub matrix_b:       I24F8,
+    pub matrix_c:       I24F8,
+    pub matrix_d:       I24F8,
+    pub wrap:           bool,
+    pub size:           (u32, u32),
 }

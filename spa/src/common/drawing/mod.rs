@@ -19,12 +19,14 @@ const BMP_MAP_SIZE: u32 = 16;
 const TILE_MAP_SIZE: u32 = 32;
 const VRAM_MAP_BLOCK: u32 = TILE_MAP_SIZE * TILE_MAP_SIZE * 2;
 
-/// Width of bitmap in mode 5.
-const SMALL_BITMAP_WIDTH: u8 = 160;
-/// Height of bitmap in mode 5.
-const SMALL_BITMAP_HEIGHT: u8 = 128;
-const SMALL_BITMAP_LEFT: u8 = (240 - SMALL_BITMAP_WIDTH) / 2;
-const SMALL_BITMAP_TOP: u8 = (160 - SMALL_BITMAP_HEIGHT) / 2;
+/// Width of bitmap in GBA mode 5.
+const SMALL_BITMAP_WIDTH: u32 = 160;
+/// Height of bitmap in GBA mode 5.
+const SMALL_BITMAP_HEIGHT: u32 = 128;
+const SMALL_BITMAP_LEFT: u32 = (240 - SMALL_BITMAP_WIDTH) / 2;
+const SMALL_BITMAP_TOP: u32 = (160 - SMALL_BITMAP_HEIGHT) / 2;
+/// Width of bitmap in GBA mode 4, 5.
+const LARGE_BITMAP_WIDTH: u32 = 240;
 
 pub enum RendererMode {
     GBA,
@@ -417,21 +419,126 @@ impl SoftwareRenderer {
         }
     }
 
+    /// Get the colour of a tile affine BG pixel (NDS only).
+    /// The x and y values provided should be mosaiced already.
+    /// 
+    /// If None is returned, the pixel is transparent.
+    fn tile_affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &impl VRAM2D, screen_x: u8, _screen_y: u8) -> Option<Colour> {
+        // Transform from screen space to BG space.
+        // Displacement points x0 and y0 are incremented by matrix points B and D respectively
+        // after each scanline, simulating (B * y_i) + x_0 and (D * y_i) + x_0
+        let x_0 = bg.bg_ref_point_x;
+        let y_0 = bg.bg_ref_point_y;
+        let x_i = I24F8::from_num(screen_x as i32);
+        //let y_i = I24F8::from_num(screen_y as i32);
+        let x_out = (bg.matrix_a * x_i) + x_0;
+        let y_out = (bg.matrix_c * x_i) + y_0;
+
+        let bg_x = if bg.wrap {
+            (x_out.to_num::<i32>() as u32) & (bg.size - 1)
+        } else {
+            let bg_x = x_out.to_num::<i32>() as u32;
+            if bg_x >= bg.size {
+                return None;
+            }
+            bg_x
+        };
+        let bg_y = if bg.wrap {
+            (y_out.to_num::<i32>() as u32) & (bg.size - 1)
+        } else {
+            let bg_y = y_out.to_num::<i32>() as u32;
+            if bg_y >= bg.size {
+                return None;
+            }
+            bg_y
+        };
+
+        // Find tile attrs in bg map
+        let map_x = bg_x / TILE_SIZE;
+        let map_y = bg_y / TILE_SIZE;
+        let map_width = bg.size / TILE_SIZE;
+        // The address of the tile attributes.
+        let tile_map_addr = (bg.tile_map_addr + map_x + (map_y * map_width)) * 2;
+        let attrs = vram.tile_map_attrs(tile_map_addr);
+        
+        let mut tile_x = (bg_x % TILE_SIZE) as u8;
+        let mut tile_y = (bg_y % TILE_SIZE) as u8;
+        if attrs.h_flip() {
+            tile_x = 7 - tile_x;
+        }
+        if attrs.v_flip() {
+            tile_y = 7 - tile_y;
+        }
+        let tile_addr = bg.tile_data_addr + (attrs.tile_num() * TILE_BYTES_8BPP);
+        let texel = vram.bg_tile_texel_8bpp(tile_addr, tile_x, tile_y) as u16;
+        if texel == 0 {
+            None
+        } else {
+            let palette_offset = (attrs.palette_num() as u16) * 256;
+            // TODO: slot
+            Some(self.palette_cache.get_ext_bg(0, palette_offset + texel))
+        }
+    }
+
     /// Draw a bitmap pixel.
-    fn bitmap_bg_pixel(&self, bg: &BitmapBackgroundData, vram: &impl VRAM2D, bg_x: u8, bg_y: u8) -> Option<Colour> {
+    fn bitmap_bg_pixel(&self, bg: &BitmapBackgroundData, vram: &impl VRAM2D, bg_x: u32, bg_y: u32) -> Option<Colour> {
         if bg.small {
             let bitmap_x = bg_x.wrapping_sub(SMALL_BITMAP_LEFT);
             let bitmap_y = bg_y.wrapping_sub(SMALL_BITMAP_TOP);
             if bitmap_x >= SMALL_BITMAP_WIDTH || bitmap_y >= SMALL_BITMAP_HEIGHT {
                 return None;
             }
-            let colour = vram.bg_small_bitmap_texel_15bpp(bg.data_addr, bitmap_x, bitmap_y);
+            let colour = vram.bg_bitmap_texel_15bpp(bg.data_addr, bitmap_x, bitmap_y, SMALL_BITMAP_WIDTH);
             Some(Colour::from_555(colour))
         } else if bg.use_15bpp {
-            let colour = vram.bg_bitmap_texel_15bpp(0, bg_x, bg_y);
+            let colour = vram.bg_bitmap_texel_15bpp(0, bg_x, bg_y, LARGE_BITMAP_WIDTH);
             Some(Colour::from_555(colour))
         } else {
-            let texel = vram.bg_bitmap_texel_8bpp(bg.data_addr, bg_x, bg_y);
+            let texel = vram.bg_bitmap_texel_8bpp(bg.data_addr, bg_x, bg_y, LARGE_BITMAP_WIDTH);
+            if texel == 0 {
+                None
+            } else {
+                Some(self.palette_cache.get_bg(texel))
+            }
+        }
+    }
+
+    /// Draw an affine bitmap pixel (NDS only).
+    fn bitmap_affine_bg_pixel(&self, bg: &BitmapAffineBackgroundData, vram: &impl VRAM2D, screen_x: u8, _screen_y: u8) -> Option<Colour> {
+        // Transform from screen space to BG space.
+        // Displacement points x0 and y0 are incremented by matrix points B and D respectively
+        // after each scanline, simulating (B * y_i) + x_0 and (D * y_i) + x_0
+        let x_0 = bg.bg_ref_point_x;
+        let y_0 = bg.bg_ref_point_y;
+        let x_i = I24F8::from_num(screen_x as i32);
+        //let y_i = I24F8::from_num(screen_y as i32);
+        let x_out = (bg.matrix_a * x_i) + x_0;
+        let y_out = (bg.matrix_c * x_i) + y_0;
+
+        let bg_x = if bg.wrap {
+            (x_out.to_num::<i32>() as u32) & (bg.size.0 - 1)
+        } else {
+            let bg_x = x_out.to_num::<i32>() as u32;
+            if bg_x >= bg.size.0 {
+                return None;
+            }
+            bg_x
+        };
+        let bg_y = if bg.wrap {
+            (y_out.to_num::<i32>() as u32) & (bg.size.1 - 1)
+        } else {
+            let bg_y = y_out.to_num::<i32>() as u32;
+            if bg_y >= bg.size.1 {
+                return None;
+            }
+            bg_y
+        };
+
+        if bg.use_15bpp {
+            let colour = vram.bg_bitmap_texel_15bpp(bg.data_addr, bg_x, bg_y, bg.size.1);
+            Some(Colour::from_555(colour))
+        } else {
+            let texel = vram.bg_bitmap_texel_8bpp(bg.data_addr, bg_x, bg_y, bg.size.1);
             if texel == 0 {
                 None
             } else {
@@ -445,7 +552,11 @@ impl SoftwareRenderer {
 impl SoftwareRenderer {
     fn draw<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [u8], line: u8) {
         // Gather the backgrounds.
-        let bg_data = mem.registers.bg_data_for_mode();
+        let bg_data = match self.mode {
+            RendererMode::GBA => mem.registers.gba_bg_data_for_mode(),
+            RendererMode::NDSA => mem.registers.nds_bg_data_for_mode(),
+            RendererMode::NDSB => mem.registers.nds_bg_data_for_mode(), // TODO: disallow mode 6
+        };
 
         // TODO: don't alloc these every time
         let mut obj_line = vec![None; self.h_res];
@@ -524,16 +635,17 @@ impl SoftwareRenderer {
         } else {
             (x, y)
         };
+        use BackgroundTypeData::*;
         match &bg.type_data {
-            BackgroundTypeData::Tiled(t) => {
+            Tiled(t) => {
                 let scrolled_x = (x as u32).wrapping_add(t.scroll_x as u32);
                 let scrolled_y = (y as u32).wrapping_add(t.scroll_y as u32);
                 self.tile_bg_pixel(t, &mem.vram, scrolled_x, scrolled_y)
             },
-            BackgroundTypeData::Affine(a) => {
-                self.affine_bg_pixel(a, &mem.vram, x, y)
-            },
-            BackgroundTypeData::Bitmap(b) => self.bitmap_bg_pixel(b, &mem.vram, x, y)
+            Affine(a) => self.affine_bg_pixel(a, &mem.vram, x, y),
+            Bitmap(b) => self.bitmap_bg_pixel(b, &mem.vram, x as u32, y as u32),
+            ExtTiledAffine(a) => self.tile_affine_bg_pixel(a, &mem.vram, x, y),
+            ExtBitmapAffine(ba) => self.bitmap_affine_bg_pixel(ba, &mem.vram, x, y),
         }
     }
 
