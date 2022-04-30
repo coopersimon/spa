@@ -19,6 +19,7 @@ pub enum ColType {
     Direct(u16) // TODO: alpha
 }
 
+/// A colour in R8G8B8 format.
 #[derive(Clone)]
 pub struct Colour {
     pub r: u8,
@@ -27,6 +28,8 @@ pub struct Colour {
 }
 
 impl Colour {
+    /// Deserialise from format:
+    /// 0bbbbbgg gggrrrrr
     pub fn from_555(colour: u16) -> Self {
         let r = ((colour & 0x001F) << 3) as u8;
         let g = ((colour & 0x03E0) >> 2) as u8;
@@ -35,6 +38,20 @@ impl Colour {
             r: r | (r >> 5),
             g: g | (g >> 5),
             b: b | (b >> 5),
+        }
+    }
+
+    /// Deserialise from format:
+    /// Gbbbbbgg gggrrrrr
+    pub fn from_565(colour: u16) -> Self {
+        let r = ((colour & 0x001F) << 3) as u8;
+        let g_hi = ((colour & 0x03E0) >> 2) as u8;
+        let g_lo = ((colour & 0x8000) >> 13) as u8;
+        let b = ((colour & 0x7C00) >> 7) as u8;
+        Self {
+            r: r | (r >> 6),
+            g: g_hi | g_lo | (g_hi >> 6),
+            b: b | (b >> 6),
         }
     }
 
@@ -49,6 +66,9 @@ impl Colour {
 pub struct PaletteCache {
     bg_palette:     Vec<Colour>,
     obj_palette:    Vec<Colour>,
+
+    ext_bg_palette:     [Vec<Colour>; 4],
+    ext_obj_palette:    Vec<Colour>,
 }
 
 impl PaletteCache {
@@ -56,21 +76,54 @@ impl PaletteCache {
         Self {
             bg_palette:     vec![Colour::black(); 256],
             obj_palette:    vec![Colour::black(); 256],
+
+            ext_bg_palette:     [Vec::new(), Vec::new(), Vec::new(), Vec::new()],
+            ext_obj_palette:    Vec::new(),
         }
     }
 
-    /// Update the bg palette cache.
-    pub fn update_bg(&mut self, palette_ram: &[u16]) {
+    /// Update the bg palette cache, using 555 colour format.
+    pub fn update_bg_555(&mut self, palette_ram: &[u16]) {
         for (raw, colour) in palette_ram.iter().zip(self.bg_palette.iter_mut()) {
             *colour = Colour::from_555(*raw);
         }
     }
 
-    /// Update the obj palette cache.
-    pub fn update_obj(&mut self, palette_ram: &[u16]) {
+    /// Update the obj palette cache, using 555 colour format.
+    pub fn update_obj_555(&mut self, palette_ram: &[u16]) {
         for (raw, colour) in palette_ram.iter().zip(self.obj_palette.iter_mut()) {
             *colour = Colour::from_555(*raw);
         }
+    }
+
+    /// Update the bg palette cache, using 565 colour format.
+    pub fn update_bg_565(&mut self, palette_ram: &[u16]) {
+        for (raw, colour) in palette_ram.iter().zip(self.bg_palette.iter_mut()) {
+            *colour = Colour::from_565(*raw);
+        }
+    }
+
+    /// Update the obj palette cache, using 565 colour format.
+    pub fn update_obj_565(&mut self, palette_ram: &[u16]) {
+        for (raw, colour) in palette_ram.iter().zip(self.obj_palette.iter_mut()) {
+            *colour = Colour::from_565(*raw);
+        }
+    }
+
+    /// Update the extended bg palette cache.
+    pub fn update_ext_bg(&mut self, slot: usize, ext_palette_ram: &[u8]) {
+        self.ext_bg_palette[slot] = ext_palette_ram.chunks_exact(2)
+            .map(|bytes| u16::from_le_bytes(bytes.try_into().unwrap()))
+            .map(|raw| Colour::from_565(raw))
+            .collect::<Vec<_>>();
+    }
+
+    /// Update the extended obj palette cache.
+    pub fn update_ext_obj(&mut self, ext_palette_ram: &[u8]) {
+        self.ext_obj_palette = ext_palette_ram.chunks_exact(2)
+            .map(|bytes| u16::from_le_bytes(bytes.try_into().unwrap()))
+            .map(|raw| Colour::from_565(raw))
+            .collect::<Vec<_>>();
     }
 
     pub fn get_backdrop(&self) -> Colour {
@@ -83,5 +136,13 @@ impl PaletteCache {
 
     pub fn get_obj(&self, index: u8) -> Colour {
         self.obj_palette[index as usize].clone()
+    }
+
+    pub fn get_ext_bg(&self, slot: usize, index: u16) -> Colour {
+        self.ext_bg_palette[slot][index as usize].clone()
+    }
+
+    pub fn get_ext_obj(&self, index: u16) -> Colour {
+        self.ext_obj_palette[index as usize].clone()
     }
 }

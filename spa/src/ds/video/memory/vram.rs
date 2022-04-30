@@ -137,6 +137,9 @@ pub struct EngineAVRAM {
     pub ext_bg_palette_0: VRAMSlot, // Up to 32K
     pub ext_bg_palette_2: VRAMSlot, // 16K
     pub ext_obj_palette:  VRAMSlot, // 8K
+
+    pub ext_bg_palette_dirty:   bool,
+    pub ext_obj_palette_dirty:  bool,
 }
 
 impl EngineAVRAM {
@@ -251,6 +254,37 @@ impl VRAM2D for EngineAVRAM {
             panic!("reading from strange addr (ENG_A_OBJ: {:X})", addr)
         }
     }
+
+    fn ref_ext_bg_palette<'a>(&'a mut self) -> [Option<&'a [u8]>; 4] {
+        if self.ext_bg_palette_dirty {
+            self.ext_bg_palette_dirty = false;
+            [
+                self.ext_bg_palette_0.as_ref().map(|v| &v.ref_mem()[0..0x2000]),
+                self.ext_bg_palette_0.as_ref().map(|v| &v.ref_mem()[0x2000..0x4000]),
+                if self.ext_bg_palette_2.is_some() {
+                    self.ext_bg_palette_2.as_ref().map(|v| &v.ref_mem()[0..0x2000])
+                } else {
+                    self.ext_bg_palette_0.as_ref().map(|v| &v.ref_mem()[0x4000..0x6000])
+                },
+                if self.ext_bg_palette_2.is_some() {
+                    self.ext_bg_palette_2.as_ref().map(|v| &v.ref_mem()[0x2000..0x4000])
+                } else {
+                    self.ext_bg_palette_0.as_ref().map(|v| &v.ref_mem()[0x6000..0x8000])
+                }
+            ]
+        } else {
+            [None; 4]
+        }
+    }
+
+    fn ref_ext_obj_palette<'a>(&'a mut self) -> Option<&'a [u8]> {
+        if self.ext_obj_palette_dirty {
+            self.ext_obj_palette_dirty = false;
+            self.ext_obj_palette.as_ref().map(|v| &v.ref_mem()[0..0x2000])
+        } else {
+            None
+        }
+    }
 }
 
 /// VRAM accessible by 2D engine B.
@@ -263,6 +297,9 @@ pub struct EngineBVRAM {
 
     pub ext_bg_palette:     VRAMSlot, // 32K
     pub ext_obj_palette:    VRAMSlot, // 16K
+
+    pub ext_bg_palette_dirty:   bool,
+    pub ext_obj_palette_dirty:  bool,
 }
 
 impl EngineBVRAM {
@@ -315,5 +352,28 @@ impl VRAM2D for EngineBVRAM {
 
     fn get_obj_halfword(&self, addr: u32) -> u16 {
         self.obj_slot.as_ref().unwrap().read_halfword(addr)
+    }
+
+    fn ref_ext_bg_palette<'a>(&'a mut self) -> [Option<&'a [u8]>; 4] {
+        if self.ext_bg_palette_dirty {
+            self.ext_bg_palette_dirty = false;
+            [
+                self.ext_bg_palette.as_ref().map(|v| &v.ref_mem()[0..0x2000]),
+                self.ext_bg_palette.as_ref().map(|v| &v.ref_mem()[0x2000..0x4000]),
+                self.ext_bg_palette.as_ref().map(|v| &v.ref_mem()[0..0x2000]),
+                self.ext_bg_palette.as_ref().map(|v| &v.ref_mem()[0x2000..0x4000])
+            ]
+        } else {
+            [None; 4]
+        }
+    }
+
+    fn ref_ext_obj_palette<'a>(&'a mut self) -> Option<&'a [u8]> {
+        if self.ext_obj_palette_dirty {
+            self.ext_obj_palette_dirty = false;
+            self.ext_obj_palette.as_ref().map(|v| &v.ref_mem()[0..0x2000])
+        } else {
+            None
+        }
     }
 }

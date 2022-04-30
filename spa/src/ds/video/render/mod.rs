@@ -2,6 +2,7 @@
 use std::sync::{
     Arc, Mutex
 };
+use crate::common::drawing::{SoftwareRenderer, RendererMode};
 use super::{
     memory::DSVideoMemory,
     constants::*
@@ -24,26 +25,43 @@ pub trait Renderer {
 }
 
 pub struct ProceduralRenderer {
-    //renderer:   SoftwareRenderer,
+    engine_a:   SoftwareRenderer,
+    engine_b:   SoftwareRenderer,
 
     upper: RenderTarget,
-    lower: RenderTarget
+    lower: RenderTarget,
+
+    engine_a_output: Vec<u8>
 }
 
 impl Renderer for ProceduralRenderer {
     fn new(upper: RenderTarget, lower: RenderTarget) -> Self {
         Self {
-            //renderer:   SoftwareRenderer::new(H_RES),
-            upper, lower
+            engine_a:   SoftwareRenderer::new(RendererMode::NDSA),
+            engine_b:   SoftwareRenderer::new(RendererMode::NDSB),
+
+            upper, lower,
+
+            engine_a_output: vec![0; V_RES * H_RES * 4]
         }
     }
 
     fn render_line(&mut self, mem: &mut DSVideoMemory, line: u16) {
-        //self.renderer.setup_caches(mem);
-        //let start_offset = (line as usize) * (H_RES * 4);
-        //let end_offset = start_offset + (H_RES * 4);
-        //let mut target = self.target.lock().unwrap();
-        //self.renderer.draw_line(mem, &mut target[start_offset..end_offset], line);
+        let start_offset = (line as usize) * (H_RES * 4);
+        let end_offset = start_offset + (H_RES * 4);
+        {
+            let mut engine_a_mem = mem.engine_a_mem.lock().unwrap();
+            self.engine_a.setup_caches(&mut engine_a_mem);
+            // Choose out.
+            self.engine_a.draw_line(&engine_a_mem, &mut self.engine_a_output[start_offset..end_offset], line as u8);
+            // TODO: composite engine A
+        }
+        {
+            let mut engine_b_mem = mem.engine_b_mem.lock().unwrap();
+            self.engine_b.setup_caches(&mut engine_b_mem);
+            let mut target = self.upper.lock().unwrap();    // TODO: SELECT (POWCNT)
+            self.engine_b.draw_line(&engine_b_mem, &mut target[start_offset..end_offset], line as u8);
+        }
     }
 
     fn start_frame(&mut self) {

@@ -55,11 +55,31 @@ impl SoftwareRenderer {
     /// Create caches from dirty memory.
     pub fn setup_caches<V: VRAM2D>(&mut self, mem: &mut VideoMemory<V>) {
         // Refresh palette cache
-        if let Some(bg_palette_mem) = mem.palette.ref_bg_palette() {
-            self.palette_cache.update_bg(bg_palette_mem);
-        }
-        if let Some(obj_palette_mem) = mem.palette.ref_obj_palette() {
-            self.palette_cache.update_obj(obj_palette_mem);
+        match self.mode {
+            RendererMode::GBA => {
+                if let Some(bg_palette_mem) = mem.palette.ref_bg_palette() {
+                    self.palette_cache.update_bg_555(bg_palette_mem);
+                }
+                if let Some(obj_palette_mem) = mem.palette.ref_obj_palette() {
+                    self.palette_cache.update_obj_555(obj_palette_mem);
+                }
+            },
+            _ => {
+                if let Some(bg_palette_mem) = mem.palette.ref_bg_palette() {
+                    self.palette_cache.update_bg_565(bg_palette_mem);
+                }
+                if let Some(obj_palette_mem) = mem.palette.ref_obj_palette() {
+                    self.palette_cache.update_obj_565(obj_palette_mem);
+                }
+                for (n, palette) in mem.vram.ref_ext_bg_palette().iter().enumerate() {
+                    if let Some(bg_ext_palette) = palette {
+                        self.palette_cache.update_ext_bg(n, bg_ext_palette);
+                    }
+                }
+                if let Some(obj_ext_palette) = mem.vram.ref_ext_obj_palette() {
+                    self.palette_cache.update_ext_obj(obj_ext_palette);
+                }
+            }
         }
     }
 
@@ -454,7 +474,7 @@ impl SoftwareRenderer {
                     if self.window_pixel(&mem.registers, mem.registers.obj_window_mask(), obj_window, x, y) {
                         let col = match obj.colour {
                             ColType::Palette(c) => self.palette_cache.get_obj(c),
-                            ColType::Extended(_) => unimplemented!(),   // TODO!
+                            ColType::Extended(c) => self.palette_cache.get_ext_obj(c),
                             ColType::Direct(c) => Colour::from_555(c),
                         };
                         if colour_window() {

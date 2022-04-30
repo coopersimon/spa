@@ -428,10 +428,19 @@ impl DSVideoMemory {
                     Obj03  => std::mem::replace(&mut engine_a.vram.obj_slot_03, new),
                     Obj1   => std::mem::replace(&mut engine_a.vram.obj_slot_1, new),
                 
-                    BgExtPalette0 => std::mem::replace(&mut engine_a.vram.ext_bg_palette_0, new),
-                    BgExtPalette2 => std::mem::replace(&mut engine_a.vram.ext_bg_palette_2, new),
+                    BgExtPalette0 => {
+                        engine_a.vram.ext_bg_palette_dirty = true;
+                        std::mem::replace(&mut engine_a.vram.ext_bg_palette_0, new)
+                    },
+                    BgExtPalette2 => {
+                        engine_a.vram.ext_bg_palette_dirty = true;
+                        std::mem::replace(&mut engine_a.vram.ext_bg_palette_2, new)
+                    },
                 
-                    ObjExtPalette => std::mem::replace(&mut engine_a.vram.ext_obj_palette, new)
+                    ObjExtPalette => {
+                        engine_a.vram.ext_obj_palette_dirty = true;
+                        std::mem::replace(&mut engine_a.vram.ext_obj_palette, new)
+                    }
                 }
             },
             Slot::EngineB(slot) => {
@@ -443,8 +452,14 @@ impl DSVideoMemory {
                 
                     Obj   => std::mem::replace(&mut engine_b.vram.obj_slot, new),
                 
-                    BgExtPalette  => std::mem::replace(&mut engine_b.vram.ext_bg_palette, new),
-                    ObjExtPalette => std::mem::replace(&mut engine_b.vram.ext_obj_palette, new)
+                    BgExtPalette  => {
+                        engine_b.vram.ext_bg_palette_dirty = true;
+                        std::mem::replace(&mut engine_b.vram.ext_bg_palette, new)
+                    },
+                    ObjExtPalette => {
+                        engine_b.vram.ext_bg_palette_dirty = true;
+                        std::mem::replace(&mut engine_b.vram.ext_obj_palette, new)
+                    }
                 }
             },
             Slot::Texture(_) => panic!("TEX unsupported right now"),

@@ -47,6 +47,16 @@ pub trait VRAM2D {
     /// Read a halfword from object VRAM.
     fn get_obj_halfword(&self, addr: u32) -> u16;
 
+    /// Get extended bg palette memory if it is dirty.
+    fn ref_ext_bg_palette<'a>(&'a mut self) -> [Option<&'a [u8]>; 4] {
+        [None; 4]
+    }
+
+    /// Get extended obj palette memory if it is dirty.
+    fn ref_ext_obj_palette<'a>(&'a mut self) -> Option<&'a [u8]> {
+        None
+    }
+
     /// Get a set of tile map attributes for a regular background.
     fn tile_map_attrs(&self, addr: u32) -> TileMapAttrs {
         TileMapAttrs::from_bits_truncate(self.get_bg_halfword(addr))
