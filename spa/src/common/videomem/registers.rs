@@ -23,11 +23,34 @@ bitflags! {
         const DISPLAY_BG1       = u16::bit(9);
         const DISPLAY_BG0       = u16::bit(8);
         const FORCED_BLANK      = u16::bit(7);
-        const OBJ_TILE_MAP      = u16::bit(6);
+        const GBA_OBJ_TILE_MAP  = u16::bit(6);
         const HBLANK_INTERVAL   = u16::bit(5);
         const FRAME_DISPLAY     = u16::bit(4);
         const CGB_MODE          = u16::bit(3);
         const MODE              = u16::bits(0, 2);
+
+        // DS extensions
+
+        const NDS_OBJ_BMP_MAP   = u16::bit(6);
+        const NDS_OBJ_BMP_DIM   = u16::bit(5);
+        const NDS_OBJ_TILE_MAP  = u16::bit(4);
+        const BG0_3D            = u16::bit(3);
+    }
+}
+
+bitflags! {
+    #[derive(Default)]
+    /// NDS only: upper half of DISPCNT
+    struct NDSControl: u16 {
+        const OBJ_EXT_PALETTE   = u16::bit(15);
+        const BG_EXT_PALETTE    = u16::bit(14);
+        const BG_MAP_BASE_HI    = u16::bits(11, 13);
+        const BG_TILE_BASE_HI   = u16::bits(8, 10);
+        const HBLANK_INTERVAL   = u16::bit(7);
+        const OBJ_BMP_1D_GAP    = u16::bit(6);
+        const OBJ_TILE_1D_GAP   = u16::bits(4, 5);
+        const VRAM_BLOCK        = u16::bits(2, 3);
+        const DISP_MODE         = u16::bits(0, 1);
     }
 }
 
@@ -148,6 +171,7 @@ impl Into<ColourEffect> for ColourSpecialControl {
 #[derive(Default)]
 pub struct VideoRegisters {
     lcd_control:    LCDControl,
+    lcd_control_hi: NDSControl,
 
     bg0_control:    BGControl,
     bg1_control:    BGControl,
@@ -520,8 +544,44 @@ impl VideoRegisters {
 
     /// Returns true if tiles should map in 1D.
     /// Returns false if tiles should map in 2D.
-    pub fn obj_1d_tile_mapping(&self) -> bool {
-        self.lcd_control.contains(LCDControl::OBJ_TILE_MAP)
+    /// 
+    /// Only valid for GBA.
+    pub fn gba_obj_1d_tile_mapping(&self) -> bool {
+        self.lcd_control.contains(LCDControl::GBA_OBJ_TILE_MAP)
+    }
+
+    /// Returns true if tiles should map in 1D.
+    /// Returns false if tiles should map in 2D.
+    /// 
+    /// Only valid for NDS.
+    pub fn nds_obj_1d_tile_mapping(&self) -> bool {
+        self.lcd_control.contains(LCDControl::NDS_OBJ_TILE_MAP)
+    }
+
+    /// The gap between 1D tiles for NDS.
+    pub fn nds_obj_1d_tile_boundary(&self) -> u16 {
+        (self.lcd_control_hi & NDSControl::OBJ_TILE_1D_GAP).bits() >> 4
+    }
+
+    /// The gap between 1D bitmap for NDS engine A.
+    pub fn obj_1d_bmp_large_boundary(&self) -> bool {
+        self.lcd_control_hi.contains(NDSControl::OBJ_BMP_1D_GAP)
+    }
+
+    /// The width of the source 2D bitmap for NDS.
+    ///
+    /// Returns true if bmp should be 32 8x8 bmp tiles wide.
+    /// Returns false if bmp should be 16 8x8 bmp tiles wide.
+    pub fn obj_2d_wide_bmp(&self) -> bool {
+        self.lcd_control.contains(LCDControl::NDS_OBJ_BMP_DIM)
+    }
+
+    // Extended palette
+    pub fn bg_ext_palette(&self) -> bool {
+        self.lcd_control_hi.contains(NDSControl::BG_EXT_PALETTE)
+    }
+    pub fn obj_ext_palette(&self) -> bool {
+        self.lcd_control_hi.contains(NDSControl::OBJ_EXT_PALETTE)
     }
 
     // Windows
@@ -625,7 +685,7 @@ impl MemInterface16 for VideoRegisters {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
             0x0 => self.lcd_control.bits(),
-            0x2 => 0, // TODO: green swap
+            0x2 => self.lcd_control_hi.bits(),
             //0x4 => 0, LCD_STAT
             //0x6 => 0, V_COUNT
             0x8 => self.bg0_control.bits(),
@@ -675,7 +735,7 @@ impl MemInterface16 for VideoRegisters {
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
             0x0 => self.lcd_control = LCDControl::from_bits_truncate(data),
-            0x2 => {}, // TODO: green swap
+            0x2 => self.lcd_control_hi = NDSControl::from_bits_truncate(data),
             //0x4 => LCD_STAT
             //0x6 => V_COUNT
             0x8 => self.bg0_control = BGControl::from_bits_truncate(data),

@@ -3,9 +3,20 @@
 /// An object pixel.
 #[derive(Clone, Copy)]
 pub struct ObjectPixel {
-    pub colour:             u8,
+    pub colour:             ColType,
     pub priority:           u8,
     pub semi_transparent:   bool,
+}
+
+/// A variable colour.
+#[derive(Clone, Copy)]
+pub enum ColType {
+    /// One of the 256 normal colours
+    Palette(u8),
+    /// One of the 4096 extended colours
+    Extended(u16),
+    /// A direct colour (in 5,5,5 format)
+    Direct(u16) // TODO: alpha
 }
 
 #[derive(Clone)]

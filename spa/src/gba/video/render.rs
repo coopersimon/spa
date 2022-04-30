@@ -5,7 +5,7 @@ use std::sync::{
 };
 use super::memory::VRAMRenderRef;
 use super::constants::*;
-use crate::common::drawing::SoftwareRenderer;
+use crate::common::drawing::{SoftwareRenderer, RendererMode};
 use crate::common::videomem::VideoMemory;
 
 pub type RenderTarget = Arc<Mutex<Box<[u8]>>>;
@@ -33,7 +33,7 @@ pub struct ProceduralRenderer {
 impl Renderer for ProceduralRenderer {
     fn new(target: RenderTarget) -> Self {
         Self {
-            renderer:   SoftwareRenderer::new(H_RES),
+            renderer:   SoftwareRenderer::new(RendererMode::GBA),
             target:     target,
         }
     }
@@ -69,7 +69,7 @@ pub struct DebugTileRenderer {
 impl Renderer for DebugTileRenderer {
     fn new(target: RenderTarget) -> Self {
         Self {
-            renderer:   SoftwareRenderer::new(H_RES),
+            renderer:   SoftwareRenderer::new(RendererMode::GBA),
             target:     target,
         }
     }

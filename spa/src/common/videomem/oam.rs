@@ -205,15 +205,14 @@ impl ObjAttrs {
         ((base_size.0 as u16) << shift, base_size.1 << shift)
     }
 
+    pub fn use_8bpp(&self) -> bool {
+        self.attrs_0.contains(ObjAttr0::USE_8_BPP)
+    }
+
     /// Get the palette bank for the object.
-    /// If "None" is returned, the object uses 8bpp tiles.
-    pub fn palette_bank(&self) -> Option<u8> {
-        if self.attrs_0.contains(ObjAttr0::USE_8_BPP) {
-            None
-        } else {
-            let palette = (self.attrs_2 & ObjAttr2::PALETTE).bits() >> 12;
-            Some(palette as u8)
-        }
+    pub fn palette_bank(&self) -> u8 {
+        let palette = (self.attrs_2 & ObjAttr2::PALETTE).bits() >> 12;
+        palette as u8
     }
 
     /// Get the sprite tile num to use.
@@ -229,6 +228,11 @@ impl ObjAttrs {
     pub fn is_obj_window(&self) -> bool {
         const OBJ_WINDOW: u16 = 2 << 10;
         (self.attrs_0 & ObjAttr0::OBJ_MODE).bits() == OBJ_WINDOW
+    }
+
+    pub fn is_bitmap(&self) -> bool {
+        const BITMAP: u16 = 3 << 10;
+        (self.attrs_0 & ObjAttr0::OBJ_MODE).bits() == BITMAP
     }
 
     pub fn is_mosaic(&self) -> bool {

@@ -38,11 +38,14 @@ pub trait VRAM2D {
     /// Read a byte from background VRAM.
     fn get_bg_byte(&self, addr: u32) -> u8;
 
+    /// Read a halfword from background VRAM.
+    fn get_bg_halfword(&self, addr: u32) -> u16;
+
     /// Read a byte from object VRAM.
     fn get_obj_byte(&self, addr: u32) -> u8;
 
-    /// Read a halfword from background VRAM.
-    fn get_bg_halfword(&self, addr: u32) -> u16;
+    /// Read a halfword from object VRAM.
+    fn get_obj_halfword(&self, addr: u32) -> u16;
 
     /// Get a set of tile map attributes for a regular background.
     fn tile_map_attrs(&self, addr: u32) -> TileMapAttrs {
@@ -73,6 +76,31 @@ pub trait VRAM2D {
         self.get_bg_byte(addr + y_offset + x_offset)
     }
 
+    /// Get a bitmap texel, using 256-colour palette.
+    fn bg_bitmap_texel_8bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
+        let y_offset = (y as u32) * 240;
+        let x_offset = x as u32;
+        self.get_bg_byte(addr + y_offset + x_offset)
+    }
+
+    /// Get a bitmap texel, using direct colour.
+    /// Bitmap size is 240x160.
+    fn bg_bitmap_texel_15bpp(&self, addr: u32, x: u8, y: u8) -> u16 {
+        let y_offset = (y as u32) * 480;
+        let x_offset = (x as u32) * 2;
+        let texel_addr = addr + y_offset + x_offset;
+        self.get_bg_halfword(texel_addr)
+    }
+
+    /// Get a bitmap texel, using direct colour.
+    /// Bitmap size is 160x128.
+    fn bg_small_bitmap_texel_15bpp(&self, addr: u32, x: u8, y: u8) -> u16 {
+        let y_offset = (y as u32) * 320;
+        let x_offset = (x as u32) * 2;
+        let texel_addr = addr + y_offset + x_offset;
+        self.get_bg_halfword(texel_addr)
+    }
+
     /// Get a texel for a particular object tile, using 16-colour palette.
     fn obj_tile_texel_4bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
         let y_offset = (4 * y) as u32;
@@ -90,30 +118,5 @@ pub trait VRAM2D {
         let y_offset = (8 * y) as u32;
         let x_offset = x as u32;
         self.get_obj_byte(addr + y_offset + x_offset)
-    }
-
-    /// Get a bitmap texel, using 256-colour palette.
-    fn bitmap_texel_8bpp(&self, addr: u32, x: u8, y: u8) -> u8 {
-        let y_offset = (y as u32) * 240;
-        let x_offset = x as u32;
-        self.get_bg_byte(addr + y_offset + x_offset)
-    }
-
-    /// Get a bitmap texel, using direct colour.
-    /// Bitmap size is 240x160.
-    fn bitmap_texel_15bpp(&self, addr: u32, x: u8, y: u8) -> u16 {
-        let y_offset = (y as u32) * 480;
-        let x_offset = (x as u32) * 2;
-        let texel_addr = addr + y_offset + x_offset;
-        self.get_bg_halfword(texel_addr)
-    }
-
-    /// Get a bitmap texel, using direct colour.
-    /// Bitmap size is 160x128.
-    fn small_bitmap_texel_15bpp(&self, addr: u32, x: u8, y: u8) -> u16 {
-        let y_offset = (y as u32) * 320;
-        let x_offset = (x as u32) * 2;
-        let texel_addr = addr + y_offset + x_offset;
-        self.get_bg_halfword(texel_addr)
     }
 }

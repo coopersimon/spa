@@ -228,6 +228,14 @@ impl VRAM2D for EngineAVRAM {
         }
     }
 
+    fn get_bg_halfword(&self, addr: u32) -> u16 {
+        if let Some((vram, offset)) = self.lookup_bg(addr) {
+            vram.read_halfword(addr - offset)
+        } else {
+            panic!("reading from strange addr (ENG_A_BG: {:X})", addr)
+        }
+    }
+
     fn get_obj_byte(&self, addr: u32) -> u8 {
         if let Some((vram, offset)) = self.lookup_obj(addr) {
             vram.read_byte(addr - offset)
@@ -236,11 +244,11 @@ impl VRAM2D for EngineAVRAM {
         }
     }
 
-    fn get_bg_halfword(&self, addr: u32) -> u16 {
-        if let Some((vram, offset)) = self.lookup_bg(addr) {
+    fn get_obj_halfword(&self, addr: u32) -> u16 {
+        if let Some((vram, offset)) = self.lookup_obj(addr) {
             vram.read_halfword(addr - offset)
         } else {
-            panic!("reading from strange addr (ENG_A_BG: {:X})", addr)
+            panic!("reading from strange addr (ENG_A_OBJ: {:X})", addr)
         }
     }
 }
@@ -293,15 +301,19 @@ impl VRAM2D for EngineBVRAM {
         }
     }
 
-    fn get_obj_byte(&self, addr: u32) -> u8 {
-        self.obj_slot.as_ref().unwrap().read_byte(addr)
-    }
-
     fn get_bg_halfword(&self, addr: u32) -> u16 {
         if let Some((vram, offset)) = self.lookup_bg(addr) {
             vram.read_halfword(addr - offset)
         } else {
             panic!("reading from strange addr (ENG_B_BG: {:X})", addr)
         }
+    }
+
+    fn get_obj_byte(&self, addr: u32) -> u8 {
+        self.obj_slot.as_ref().unwrap().read_byte(addr)
+    }
+
+    fn get_obj_halfword(&self, addr: u32) -> u16 {
+        self.obj_slot.as_ref().unwrap().read_halfword(addr)
     }
 }

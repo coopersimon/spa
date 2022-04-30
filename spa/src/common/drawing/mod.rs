@@ -11,8 +11,11 @@ use colour::*;
 use background::*;
 
 const TILE_SIZE: u32 = 8;
-const TILE_BYTES_4BPP: u32 = 32;
-const TILE_BYTES_8BPP: u32 = 64;
+const TILE_SHIFT_4BPP: usize = 5;
+const TILE_BYTES_4BPP: u32 = 1 << TILE_SHIFT_4BPP;
+const TILE_BYTES_8BPP: u32 = TILE_BYTES_4BPP * 2;
+const BMP_SHIFT: usize = 7;
+const BMP_MAP_SIZE: u32 = 16;
 const TILE_MAP_SIZE: u32 = 32;
 const VRAM_MAP_BLOCK: u32 = TILE_MAP_SIZE * TILE_MAP_SIZE * 2;
 
@@ -23,15 +26,28 @@ const SMALL_BITMAP_HEIGHT: u8 = 128;
 const SMALL_BITMAP_LEFT: u8 = (240 - SMALL_BITMAP_WIDTH) / 2;
 const SMALL_BITMAP_TOP: u8 = (160 - SMALL_BITMAP_HEIGHT) / 2;
 
+pub enum RendererMode {
+    GBA,
+    NDSA,
+    NDSB
+}
+
 pub struct SoftwareRenderer {
+    mode:   RendererMode,
     h_res:  usize,
     palette_cache:  PaletteCache
 }
 
 impl SoftwareRenderer {
-    pub fn new(h_res: usize) -> Self {
+    pub fn new(mode: RendererMode) -> Self {
+        // TODO: source constants from constants files
+        let h_res = match mode {
+            RendererMode::GBA   => 240,
+            /* NDS */_          => 256,
+        };
         Self {
-            h_res: h_res,
+            mode:   mode,
+            h_res:  h_res,
             palette_cache:  PaletteCache::new()
         }
     }
@@ -58,11 +74,76 @@ impl SoftwareRenderer {
     }
 }
 
+// Internal: GBA / NDS
+impl SoftwareRenderer {
+    /// Check if tiled objects should use 2D or 1D mapping.
+    /// 
+    /// 2D mapping: grid of 32x32 tiles. An object that
+    /// is larger than 1 tile will expand into x and y
+    /// dimensions appropriately.
+    /// 
+    /// 1D mapping: List of 1024 tiles.
+    fn obj_1d_tile_mapping(&self, regs: &VideoRegisters) -> bool {
+        match self.mode {
+            RendererMode::GBA   => regs.gba_obj_1d_tile_mapping(),
+            _                   => regs.nds_obj_1d_tile_mapping(),
+        }
+    }
+
+    /// The shift needed to convert tile number into
+    /// VRAM address.
+    fn obj_tile_shift(&self, regs: &VideoRegisters) -> usize {
+        match self.mode {
+            RendererMode::NDSA if regs.nds_obj_1d_tile_mapping() => match regs.nds_obj_1d_tile_boundary() {
+                0 => TILE_SHIFT_4BPP,
+                1 => TILE_SHIFT_4BPP * 2,
+                2 => TILE_SHIFT_4BPP * 3,
+                _ => TILE_SHIFT_4BPP * 4,
+            },
+            RendererMode::NDSB if regs.nds_obj_1d_tile_mapping() => match regs.nds_obj_1d_tile_boundary() {
+                0 => TILE_SHIFT_4BPP,
+                1 => TILE_SHIFT_4BPP * 2,
+                _ => TILE_SHIFT_4BPP * 3,
+            }
+            _ => TILE_SHIFT_4BPP,
+        }
+    }
+
+    /// Check if bitmap objects should use 2D or 1D mapping.
+    /// 
+    /// 2D mapping: grid of 32x32 tiles. An object that
+    /// is larger than 1 tile will expand into x and y
+    /// dimensions appropriately.
+    /// 
+    /// 1D mapping: List of 1024 tiles.
+    fn obj_1d_bmp_mapping(&self, regs: &VideoRegisters) -> bool {
+        match self.mode {
+            RendererMode::GBA   => regs.gba_obj_1d_tile_mapping(),
+            _                   => regs.nds_obj_1d_tile_mapping(),
+        }
+    }
+
+    /// The shift needed to convert tile number into
+    /// VRAM address for bitmaps.
+    fn obj_bmp_shift(&self, regs: &VideoRegisters) -> usize {
+        match self.mode {
+            RendererMode::NDSA if regs.obj_1d_bmp_large_boundary() => BMP_SHIFT * 2,
+            _ => BMP_SHIFT,
+        }
+    }
+}
+
 // Internal: draw layers
 impl SoftwareRenderer {
     /// Draw object pixels to a target line.
     fn draw_obj_line<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [Option<ObjectPixel>], obj_window: &mut [bool], y: u8) {
-        let use_1d_tile_mapping = mem.registers.obj_1d_tile_mapping();
+        // Global settings
+        let use_1d_tile_mapping = self.obj_1d_tile_mapping(&mem.registers);
+        let tile_addr_shift = self.obj_tile_shift(&mem.registers);
+        let use_1d_bmp_mapping = self.obj_1d_bmp_mapping(&mem.registers);
+        let bmp_1d_addr_shift = self.obj_bmp_shift(&mem.registers);
+        let bmp_2d_width = if mem.registers.obj_2d_wide_bmp() {BMP_MAP_SIZE * 2} else {BMP_MAP_SIZE};
+        let bmp_2d_mask = bmp_2d_width - 1;
         let mosaic_x = mem.registers.obj_mosaic_x();
         let mosaic_y = mem.registers.obj_mosaic_y();
 
@@ -79,10 +160,10 @@ impl SoftwareRenderer {
             // Lots of stuff we need for the object...
             let in_obj_window = object.is_obj_window();
             let semi_transparent = object.is_semi_transparent();
+            let bitmap = object.is_bitmap();
             let priority = object.priority();
-            let palette_bank = object.palette_bank();
-            let palette_offset = palette_bank.unwrap_or(0) * 16;
-            let use_8bpp = palette_bank.is_none();
+            let palette_offset = object.palette_bank() * 16;
+            let use_8bpp = object.use_8bpp();
             let tile_shift = if use_8bpp {1} else {0};
             let base_tile_num = object.tile_num();
             let affine = object.affine_param_num();
@@ -130,38 +211,70 @@ impl SoftwareRenderer {
                 } else {
                     (index_x, index_y)
                 };
-                let tile_x = (index_x / 8) as u32;
-                let tile_y = (index_y / 8) as u32;
-                let tile_num = if use_1d_tile_mapping {
-                    let tile_width = (source_size.0 / 8) as u32;
-                    let offset = (tile_x + (tile_y * tile_width)) << tile_shift;
-                    base_tile_num + offset
+
+                let colour = if bitmap {
+                    let addr = if use_1d_bmp_mapping {
+                        let base = base_tile_num << bmp_1d_addr_shift;
+                        let offset_x = index_x as u32;
+                        let offset_y = index_y as u32 * source_size.1 as u32;
+                        base + ((offset_x + offset_y) * 2)
+                    } else {
+                        let base_tile_x = base_tile_num & bmp_2d_mask;
+                        let base_tile_y = base_tile_num & (!bmp_2d_mask);
+                        let target_tile_x = base_tile_x * BMP_MAP_SIZE;                 // In pixels
+                        let target_tile_y = base_tile_y * (BMP_MAP_SIZE * TILE_SIZE);   // In pixels
+                        let base = target_tile_x + target_tile_y;
+                        let offset_x = index_x as u32;
+                        let offset_y = (index_y as u32) * (bmp_2d_width * TILE_SIZE);
+                        (base + offset_x + offset_y) * 2
+                    };
+                    let colour = mem.vram.get_obj_halfword(addr);
+                    ColType::Direct(colour)
                 } else {
-                    const TILE_GRID_WIDTH: u32 = 0x20;
-                    const TILE_GRID_HEIGHT: u32 = 0x20;
-                    let base_tile_x = base_tile_num % TILE_GRID_WIDTH;
-                    let base_tile_y = base_tile_num / TILE_GRID_WIDTH;
-                    let target_tile_x = base_tile_x.wrapping_add(tile_x << tile_shift) % TILE_GRID_WIDTH;
-                    let target_tile_y = base_tile_y.wrapping_add(tile_y) % TILE_GRID_HEIGHT;
-                    target_tile_x + (target_tile_y * TILE_GRID_WIDTH)
+                    let tile_x = (index_x / 8) as u32;
+                    let tile_y = (index_y / 8) as u32;
+                    let tile_num = if use_1d_tile_mapping {
+                        let tile_width = (source_size.0 / 8) as u32;
+                        let offset = (tile_x + (tile_y * tile_width)) << tile_shift;
+                        base_tile_num + offset
+                    } else {
+                        const TILE_GRID_WIDTH: u32 = 0x20;
+                        const TILE_GRID_HEIGHT: u32 = 0x20;
+                        let base_tile_x = base_tile_num % TILE_GRID_WIDTH;
+                        let base_tile_y = base_tile_num / TILE_GRID_WIDTH;
+                        let target_tile_x = base_tile_x.wrapping_add(tile_x << tile_shift) % TILE_GRID_WIDTH;
+                        let target_tile_y = base_tile_y.wrapping_add(tile_y) % TILE_GRID_HEIGHT;
+                        target_tile_x + (target_tile_y * TILE_GRID_WIDTH)
+                    };
+                    
+                    let tile_addr = tile_num << tile_addr_shift;
+                    let texel = if use_8bpp {
+                        mem.vram.obj_tile_texel_8bpp(tile_addr, index_x % 8, index_y % 8)
+                    } else {
+                        mem.vram.obj_tile_texel_4bpp(tile_addr, index_x % 8, index_y % 8)
+                    };
+                    // Transparent.
+                    if texel == 0 {
+                        continue;
+                    }
+                    if use_8bpp {
+                        if mem.registers.obj_ext_palette() {
+                            let offset = (palette_offset as u16) * 16;
+                            ColType::Extended(offset + (texel as u16))
+                        } else {
+                            ColType::Palette(texel)
+                        }
+                    } else {
+                        ColType::Palette(palette_offset + texel)
+                    }
                 };
-                
-                let tile_addr = tile_num * TILE_BYTES_4BPP;
-                let texel = if use_8bpp {
-                    mem.vram.obj_tile_texel_8bpp(tile_addr, index_x % 8, index_y % 8)
-                } else {
-                    mem.vram.obj_tile_texel_4bpp(tile_addr, index_x % 8, index_y % 8)
-                };
-                // Transparent.
-                if texel == 0 {
-                    continue;
-                }
+
                 if in_obj_window {
                     obj_window[x as usize] = true;
                 } else {
                     // Palette lookup.
                     target[x as usize] = Some(ObjectPixel{
-                        colour: palette_offset + texel, priority, semi_transparent
+                        colour, priority, semi_transparent
                     });
                 }
             }
@@ -292,13 +405,13 @@ impl SoftwareRenderer {
             if bitmap_x >= SMALL_BITMAP_WIDTH || bitmap_y >= SMALL_BITMAP_HEIGHT {
                 return None;
             }
-            let colour = vram.small_bitmap_texel_15bpp(bg.data_addr, bitmap_x, bitmap_y);
+            let colour = vram.bg_small_bitmap_texel_15bpp(bg.data_addr, bitmap_x, bitmap_y);
             Some(Colour::from_555(colour))
         } else if bg.use_15bpp {
-            let colour = vram.bitmap_texel_15bpp(0, bg_x, bg_y);
+            let colour = vram.bg_bitmap_texel_15bpp(0, bg_x, bg_y);
             Some(Colour::from_555(colour))
         } else {
-            let texel = vram.bitmap_texel_8bpp(bg.data_addr, bg_x, bg_y);
+            let texel = vram.bg_bitmap_texel_8bpp(bg.data_addr, bg_x, bg_y);
             if texel == 0 {
                 None
             } else {
@@ -339,7 +452,11 @@ impl SoftwareRenderer {
             if let Some(obj) = obj_pixel {
                 if obj.priority == priority {
                     if self.window_pixel(&mem.registers, mem.registers.obj_window_mask(), obj_window, x, y) {
-                        let col = self.palette_cache.get_obj(obj.colour);
+                        let col = match obj.colour {
+                            ColType::Palette(c) => self.palette_cache.get_obj(c),
+                            ColType::Extended(_) => unimplemented!(),   // TODO!
+                            ColType::Direct(c) => Colour::from_555(c),
+                        };
                         if colour_window() {
                             match self.colour_effect(&mem.registers, mem.registers.obj_blend_mask(), col, target_1, obj.semi_transparent) {
                                 Blended::Colour(c) => return c,

@@ -58,18 +58,25 @@ pub struct VRAMRenderRef {
     data: Rc<RefCell<Vec<u8>>>
 }
 
+const OBJECT_VRAM_BASE: u32 = 64 * 1024;
 impl VRAM2D for VRAMRenderRef {
     fn get_bg_byte(&self, addr: u32) -> u8 {
         self.data.borrow()[addr as usize]
     }
 
+    fn get_bg_halfword(&self, addr: u32) -> u16 {
+        let start = addr as usize;
+        let end = start + 2;
+        let data: [u8; 2] = (self.data.borrow()[start..end]).try_into().unwrap();
+        u16::from_le_bytes(data)
+    }
+
     fn get_obj_byte(&self, addr: u32) -> u8 {
-        const OBJECT_VRAM_BASE: u32 = 64 * 1024;
         self.data.borrow()[(OBJECT_VRAM_BASE + addr) as usize]
     }
 
-    fn get_bg_halfword(&self, addr: u32) -> u16 {
-        let start = addr as usize;
+    fn get_obj_halfword(&self, addr: u32) -> u16 {
+        let start = (OBJECT_VRAM_BASE + addr) as usize;
         let end = start + 2;
         let data: [u8; 2] = (self.data.borrow()[start..end]).try_into().unwrap();
         u16::from_le_bytes(data)
