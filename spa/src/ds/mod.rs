@@ -80,6 +80,10 @@ impl NDS {
         self.frame_receiver.get_frame(&mut [upper_frame, lower_frame], self.current_input.clone());
     }
 
+    pub fn render_size(&mut self) -> (usize, usize) {
+        RendererType::render_size()
+    }
+
     pub fn set_button(&mut self, button: Button, pressed: bool) {
         self.current_input.set_button(button, pressed);
     }
