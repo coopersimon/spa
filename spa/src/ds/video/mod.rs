@@ -143,7 +143,7 @@ impl LCDStatus {
     }
 
     fn v_count(self) -> u16 {
-        ((self & LCDStatus::VCOUNT).bits() >> 8) | ((self & LCDStatus::VCOUNT_HI).bits() << 8)
+        ((self & LCDStatus::VCOUNT).bits() >> 8) | ((self & LCDStatus::VCOUNT_HI).bits() << 1)
     }
 }
 
