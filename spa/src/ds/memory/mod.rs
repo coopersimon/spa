@@ -4,6 +4,7 @@ mod shared;
 mod power;
 
 use arm::{Mem32, MemCycleType};
+use crossbeam_channel::{Sender, Receiver, bounded};
 
 use std::{
     path::PathBuf,
@@ -81,6 +82,7 @@ pub struct DS9MemoryBus<R: Renderer> {
     counter:            usize,
     barrier:            Arc<Barrier>,
     frame_sender:       FrameSender<UserInput>,
+    input_send:         Sender<UserInput>
 }
 
 impl<R: Renderer> DS9MemoryBus<R> {
@@ -99,6 +101,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
         let (card_9, card_7) = DSCardIO::new(&config.rom_path, key1).unwrap();
 
         let barrier = Arc::new(Barrier::new(2));
+        let (input_send, input_recv) = bounded(1);
 
         (Self{
             bios:               arm9_bios,
@@ -120,7 +123,8 @@ impl<R: Renderer> DS9MemoryBus<R> {
             
             counter:            0,
             barrier:            barrier.clone(),
-            frame_sender:       frame_sender
+            frame_sender:       frame_sender,
+            input_send:         input_send
         }, Box::new(DS7MemoryBus{
             bios:               arm7_bios,
             power_control:      DS7PowerControl::new(),
@@ -143,7 +147,8 @@ impl<R: Renderer> DS9MemoryBus<R> {
             card:               card_7,
 
             counter:            0,
-            barrier:            barrier
+            barrier:            barrier,
+            input_recv:         input_recv
         }))
     }
 }
@@ -322,7 +327,7 @@ impl <R: Renderer> DS9MemoryBus<R> {
 
         let input = self.frame_sender.sync_frame();
         self.joypad.set_all_buttons(input.buttons);
-        // TODO: send input to ARM7
+        self.input_send.send(input).unwrap();
     }
 }
 
@@ -649,12 +654,13 @@ pub struct DS7MemoryBus {
     rtc:        RealTimeClock,
     spi:        SPI,
 
-    dma:    ds7DMA,
+    dma:                ds7DMA,
     interrupt_control:  InterruptControl,
     card:               DSCardIO,
 
     counter:            usize,
-    barrier:            Arc<Barrier>
+    barrier:            Arc<Barrier>,
+    input_recv:         Receiver<UserInput>
 }
 
 // Internal
@@ -671,9 +677,7 @@ impl DS7MemoryBus {
                 // Check if DMA channel has changed since last transfer.
                 let access = if last_active != c {
                     last_active = c;
-                    if self.do_clock(4) {
-                        //self.frame_end();
-                    }
+                    self.do_clock(4);
                     arm::MemCycleType::N
                 } else {
                     arm::MemCycleType::S
@@ -708,9 +712,7 @@ impl DS7MemoryBus {
                         cycles
                     }
                 };
-                if self.do_clock(cycles) {
-                    //self.frame_end();
-                }
+                self.do_clock(cycles);
             } else {
                 break;
             }
@@ -720,10 +722,14 @@ impl DS7MemoryBus {
     /// Indicate to all of the devices on the memory bus that cycles have passed.
     /// 
     /// Returns true if VBlank occurred, and therefore the frame is ready to be presented.
-    fn do_clock(&mut self, cycles: usize) -> bool {
+    fn do_clock(&mut self, cycles: usize)/* -> bool*/ {
         self.counter += cycles;
         if self.counter >= ARM7_THREAD_SYNC_CYCLES {
             self.counter -= ARM7_THREAD_SYNC_CYCLES;
+            // Check buttons + touchpad
+            if let Ok(new_input) = self.input_recv.try_recv() {
+                self.set_input(new_input);
+            }
             self.barrier.wait();
         }
 
@@ -745,11 +751,16 @@ impl DS7MemoryBus {
             self.card.get_interrupt()
         );
 
-        false
+        //false
     }
 
     fn check_irq(&self) -> bool {
         self.interrupt_control.irq()
+    }
+
+    fn set_input(&mut self, new_input: UserInput) {
+        self.joypad.set_all_buttons(new_input.buttons);
+        self.ds_joypad.set_all_buttons(new_input.ds_buttons);
     }
 }
 
@@ -757,17 +768,13 @@ impl Mem32 for DS7MemoryBus {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
-        if self.do_clock(cycles) {
-            //self.frame_end();
-        }
+        self.do_clock(cycles);
         self.do_dma();
 
         // Check if CPU is halted.
         if self.power_control.halt {
             loop {
-                if self.do_clock(1) {
-                    //self.frame_end();
-                }
+                self.do_clock(1);
                 self.do_dma();
                 if self.check_irq() {
                     self.power_control.halt = false;
