@@ -31,7 +31,7 @@ use crate::{
         ipc::IPC,
         joypad::DSJoypad,
         interrupt::{Interrupts, InterruptControl},
-        card::DSCardIO,
+        card::*,
         rtc::RealTimeClock,
         spi::SPI,
         video::*,
@@ -54,7 +54,9 @@ pub struct MemoryConfig {
     pub save_path:      Option<PathBuf>,
     pub ds9_bios_path:  Option<PathBuf>,
     pub ds7_bios_path:  Option<PathBuf>,
-    pub firmware_path:  Option<PathBuf>
+    pub firmware_path:  Option<PathBuf>,
+
+    pub fast_boot:      bool
 }
 
 /// Memory bus for DS ARM9 processor.
@@ -150,6 +152,23 @@ impl<R: Renderer> DS9MemoryBus<R> {
             barrier:            barrier,
             input_recv:         input_recv
         }))
+    }
+
+    /// Get the game cart header.
+    pub fn get_header(&self) -> CardHeader {
+        self.card.get_header()
+    }
+
+    /// Setup ARM9 boot area, for fast booting without BIOS.
+    pub fn setup_boot_area(&mut self, header: &CardHeader) {
+        let boot_area_size = header.arm9_size() as usize;
+        let mut buffer = vec![0_u8; boot_area_size];
+        self.card.load_data(header.arm9_rom_offset(), &mut buffer);
+
+        let arm9_addr = header.arm9_ram_addr();
+        for (n, byte) in buffer.iter().enumerate() {
+            self.store_byte(MemCycleType::N, arm9_addr + (n as u32), *byte);
+        }
     }
 }
 
@@ -661,6 +680,20 @@ pub struct DS7MemoryBus {
     counter:            usize,
     barrier:            Arc<Barrier>,
     input_recv:         Receiver<UserInput>
+}
+
+impl DS7MemoryBus {
+    /// Setup ARM7 boot area, for fast booting without BIOS.
+    pub fn setup_boot_area(&mut self, header: &CardHeader) {
+        let boot_area_size = header.arm7_size() as usize;
+        let mut buffer = vec![0_u8; boot_area_size];
+        self.card.load_data(header.arm7_rom_offset(), &mut buffer);
+
+        let arm7_addr = header.arm7_ram_addr();
+        for (n, byte) in buffer.iter().enumerate() {
+            self.store_byte(MemCycleType::N, arm7_addr + (n as u32), *byte);
+        }
+    }
 }
 
 // Internal

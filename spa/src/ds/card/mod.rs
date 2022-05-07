@@ -1,4 +1,4 @@
-//mod crypto;
+mod header;
 
 use bitflags::bitflags;
 
@@ -23,6 +23,7 @@ use crate::utils::{
     meminterface::{MemInterface16, MemInterface32}
 };
 use crate::ds::interrupt::Interrupts;
+pub use header::CardHeader;
 
 bitflags!{
     #[derive(Default)]
@@ -96,6 +97,16 @@ impl DSCardIO {
         } else {
             Interrupts::empty()
         }
+    }
+
+    pub fn get_header(&self) -> CardHeader {
+        let mut data = vec![0; 0x200];
+        self.card.lock().unwrap().load_data(0, &mut data);
+        CardHeader::new(data)
+    }
+
+    pub fn load_data(&self, from_addr: u32, into_buffer: &mut [u8]) {
+        self.card.lock().unwrap().load_data(from_addr, into_buffer);
     }
 }
 
@@ -203,6 +214,11 @@ impl DSCard {
                 //self.trigger_interrupt();
             }
         }
+    }
+
+    fn load_data(&mut self, from_addr: u32, into_buffer: &mut [u8]) {
+        self.rom_file.seek(SeekFrom::Start(from_addr as u64)).unwrap();
+        self.rom_file.read(into_buffer).unwrap();
     }
 }
 

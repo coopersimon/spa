@@ -43,23 +43,9 @@ pub mod debug {
     }
     
     pub struct DebugFrameReq<I> {
-        tx: Sender<I>,
-        rx: Receiver<()>
+        pub tx: Sender<I>,
+        pub rx: Receiver<()>
     }
-    
-    impl<I> DebugFrameReq<I> {
-        /// Check if CPU thread has told us processing for the frame is complete.
-        /// 
-        /// Then force it to continue if so.
-        pub fn check_and_continue(&mut self, input: I) {
-            // Wait for CPU thread to let us know its processing is complete.
-            match self.rx.try_recv() {
-                // Let CPU thread know processing can continue.
-                Ok(_) => self.tx.send(input).expect("couldn't send to cpu thread"),
-                Err(_) => {},
-            }
-        }
-    }    
 }
 
 pub struct FrameRequester<I> {

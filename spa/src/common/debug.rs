@@ -9,7 +9,7 @@ use arm::{
     Mem32,
     MemCycleType
 };
-use crossbeam_channel::{Sender, Receiver, bounded};
+use crossbeam_channel::{Sender, Receiver, bounded, select};
 
 enum Request {
     DoStep,
@@ -55,11 +55,19 @@ impl<I: Clone> DebugInterface<I> {
 
     pub fn step(&mut self) {
         self.req_send.send(Request::DoStep).unwrap();
-        match self.res_recv.recv().unwrap() {
-            Response::Cycles(_) => {
-                self.requester.check_and_continue(self.default_input.clone());
+        select! {
+            recv(self.res_recv) -> msg => match msg.unwrap() {
+                Response::Cycles(_) => {},
+                _ => panic!("unexpected response")
             },
-            _ => panic!("unexpected response")
+            recv(self.requester.rx) -> _ => {
+                self.requester.tx.send(self.default_input.clone()).expect("couldn't send to cpu thread");
+
+                match self.res_recv.recv().unwrap() {
+                    Response::Cycles(_) => {},
+                    _ => panic!("unexpected response")
+                }
+            },
         }
     }
 

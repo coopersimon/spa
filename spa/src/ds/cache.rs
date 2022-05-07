@@ -79,6 +79,12 @@ impl<R: Renderer> DS9InternalMem<R> {
             data_tcm_end:   0,
         }
     }
+
+    /// When booting without BIOS, CP15 needs to be setup correctly.
+    pub fn setup_init(&mut self) {
+        self.write_tcm_settings(0x0080_000A, 0);
+        self.write_control_reg(0x0001_2078);
+    }
 }
 
 impl<R: Renderer> Mem32 for DS9InternalMem<R> {
@@ -316,6 +322,7 @@ impl<R: Renderer> ARM9Mem for DS9InternalMem<R> {
 impl<R: Renderer> CoprocV4 for DS9InternalMem<R> {
     /// Transfer from ARM register to Coproc register.
     fn mcr(&mut self, dest_reg: usize, op_reg: usize, data: u32, _op: u32, info: u32) -> usize {
+        //println!("write: {:X} => ({}, {}) | info: {}", data, dest_reg, op_reg, info);
         // opcode should always be 0.
         match (dest_reg, op_reg) {
             (0, 0) => {},

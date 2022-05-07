@@ -52,7 +52,7 @@ fn main() {
                 p
             });
             let config = ds::MemoryConfig{
-                rom_path, save_path, ds7_bios_path, ds9_bios_path, firmware_path
+                rom_path, save_path, ds7_bios_path, ds9_bios_path, firmware_path, fast_boot: true
             };
             if value == "ds7" {
                 let debug_interface = ds::NDS::new_debug_7(config);
@@ -86,7 +86,7 @@ fn main() {
                     p
                 });
                 let config = ds::MemoryConfig{
-                    rom_path, save_path, ds7_bios_path, ds9_bios_path, firmware_path
+                    rom_path, save_path, ds7_bios_path, ds9_bios_path, firmware_path, fast_boot: true
                 };
                 run::run_nds(config, cmd_args.is_present("mute"))
             },
