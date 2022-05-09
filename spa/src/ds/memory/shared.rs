@@ -65,7 +65,7 @@ impl ARM9SharedRAM {
     pub fn new() -> (Self, ARM7SharedRAM) {
         let lo_bank = Arc::new(Mutex::new(WRAM::new(BANK_SIZE)));
         let hi_bank = Arc::new(Mutex::new(WRAM::new(BANK_SIZE)));
-        let bank_status = Arc::new(AtomicU8::new(0));
+        let bank_status = Arc::new(AtomicU8::new(3));
         (Self {
             bank_control:   0,
             bank_status:    bank_status.clone(),
