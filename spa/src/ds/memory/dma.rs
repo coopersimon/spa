@@ -4,6 +4,7 @@ use bitflags::bitflags;
 
 use crate::utils::{
     bits::u32,
+    bytes,
     meminterface::MemInterface32
 };
 use crate::common::dma::DMAAddress;
@@ -19,6 +20,7 @@ bitflags!{
         const REPEAT        = u32::bit(25);
         const SRC_ADDR_MODE = u32::bits(23, 24);
         const DST_ADDR_MODE = u32::bits(21, 22);
+        const WORD_COUNT    = u32::bits(0, 20);
 
         // ENABLE | START_TIMING
         const SHOULD_START  = u32::bit(31) | u32::bits(27, 29);
@@ -30,6 +32,12 @@ bitflags!{
         const START_DS_CART = u32::bit(31) | u32::bit(27) | u32::bit(29);
         const START_GB_CART = u32::bit(31) | u32::bits(28, 29);
         const START_G_FIFO  = u32::bit(31) | u32::bits(27, 29);
+    }
+}
+
+impl Control {
+    fn word_count(self) -> u32 {
+        (self & Control::WORD_COUNT).bits()
     }
 }
 
@@ -100,6 +108,57 @@ impl DMA {
 }
 
 impl MemInterface32 for DMA {
+    fn read_halfword(&mut self, addr: u32) -> u16 {
+        match addr {
+            0x00..=0x0B => self.channels[0].read_halfword(addr),
+            0x0C..=0x17 => self.channels[1].read_halfword(addr - 0x0C),
+            0x18..=0x23 => self.channels[2].read_halfword(addr - 0x18),
+            0x24..=0x2F => self.channels[3].read_halfword(addr - 0x24),
+            0x30 => bytes::u32::lo(self.fill_data[0]),
+            0x32 => bytes::u32::hi(self.fill_data[0]),
+            0x34 => bytes::u32::lo(self.fill_data[1]),
+            0x36 => bytes::u32::hi(self.fill_data[1]),
+            0x38 => bytes::u32::lo(self.fill_data[2]),
+            0x3A => bytes::u32::hi(self.fill_data[2]),
+            0x3C => bytes::u32::lo(self.fill_data[3]),
+            0x3E => bytes::u32::hi(self.fill_data[3]),
+            _ => unreachable!()
+        }
+    }
+    fn write_halfword(&mut self, addr: u32, data: u16) {
+        match addr {
+            0x00..=0x09 => self.channels[0].write_halfword(addr, data),
+            0x0A        => {
+                self.channels[0].write_halfword(addr, data);
+                self.active[0] = self.channels[0].should_start_now();
+            },
+            0x0C..=0x15 => self.channels[1].write_halfword(addr - 0x0C, data),
+            0x16        => {
+                self.channels[1].write_halfword(addr - 0x0C, data);
+                self.active[1] = self.channels[1].should_start_now();
+            },
+            0x18..=0x21 => self.channels[2].write_halfword(addr - 0x18, data),
+            0x22        => {
+                self.channels[2].write_halfword(addr - 0x18, data);
+                self.active[2] = self.channels[2].should_start_now();
+            },
+            0x24..=0x2D => self.channels[3].write_halfword(addr - 0x24, data),
+            0x2E        => {
+                self.channels[3].write_halfword(addr - 0x24, data);
+                self.active[3] = self.channels[3].should_start_now();
+            },
+            0x30 => self.fill_data[0] = bytes::u32::set_lo(self.fill_data[0], data),
+            0x32 => self.fill_data[0] = bytes::u32::set_hi(self.fill_data[0], data),
+            0x34 => self.fill_data[1] = bytes::u32::set_lo(self.fill_data[1], data),
+            0x36 => self.fill_data[1] = bytes::u32::set_hi(self.fill_data[1], data),
+            0x38 => self.fill_data[2] = bytes::u32::set_lo(self.fill_data[2], data),
+            0x3A => self.fill_data[2] = bytes::u32::set_hi(self.fill_data[2], data),
+            0x3C => self.fill_data[3] = bytes::u32::set_lo(self.fill_data[3], data),
+            0x3E => self.fill_data[3] = bytes::u32::set_hi(self.fill_data[3], data),
+            _ => unreachable!()
+        }
+    }
+
     fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
             0x00..=0x0B => self.channels[0].read_word(addr),
@@ -149,8 +208,8 @@ pub struct DMAChannel {
     // External control registers
     src_addr:           u32,
     dst_addr:           u32,
-    word_count:         u32,
     control:            Control,
+    //word_count:         u32,
 
     // Internal registers
     /// Word size in bytes. Can be 2 or 4.
@@ -168,7 +227,7 @@ impl DMAChannel {
         Self {
             src_addr:           0,
             dst_addr:           0,
-            word_count:         0,
+            //word_count:         0,
             control:            Control::default(),
 
             word_size:          2,
@@ -205,7 +264,7 @@ impl DMAChannel {
     pub fn next_addrs(&mut self) -> DMAAddress {
         let src_addr = self.current_src_addr;
         let dst_addr = self.current_dst_addr;
-        self.current_src_addr = match (self.control & Control::SRC_ADDR_MODE).bits() >> 7 {
+        self.current_src_addr = match (self.control & Control::SRC_ADDR_MODE).bits() >> 23 {
             0b00 => self.current_src_addr.wrapping_add(self.word_size),
             0b01 => self.current_src_addr.wrapping_sub(self.word_size),
             0b10 => self.current_src_addr,
@@ -222,7 +281,7 @@ impl DMAChannel {
                 _ => unreachable!()
             }
         };*/
-        self.current_dst_addr = match (self.control & Control::DST_ADDR_MODE).bits() >> 5 {
+        self.current_dst_addr = match (self.control & Control::DST_ADDR_MODE).bits() >> 21 {
             0b00 | 0b11 => self.current_dst_addr.wrapping_add(self.word_size),
             0b01 => self.current_dst_addr.wrapping_sub(self.word_size),
             0b10 => self.current_dst_addr,
@@ -246,6 +305,35 @@ impl DMAChannel {
 }
 
 impl MemInterface32 for DMAChannel {
+    fn read_halfword(&mut self, addr: u32) -> u16 {
+        match addr {
+            0x0 => 0,
+            0x2 => 0,
+            0x4 => 0,
+            0x6 => 0,
+            0x8 => bytes::u32::lo(self.control.bits()),
+            0xA => bytes::u32::hi(self.control.bits()),
+            _ => unreachable!()
+        }
+    }
+    fn write_halfword(&mut self, addr: u32, data: u16) {
+        match addr {
+            0x0 => self.src_addr = bytes::u32::set_lo(self.src_addr, data),
+            0x2 => self.src_addr = bytes::u32::set_hi(self.src_addr, data),
+            0x4 => self.dst_addr = bytes::u32::set_lo(self.dst_addr, data),
+            0x6 => self.dst_addr = bytes::u32::set_hi(self.dst_addr, data),
+            0x8 => {
+                let control = bytes::u32::set_lo(self.control.bits(), data);
+                self.set_control(control);
+            },
+            0xA => {
+                let control = bytes::u32::set_hi(self.control.bits(), data);
+                self.set_control(control);
+            },
+            _ => unreachable!()
+        }
+    }
+
     fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
             0x0 => 0,
@@ -258,10 +346,7 @@ impl MemInterface32 for DMAChannel {
         match addr {
             0x0 => self.src_addr = data,
             0x4 => self.dst_addr = data,
-            0x8 => {
-                self.word_count = data & WORD_COUNT_MASK;
-                self.set_control(data);
-            },
+            0x8 => self.set_control(data),
             _ => unreachable!()
         }
     }
@@ -279,7 +364,7 @@ impl DMAChannel {
             } else {
                 self.word_count
             };*/
-            self.current_count = self.word_count;
+            self.current_count = self.control.word_count();
 
             if self.transfer_32bit_word() {
                 self.word_size = 4;
@@ -302,7 +387,7 @@ impl DMAChannel {
             } else {
                 self.word_count
             };*/
-            self.current_count = self.word_count;
+            self.current_count = self.control.word_count();
             if (self.control & Control::DST_ADDR_MODE).bits() == u32::bits(21, 22) {
                 self.current_dst_addr = self.dst_addr;
             }

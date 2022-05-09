@@ -762,6 +762,7 @@ impl DS7MemoryBus {
             // Check buttons + touchpad
             if let Ok(new_input) = self.input_recv.try_recv() {
                 self.set_input(new_input);
+                self.dma.on_vblank();
             }
             self.barrier.wait();
         }
