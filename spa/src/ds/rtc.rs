@@ -6,7 +6,7 @@ use crate::utils::{
     bits::u8,
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum RTCState {
     Idle,
     Ready,
@@ -150,7 +150,7 @@ impl RealTimeClock {
             Int2(1) => self.alarm2_minute,
             ClockAdjust => self.clock,
             Free => self.free,
-            _ => panic!("reading bit from RTC in unsupported state"),
+            _ => panic!("reading bit from RTC in unsupported state {:?}", self.state),
         }
     }
 
@@ -200,6 +200,9 @@ impl RealTimeClock {
 
 impl MemInterface8 for RealTimeClock {
     fn read_byte(&mut self, _addr: u32) -> u8 {
+        if self.state == RTCState::Idle {
+            return 0;
+        }
         let data = self.read_data();
         // Extract lowest bit.
         self.transfer -= 1;

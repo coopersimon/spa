@@ -427,7 +427,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             },
             // I/O
             0x0400_0240..=0x0400_024B => {
-                self.write_mem_control_byte(addr, data);
+                self.write_mem_control_byte(addr & 0xF, data);
                 if cycle.is_non_seq() {8} else {2}
             },
             0x0400_1000..=0x0400_106F => {
@@ -476,7 +476,6 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
-            // TODO: mem ctl
             0x0400_0240..=0x0400_024B => (self.read_mem_control_halfword(addr & 0xF), if cycle.is_non_seq() {8} else {2}),
             0x0400_1000..=0x0400_106F => (self.video.mem.mut_engine_b().registers.read_halfword(addr & 0xFF), 2),
             0x0410_0000..=0x0410_0003 => (self.ipc.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
@@ -512,7 +511,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
             // I/O
             0x0400_0240..=0x0400_024B => {
-                self.write_mem_control_halfword(addr, data);
+                self.write_mem_control_halfword(addr & 0xF, data);
                 if cycle.is_non_seq() {8} else {2}
             },
             0x0400_1000..=0x0400_106F => {
@@ -596,7 +595,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
             // I/O
             0x0400_0240..=0x0400_024B => {
-                self.write_mem_control_word(addr, data);
+                self.write_mem_control_word(addr & 0xF, data);
                 if cycle.is_non_seq() {8} else {2}
             },
             0x0400_1000..=0x0400_106F => {
@@ -753,9 +752,9 @@ impl DS7MemoryBus {
     }
 
     /// Indicate to all of the devices on the memory bus that cycles have passed.
-    /// 
-    /// Returns true if VBlank occurred, and therefore the frame is ready to be presented.
-    fn do_clock(&mut self, cycles: usize)/* -> bool*/ {
+    fn do_clock(&mut self, cycles: usize) {
+        let mut vblank = Interrupts::empty();
+
         self.counter += cycles;
         if self.counter >= ARM7_THREAD_SYNC_CYCLES {
             self.counter -= ARM7_THREAD_SYNC_CYCLES;
@@ -763,6 +762,7 @@ impl DS7MemoryBus {
             if let Ok(new_input) = self.input_recv.try_recv() {
                 self.set_input(new_input);
                 self.dma.on_vblank();
+                vblank = Interrupts::V_BLANK;
             }
             self.barrier.wait();
         }
@@ -782,10 +782,9 @@ impl DS7MemoryBus {
             joypad_irq |
             Interrupts::from_bits_truncate(timer_irq.into()) |
             self.ipc.get_interrupts() |
-            self.card.get_interrupt()
+            self.card.get_interrupt() |
+            vblank
         );
-
-        //false
     }
 
     fn check_irq(&self) -> bool {

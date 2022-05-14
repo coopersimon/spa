@@ -1,6 +1,7 @@
 /// Serial peripheral interface
 
 mod firmware;
+mod touchscreen;
 
 use bitflags::bitflags;
 use crate::utils::{
@@ -10,6 +11,7 @@ use crate::utils::{
 };
 
 use firmware::Firmware;
+use touchscreen::Touchscreen;
 
 bitflags!{
     #[derive(Default)]
@@ -27,7 +29,8 @@ bitflags!{
 pub struct SPI {
     control: SPIControl,
 
-    firmware: Firmware,
+    firmware:       Firmware,
+    touchscreen:    Touchscreen,
 }
 
 impl SPI {
@@ -35,7 +38,8 @@ impl SPI {
         Self {
             control:    SPIControl::default(),
 
-            firmware:   Firmware::new(firmware_path).unwrap(),
+            firmware:       Firmware::new(firmware_path).unwrap(),
+            touchscreen:    Touchscreen::new(),
         }
     }
 }
@@ -45,7 +49,7 @@ impl MemInterface16 for SPI {
         match addr {
             0 => self.control.bits(),
             2 => match (self.control & SPIControl::DEVICE).bits() >> 8 {
-                0 => 0, // TODO: power manager
+                //0 => 0, // TODO: power manager
                 1 => {
                     let data = self.firmware.read();
                     if !self.control.contains(SPIControl::CHIP_HOLD) {
@@ -53,9 +57,15 @@ impl MemInterface16 for SPI {
                     }
                     bytes::u16::make(0, data)
                 },
-                2 => 0, // TODO: touchscreen
-                3 => 0, // Reserved
-                _ => unreachable!()
+                2 => {
+                    let data = self.touchscreen.read();
+                    if !self.control.contains(SPIControl::CHIP_HOLD) {
+                        self.touchscreen.deselect();
+                    }
+                    bytes::u16::make(0, data)
+                },
+                //3 => 0, // Reserved
+                x => panic!("invalid device {}", x),
             },
             _ => unreachable!()
         }
@@ -72,11 +82,11 @@ impl MemInterface16 for SPI {
         match addr {
             0 => self.control = SPIControl::from_bits_truncate(data),
             2 => match (self.control & SPIControl::DEVICE).bits() >> 8 {
-                0 => {}, // TODO: power manager
+                //0 => {}, // TODO: power manager
                 1 => self.firmware.write(bytes::u16::lo(data)),
-                2 => {}, // TODO: touchscreen
-                3 => {}, // Reserved
-                _ => unreachable!()
+                2 => self.touchscreen.write(bytes::u16::lo(data)),
+                //3 => {}, // Reserved
+                x => panic!("invalid device {} ({:X})", x, data),
             },
             _ => unreachable!()
         }

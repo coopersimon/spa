@@ -14,7 +14,8 @@ const FIRMWARE_SIZE: u32 = 256 * 1024;
 
 enum Instruction {
     None,
-    Read(u8)
+    Read(u8),
+    ReadStatus
 }
 
 /// Internal NDS firmware
@@ -55,13 +56,16 @@ impl Firmware {
     }
 
     pub fn read(&mut self) -> u8 {
-        if self.can_read {
-            self.can_read = false;
-            let data = self.data[self.addr as usize];
-            self.addr += 1;
-            data
-        } else {
-            0
+        use Instruction::*;
+        match self.instr {
+            Read(_) if self.can_read => {
+                self.can_read = false;
+                let data = self.data[self.addr as usize];
+                self.addr += 1;
+                data
+            },
+            ReadStatus => 0,
+            _ => 0,
         }
     }
 
@@ -70,6 +74,7 @@ impl Firmware {
         match self.instr {
             None => match data {
                 0x03 => self.instr = Read(3),
+                0x05 => self.instr = ReadStatus,
                 _ => panic!("unsupported instr {:X}", data),
             },
             Read(0) => { // Dummy write
@@ -79,7 +84,8 @@ impl Firmware {
                 // Addr written in MSB first
                 self.addr |= (data as u32) << ((n - 1) * 8);
                 self.instr = Read(n-1);
-            }
+            },
+            _ => {}
         }
     }
 }
