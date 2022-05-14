@@ -1,5 +1,6 @@
 /// Serial peripheral interface
 
+mod power;
 mod firmware;
 mod touchscreen;
 
@@ -10,6 +11,7 @@ use crate::utils::{
     bytes
 };
 
+use power::PowerManager;
 use firmware::Firmware;
 use touchscreen::Touchscreen;
 
@@ -29,6 +31,7 @@ bitflags!{
 pub struct SPI {
     control: SPIControl,
 
+    power_man:      PowerManager,
     firmware:       Firmware,
     touchscreen:    Touchscreen,
 }
@@ -38,6 +41,7 @@ impl SPI {
         Self {
             control:    SPIControl::default(),
 
+            power_man:      PowerManager::new(),
             firmware:       Firmware::new(firmware_path).unwrap(),
             touchscreen:    Touchscreen::new(),
         }
@@ -49,7 +53,13 @@ impl MemInterface16 for SPI {
         match addr {
             0 => self.control.bits(),
             2 => match (self.control & SPIControl::DEVICE).bits() >> 8 {
-                //0 => 0, // TODO: power manager
+                0 => {
+                    let data = self.power_man.read();
+                    if !self.control.contains(SPIControl::CHIP_HOLD) {
+                        self.power_man.deselect();
+                    }
+                    bytes::u16::make(0, data)
+                },
                 1 => {
                     let data = self.firmware.read();
                     if !self.control.contains(SPIControl::CHIP_HOLD) {
@@ -64,8 +74,8 @@ impl MemInterface16 for SPI {
                     }
                     bytes::u16::make(0, data)
                 },
-                //3 => 0, // Reserved
-                x => panic!("invalid device {}", x),
+                3 => 0, // Reserved
+                x => unreachable!(),
             },
             _ => unreachable!()
         }
@@ -82,11 +92,11 @@ impl MemInterface16 for SPI {
         match addr {
             0 => self.control = SPIControl::from_bits_truncate(data),
             2 => match (self.control & SPIControl::DEVICE).bits() >> 8 {
-                //0 => {}, // TODO: power manager
+                0 => self.power_man.write(bytes::u16::lo(data)),
                 1 => self.firmware.write(bytes::u16::lo(data)),
                 2 => self.touchscreen.write(bytes::u16::lo(data)),
-                //3 => {}, // Reserved
-                x => panic!("invalid device {} ({:X})", x, data),
+                3 => {}, // Reserved
+                x => unreachable!(),
             },
             _ => unreachable!()
         }

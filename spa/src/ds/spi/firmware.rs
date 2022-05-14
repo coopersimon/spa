@@ -53,6 +53,7 @@ impl Firmware {
     pub fn deselect(&mut self) {
         self.instr = Instruction::None;
         self.addr = 0;
+        self.can_read = false;
     }
 
     pub fn read(&mut self) -> u8 {

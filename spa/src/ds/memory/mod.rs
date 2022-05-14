@@ -2,6 +2,7 @@ mod dma;
 mod main;
 mod shared;
 mod power;
+mod exmem;
 
 use arm::{Mem32, MemCycleType};
 use crossbeam_channel::{Sender, Receiver, bounded};
@@ -42,6 +43,7 @@ use dma::DMA;
 use main::MainRAM;
 use shared::*;
 use power::*;
+use exmem::*;
 
 /// How many cycles the ARM7 should run for before syncing.
 const ARM7_THREAD_SYNC_CYCLES: usize = 100;
@@ -62,7 +64,7 @@ pub struct MemoryConfig {
 /// Memory bus for DS ARM9 processor.
 pub struct DS9MemoryBus<R: Renderer> {
     bios:           BIOS,
-    post_flag:      DS9PostFlag,
+    power_control:  DS9PowerControl,
     pub halt:       bool,
 
     main_ram:       MainRAM,
@@ -78,6 +80,7 @@ pub struct DS9MemoryBus<R: Renderer> {
 
     dma:                DMA,
     interrupt_control:  InterruptControl,
+    ex_mem_control:     ExMemControl,
     card:               DSCardIO,
 
     // sync
@@ -99,6 +102,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
         let arm7_bios = BIOS::new_from_file(config.ds7_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
         let spi = SPI::new(config.firmware_path.as_ref().map(|p| p.as_path()));
 
+        let (ex_mem_control, ex_mem_status) = ExMemControl::new();
         let key1 = (0..0x412).map(|n| arm7_bios.read_word(0x30 + (n*4))).collect::<Vec<_>>();
         let (card_9, card_7) = DSCardIO::new(&config.rom_path, key1).unwrap();
 
@@ -107,7 +111,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
 
         (Self{
             bios:               arm9_bios,
-            post_flag:          DS9PostFlag::new(),
+            power_control:      DS9PowerControl::new(config.fast_boot),
             halt:               false,
 
             main_ram:           main_ram.clone(),
@@ -121,6 +125,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
             accelerators:       Accelerators::new(),
             dma:                DMA::new(),
             interrupt_control:  InterruptControl::new(),
+            ex_mem_control:     ex_mem_control,
             card:               card_9,
             
             counter:            0,
@@ -129,7 +134,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
             input_send:         input_send
         }, Box::new(DS7MemoryBus{
             bios:               arm7_bios,
-            power_control:      DS7PowerControl::new(),
+            power_control:      DS7PowerControl::new(config.fast_boot),
 
             main_ram:           main_ram,
             wram:               WRAM::new(64 * 1024),
@@ -146,6 +151,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
 
             dma:                ds7DMA::new(),
             interrupt_control:  InterruptControl::new(),
+            ex_mem_status:      ex_mem_status,
             card:               card_7,
 
             counter:            0,
@@ -647,9 +653,10 @@ impl<R: Renderer> DS9MemoryBus<R> {
         (0x0400_0130, 0x0400_0133, joypad),
         (0x0400_0180, 0x0400_018F, ipc),
         (0x0400_01A0, 0x0400_01BF, card),
+        (0x0400_0204, 0x0400_0207, ex_mem_control),
         (0x0400_0208, 0x0400_0217, interrupt_control),
         (0x0400_0280, 0x0400_02BF, accelerators),
-        (0x0400_0300, 0x0400_0301, post_flag)
+        (0x0400_0300, 0x0400_0307, power_control)
     }
 }
 
@@ -674,6 +681,7 @@ pub struct DS7MemoryBus {
 
     dma:                ds7DMA,
     interrupt_control:  InterruptControl,
+    ex_mem_status:      ExMemStatus,
     card:               DSCardIO,
 
     counter:            usize,
@@ -1029,7 +1037,8 @@ impl DS7MemoryBus {
         (0x0400_0180, 0x0400_018F, ipc),
         (0x0400_01A0, 0x0400_01BF, card),
         (0x0400_01C0, 0x0400_01C3, spi),
+        (0x0400_0204, 0x0400_0207, ex_mem_status),
         (0x0400_0208, 0x0400_0217, interrupt_control),
-        (0x0400_0300, 0x0400_0303, power_control)
+        (0x0400_0300, 0x0400_0307, power_control)
     }
 }
