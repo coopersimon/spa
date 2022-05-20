@@ -97,7 +97,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
             0x04 => self.set_lcd_status(data),
-            0x06 => {},
+            0x06 => self.v_count = data,
             0x00..=0x6F => self.mem.mut_engine_a().registers.write_halfword(addr, data),
             _ => panic!("writing invalid video address {:X}", addr)
         }

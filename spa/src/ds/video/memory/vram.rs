@@ -227,7 +227,8 @@ impl VRAM2D for EngineAVRAM {
         if let Some((vram, offset)) = self.lookup_bg(addr) {
             vram.read_byte(addr - offset)
         } else {
-            panic!("reading from strange addr (ENG_A_BG: {:X})", addr)
+            //panic!("reading from strange addr (ENG_A_BG: {:X})", addr)
+            0
         }
     }
 
@@ -235,7 +236,8 @@ impl VRAM2D for EngineAVRAM {
         if let Some((vram, offset)) = self.lookup_bg(addr) {
             vram.read_halfword(addr - offset)
         } else {
-            panic!("reading from strange addr (ENG_A_BG: {:X})", addr)
+            //panic!("reading from strange addr (ENG_A_BG: {:X})", addr)
+            0
         }
     }
 
@@ -243,7 +245,8 @@ impl VRAM2D for EngineAVRAM {
         if let Some((vram, offset)) = self.lookup_obj(addr) {
             vram.read_byte(addr - offset)
         } else {
-            panic!("reading from strange addr (ENG_A_OBJ: {:X})", addr)
+            //panic!("reading from strange addr (ENG_A_OBJ: {:X})", addr)
+            0
         }
     }
 
@@ -251,7 +254,8 @@ impl VRAM2D for EngineAVRAM {
         if let Some((vram, offset)) = self.lookup_obj(addr) {
             vram.read_halfword(addr - offset)
         } else {
-            panic!("reading from strange addr (ENG_A_OBJ: {:X})", addr)
+            //panic!("reading from strange addr (ENG_A_OBJ: {:X})", addr)
+            0
         }
     }
 
@@ -334,7 +338,8 @@ impl VRAM2D for EngineBVRAM {
         if let Some((vram, offset)) = self.lookup_bg(addr) {
             vram.read_byte(addr - offset)
         } else {
-            panic!("reading from strange addr (ENG_B_BG: {:X})", addr)
+            //panic!("reading from strange addr (ENG_B_BG: {:X})", addr)
+            0
         }
     }
 
@@ -342,16 +347,17 @@ impl VRAM2D for EngineBVRAM {
         if let Some((vram, offset)) = self.lookup_bg(addr) {
             vram.read_halfword(addr - offset)
         } else {
-            panic!("reading from strange addr (ENG_B_BG: {:X})", addr)
+            //panic!("reading from strange addr (ENG_B_BG: {:X})", addr)
+            0
         }
     }
 
     fn get_obj_byte(&self, addr: u32) -> u8 {
-        self.obj_slot.as_ref().unwrap().read_byte(addr)
+        self.obj_slot.as_ref().map(|v| v.read_byte(addr)).unwrap_or(0)
     }
 
     fn get_obj_halfword(&self, addr: u32) -> u16 {
-        self.obj_slot.as_ref().unwrap().read_halfword(addr)
+        self.obj_slot.as_ref().map(|v| v.read_halfword(addr)).unwrap_or(0)
     }
 
     fn ref_ext_bg_palette<'a>(&'a mut self) -> [Option<&'a [u8]>; 4] {

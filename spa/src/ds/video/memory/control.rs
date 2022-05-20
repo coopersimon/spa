@@ -12,7 +12,7 @@ bitflags!{
     }
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum Slot {
     LCDC(VRAMRegion),
     ARM7(ARM7),
@@ -21,13 +21,13 @@ pub enum Slot {
     Texture(Texture)
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum ARM7 {
     Lo,
     Hi
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum EngineA {
     Bg0,
     Bg01,
@@ -49,7 +49,7 @@ pub enum EngineA {
     ObjExtPalette,
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum EngineB {
     Bg0,
     Bg01,
@@ -60,7 +60,7 @@ pub enum EngineB {
     ObjExtPalette,
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum Texture {
     Tex0,
     Tex1,

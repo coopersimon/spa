@@ -17,7 +17,7 @@ pub use vram::ARM7VRAM;
 use control::*;
 
 #[repr(usize)]
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub enum VRAMRegion {
     A = 0,
     B,
@@ -97,6 +97,7 @@ impl DSVideoMemory {
         let cnt = VRAMControl::from_bits_truncate(data);
         // Set mem in new slot.
         let to_slot = cnt.get_slot(region);
+        //println!("move {:?} | {:?} => {:?}", region, self.mem_control[region as usize].slot, to_slot);
         self.mem_control[region as usize].cnt = cnt;
         self.mem_control[region as usize].slot = to_slot;
         let prev_mem = self.swap_mem(to_slot, mem);
@@ -104,7 +105,7 @@ impl DSVideoMemory {
             // There was already something in the slot.
             let old = self.lookup_at_slot(to_slot).unwrap();
             self.vram.lcdc[old] = prev_mem;
-            self.mem_control[old].slot = to_slot;
+            self.mem_control[old].slot = Slot::LCDC(region);    // TODO: convert old to VRAMRegion
         }
     }
 }

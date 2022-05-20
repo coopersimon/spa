@@ -53,7 +53,8 @@ impl Renderer for ProceduralRenderer {
             let mut engine_a_mem = mem.engine_a_mem.lock().unwrap();
             self.engine_a.setup_caches(&mut engine_a_mem);
             // Choose out.
-            self.engine_a.draw_line(&engine_a_mem, &mut self.engine_a_output[start_offset..end_offset], line as u8);
+            let mut target = self.lower.lock().unwrap();    // TODO: SELECT (POWCNT)
+            self.engine_a.draw_line(&engine_a_mem, &mut target[start_offset..end_offset], line as u8);
             // TODO: composite engine A
         }
         {
@@ -74,5 +75,54 @@ impl Renderer for ProceduralRenderer {
 
     fn render_size() -> (usize, usize) {
         (H_RES, V_RES)
+    }
+}
+
+pub struct DebugTileRenderer {
+    engine_a:   SoftwareRenderer,
+    engine_b:   SoftwareRenderer,
+
+    upper: RenderTarget,
+    lower: RenderTarget,
+}
+
+impl Renderer for DebugTileRenderer {
+    fn new(upper: RenderTarget, lower: RenderTarget) -> Self {
+        Self {
+            engine_a:   SoftwareRenderer::new(RendererMode::NDSA),
+            engine_b:   SoftwareRenderer::new(RendererMode::NDSB),
+
+            upper, lower
+        }
+    }
+
+    fn render_line(&mut self, mem: &mut DSVideoMemory, line: u16) {
+        if line == 0 {
+            {
+                let mut engine_a_mem = mem.engine_a_mem.lock().unwrap();
+                self.engine_a.setup_caches(&mut engine_a_mem);
+                // Choose out.
+                let mut target = self.lower.lock().unwrap();    // TODO: SELECT (POWCNT)
+                self.engine_a.draw_4bpp_tiles(&engine_a_mem, &mut target);
+            }
+            {
+                let mut engine_b_mem = mem.engine_b_mem.lock().unwrap();
+                self.engine_b.setup_caches(&mut engine_b_mem);
+                let mut target = self.upper.lock().unwrap();    // TODO: SELECT (POWCNT)
+                self.engine_b.draw_4bpp_tiles(&engine_b_mem, &mut target);
+            }
+        }
+    }
+
+    fn start_frame(&mut self) {
+        //println!("Start frame");
+    }
+
+    fn finish_frame(&mut self) {
+        //println!("Finish frame");
+    }
+
+    fn render_size() -> (usize, usize) {
+        (256, 384)
     }
 }

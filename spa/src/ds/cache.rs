@@ -270,6 +270,7 @@ impl<R: Renderer> DS9InternalMem<R> {
             self.data_tcm_region = MemRegion::from_bits_truncate(data);
             self.data_tcm_start = (self.data_tcm_region & MemRegion::BASE_ADDR).bits();
             self.data_tcm_end = self.data_tcm_start + DATA_TCM_SIZE;
+            //println!("SET data TCM: {:X} => {:X}", self.data_tcm_start, self.data_tcm_end);
         }
     }
 
