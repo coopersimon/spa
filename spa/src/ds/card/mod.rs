@@ -242,7 +242,7 @@ impl MemInterface16 for DSCard {
             0x4 => self.rom_control_lo.bits(),   // ROMCTRL
             0x6 => self.rom_control_hi.bits(), // ROMCTRL
             0x8..=0xF => 0,     // Command
-            0x10..=0x1B => 0,   // Encryption seeds
+            0x10..=0x1F => 0,   // Encryption seeds
 
             0x0410_0010 | 0x0410_0012 => {    // Data out
                 let lo = self.get_data_out();
@@ -250,7 +250,7 @@ impl MemInterface16 for DSCard {
                 bytes::u16::make(hi, lo)
             },
 
-            _ => unreachable!(),
+            _ => panic!("trying to read {:X}", addr),
         }
     }
 

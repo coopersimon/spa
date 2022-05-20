@@ -90,11 +90,11 @@ impl MemInterface16 for ARM7VRAM {
         let slots = self.mem.lock().unwrap();
         match addr {
             0x0600_0000..=0x0601_FFFF => match slots.c.as_ref() {
-                Some(vram) => vram.read_halfword(addr),
+                Some(vram) => vram.read_halfword(addr - 0x0600_0000),
                 None => 0,
             },
             0x0602_0000..=0x0603_FFFF => match slots.d.as_ref() {
-                Some(vram) => vram.read_halfword(addr),
+                Some(vram) => vram.read_halfword(addr - 0x0602_0000),
                 None => 0,
             },
             _ => panic!("reading from weird VRAM addr (ARM7: {:X})", addr),
@@ -105,11 +105,11 @@ impl MemInterface16 for ARM7VRAM {
         let mut slots = self.mem.lock().unwrap();
         match addr {
             0x0600_0000..=0x0601_FFFF => match slots.c.as_mut() {
-                Some(vram) => vram.write_halfword(addr, data),
+                Some(vram) => vram.write_halfword(addr - 0x0600_0000, data),
                 None => {},
             },
             0x0602_0000..=0x0603_FFFF => match slots.d.as_mut() {
-                Some(vram) => vram.write_halfword(addr, data),
+                Some(vram) => vram.write_halfword(addr - 0x0602_0000, data),
                 None => {},
             },
             _ => panic!("reading from weird VRAM addr (ARM7: {:X})", addr),
