@@ -119,14 +119,14 @@ impl SoftwareRenderer {
         match self.mode {
             RendererMode::NDSA if regs.nds_obj_1d_tile_mapping() => match regs.nds_obj_1d_tile_boundary() {
                 0 => TILE_SHIFT_4BPP,
-                1 => TILE_SHIFT_4BPP * 2,
-                2 => TILE_SHIFT_4BPP * 3,
-                _ => TILE_SHIFT_4BPP * 4,
+                1 => TILE_SHIFT_4BPP + 1,
+                2 => TILE_SHIFT_4BPP + 2,
+                _ => TILE_SHIFT_4BPP + 3,
             },
             RendererMode::NDSB if regs.nds_obj_1d_tile_mapping() => match regs.nds_obj_1d_tile_boundary() {
                 0 => TILE_SHIFT_4BPP,
-                1 => TILE_SHIFT_4BPP * 2,
-                _ => TILE_SHIFT_4BPP * 3,
+                1 => TILE_SHIFT_4BPP + 1,
+                _ => TILE_SHIFT_4BPP + 2,
             }
             _ => TILE_SHIFT_4BPP,
         }
