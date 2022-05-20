@@ -15,6 +15,10 @@ use std::{
 struct Args {
     command: String,
 
+    /// Print key header info.
+    #[clap(short, long)]
+    header: Option<String>,
+
     /// Encrypt the firmware or ROM secure area.
     #[clap(short, long)]
     encrypt: Option<String>,
@@ -40,7 +44,13 @@ fn main() {
 
     let verbose = args.verbose;
 
-    if let Some(file_path) = args.encrypt {
+    if let Some(file_path) = args.header {
+        match args.command.as_str() {
+            "firmware" => println!("TODO"),
+            "rom" => rom_header_info(file_path),
+            _ => panic!("commands firmware + rom supported")
+        }
+    } else if let Some(file_path) = args.encrypt {
         match args.command.as_str() {
             "firmware" => encrypt_firmware(file_path, args.output.expect("specify output path"), verbose),
             "rom" => println!("TODO"),
@@ -55,6 +65,24 @@ fn main() {
     } else {
         println!("Specify encrypt or decrypt.");
     }
+}
+
+fn rom_header_info(file_path: String) {
+    let mut rom_file = File::open(file_path).expect("couldn't open ROM");
+    let mut header_data = vec![0; 0x200];
+
+    rom_file.seek(SeekFrom::Start(0)).expect("couldn't seek");
+    rom_file.read_exact(&mut header_data).expect("couldn't read");
+
+    println!("Name: {}", String::from_utf8(header_data[0..0xC].to_vec()).unwrap());
+    println!("ARM9 Entry:        ${:08X}", get_u32(&header_data, 0x24));
+    println!("ARM9 ROM:          ${:08X}", get_u32(&header_data, 0x20));
+    println!("ARM9 RAM:          ${:08X}", get_u32(&header_data, 0x28));
+    println!("ARM9 Program Size: ${:08X}", get_u32(&header_data, 0x2C));
+    println!("ARM7 Entry:        ${:08X}", get_u32(&header_data, 0x34));
+    println!("ARM7 ROM:          ${:08X}", get_u32(&header_data, 0x30));
+    println!("ARM7 RAM:          ${:08X}", get_u32(&header_data, 0x38));
+    println!("ARM7 Program Size: ${:08X}", get_u32(&header_data, 0x3C));
 }
 
 fn encrypt_firmware(file_path: String, out_path: String, verbose: bool) {
@@ -143,4 +171,8 @@ fn decrypt_firmware(file_path: String, out_path: String, verbose: bool) {
     if verbose {
         println!("Decrypted {} bytes to {}", output_buffer.len(), out_path);
     }
+}
+
+fn get_u32(slice: &[u8], at: usize) -> u32 {
+    u32::from_le_bytes(slice[at..(at + 4)].try_into().unwrap())
 }
