@@ -96,7 +96,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
         let (ds9_ipc, ds7_ipc) = IPC::new();
         let main_ram = MainRAM::new();
 
-        let (video, arm7_vram) = DSVideo::new(R::new(frame_sender.get_frame_buffer(0), frame_sender.get_frame_buffer(1)));
+        let (arm9_video, arm7_video, arm7_vram) = DSVideo::new(R::new(frame_sender.get_frame_buffer(0), frame_sender.get_frame_buffer(1)));
 
         let arm9_bios = BIOS::new_from_file(config.ds9_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
         let arm7_bios = BIOS::new_from_file(config.ds7_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
@@ -117,7 +117,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
             main_ram:           main_ram.clone(),
             shared_wram:        arm9_wram,
 
-            video:              video,
+            video:              arm9_video,
 
             ipc:                ds9_ipc,
             timers:             Timers::new(),
@@ -140,6 +140,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
             wram:               WRAM::new(64 * 1024),
             shared_wram:        arm7_wram,
 
+            video:              arm7_video,
             vram:               arm7_vram,
 
             ipc:                ds7_ipc,
@@ -188,6 +189,22 @@ impl<R: Renderer> DS9MemoryBus<R> {
         // Write additional data into RAM.
         self.main_ram.write_word(0x3F_F800, 0x1FC2);
         self.main_ram.write_word(0x3F_FC00, 0x1FC2);
+
+        // Write user settings into RAM.
+        // Birthday:
+        self.main_ram.write_byte(0x3F_FC83, 0x1);
+        self.main_ram.write_byte(0x3F_FC84, 0x1);
+        // Language:
+        self.main_ram.write_halfword(0x3F_FCE4, 0xEE_41);
+        // Touchscreen calibration:
+        self.main_ram.write_halfword(0x3F_FCD8, 0x100);   // ADC.X1
+        self.main_ram.write_halfword(0x3F_FCDA, 0x0B0);   // ADC.Y1
+        self.main_ram.write_halfword(0x3F_FCDE, 0xED0);   // ADC.X2
+        self.main_ram.write_halfword(0x3F_FCE0, 0xF20);   // ADC.Y2
+        self.main_ram.write_byte(0x3F_FCDC, 1);   // SCR.X1
+        self.main_ram.write_byte(0x3F_FCDD, 1);   // SCR.Y1
+        self.main_ram.write_byte(0x3F_FCE2, 255);   // SCR.X2
+        self.main_ram.write_byte(0x3F_FCE3, 191);   // SCR.Y2
     }
 }
 
@@ -404,7 +421,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => (
                 self.main_ram.read_byte(addr & 0x3F_FFFF),
-                if cycle.is_non_seq() {18} else {2}
+                if cycle.is_non_seq() {1} else {2}
             ),
             0x0300_0000..=0x03FF_FFFF => (
                 self.shared_wram.read_byte(addr),
@@ -438,7 +455,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_byte(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {18} else {2}
+                if cycle.is_non_seq() {1} else {2}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared RAM
                 self.shared_wram.write_byte(addr, data);
@@ -491,7 +508,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {18} else {2}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {1} else {2}),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -521,7 +538,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_halfword(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {18} else {2}
+                if cycle.is_non_seq() {1} else {2}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_halfword(addr, data);
@@ -575,7 +592,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {20} else {4}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {2} else {4}),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -605,7 +622,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_word(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {20} else {4}
+                if cycle.is_non_seq() {2} else {4}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_word(addr, data);
@@ -682,6 +699,7 @@ pub struct DS7MemoryBus {
     wram:           WRAM,
     shared_wram:    ARM7SharedRAM,
 
+    video:          ARM7Video,
     vram:           ARM7VRAM,
 
     ipc:    IPC,
@@ -783,7 +801,9 @@ impl DS7MemoryBus {
             if let Ok(new_input) = self.input_recv.try_recv() {
                 self.set_input(new_input);
                 self.dma.on_vblank();
-                vblank = Interrupts::V_BLANK;
+                if self.video.v_blank_enabled() {
+                    vblank = Interrupts::V_BLANK;
+                }
             }
             self.barrier.wait();
         }
@@ -1042,6 +1062,7 @@ impl Mem32 for DS7MemoryBus {
 
 impl DS7MemoryBus {
     MemoryBusIO!{
+        (0x0400_0004, 0x0400_0007, video),
         (0x0400_00B0, 0x0400_00DF, dma),
         (0x0400_0100, 0x0400_010F, timers),
         (0x0400_0130, 0x0400_0133, joypad),

@@ -92,17 +92,17 @@ impl VRAMControl {
 
     pub fn slot_ab(self, lcdc: VRAMRegion) -> Slot {
         match (self & VRAMControl::MST).bits() {
-            0b01 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
+            0b01 => Slot::EngineA(match self.offset() {
                 0b00 => EngineA::Bg0,
                 0b01 => EngineA::Bg1,
                 0b10 => EngineA::Bg2,
                 _    => EngineA::Bg3,
             }),
-            0b10 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
+            0b10 => Slot::EngineA(match self.offset() {
                 0 => EngineA::Obj0,
                 _ => EngineA::Obj1
             }),
-            0b11 => Slot::Texture(match (self & VRAMControl::OFFSET).bits() {
+            0b11 => Slot::Texture(match self.offset() {
                 0b00 => Texture::Tex0,
                 0b01 => Texture::Tex1,
                 0b10 => Texture::Tex2,
@@ -114,17 +114,17 @@ impl VRAMControl {
 
     pub fn slot_c(self) -> Slot {
         match (self & VRAMControl::MST).bits() {
-            0b001 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
+            0b001 => Slot::EngineA(match self.offset() {
                 0b00 => EngineA::Bg0,
                 0b01 => EngineA::Bg1,
                 0b10 => EngineA::Bg2,
                 _    => EngineA::Bg3,
             }),
-            0b010 => Slot::ARM7(match (self & VRAMControl::OFFSET).bits() {
+            0b010 => Slot::ARM7(match self.offset() {
                 0 => ARM7::Lo,
                 _ => ARM7::Hi
             }),
-            0b011 => Slot::Texture(match (self & VRAMControl::OFFSET).bits() {
+            0b011 => Slot::Texture(match self.offset() {
                 0b00 => Texture::Tex0,
                 0b01 => Texture::Tex1,
                 0b10 => Texture::Tex2,
@@ -137,17 +137,17 @@ impl VRAMControl {
 
     pub fn slot_d(self) -> Slot {
         match (self & VRAMControl::MST).bits() {
-            0b001 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
+            0b001 => Slot::EngineA(match self.offset() {
                 0b00 => EngineA::Bg0,
                 0b01 => EngineA::Bg1,
                 0b10 => EngineA::Bg2,
                 _    => EngineA::Bg3,
             }),
-            0b010 => Slot::ARM7(match (self & VRAMControl::OFFSET).bits() {
+            0b010 => Slot::ARM7(match self.offset() {
                 0 => ARM7::Lo,
                 _ => ARM7::Hi
             }),
-            0b011 => Slot::Texture(match (self & VRAMControl::OFFSET).bits() {
+            0b011 => Slot::Texture(match self.offset() {
                 0b00 => Texture::Tex0,
                 0b01 => Texture::Tex1,
                 0b10 => Texture::Tex2,
@@ -170,25 +170,25 @@ impl VRAMControl {
 
     pub fn slot_fg(self, lcdc: VRAMRegion) -> Slot {
         match (self & VRAMControl::MST).bits() {
-            0b001 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
+            0b001 => Slot::EngineA(match self.offset() {
                 0b00 => EngineA::Bg0,
                 0b01 => EngineA::Bg01,
                 0b10 => EngineA::Bg02,
                 _    => EngineA::Bg03,
             }),
-            0b010 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
+            0b010 => Slot::EngineA(match self.offset() {
                 0b00 => EngineA::Obj0,
                 0b01 => EngineA::Obj01,
                 0b10 => EngineA::Obj02,
                 _    => EngineA::Obj03,
             }),
-            0b011 => Slot::Texture(match (self & VRAMControl::OFFSET).bits() {
+            0b011 => Slot::Texture(match self.offset() {
                 0b00 => Texture::Palette0,
                 0b01 => Texture::Palette1,
                 0b10 => Texture::Palette4,
                 _    => Texture::Palette5,
             }),
-            0b100 => Slot::EngineA(match (self & VRAMControl::OFFSET).bits() {
+            0b100 => Slot::EngineA(match self.offset() {
                 0 => EngineA::BgExtPalette0,
                 _ => EngineA::BgExtPalette2,
             }),
@@ -212,5 +212,10 @@ impl VRAMControl {
             0b11 => Slot::EngineB(EngineB::ObjExtPalette),
             _ => Slot::LCDC(VRAMRegion::I),
         }
+    }
+
+    #[inline]
+    fn offset(self) -> u8 {
+        (self & VRAMControl::OFFSET).bits() >> 3
     }
 }

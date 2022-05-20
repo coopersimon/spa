@@ -5,6 +5,9 @@ mod render;
 mod memory;
 
 use bitflags::bitflags;
+use std::sync::{
+    Arc, atomic::{AtomicU16, Ordering}
+};
 use crate::utils::{
     meminterface::MemInterface16,
     bits::u16,
@@ -36,6 +39,7 @@ pub struct DSVideo<R: Renderer> {
     cycle_count:    usize,
 
     v_count:        u16,
+    v_count_out:    Arc<AtomicU16>,
     lcd_status:     LCDStatus,
 
     pub mem:        DSVideoMemory,
@@ -44,18 +48,23 @@ pub struct DSVideo<R: Renderer> {
 }
 
 impl<R: Renderer> DSVideo<R> {
-    pub fn new(renderer: R) -> (Self, ARM7VRAM) {
+    pub fn new(renderer: R) -> (Self, ARM7Video, ARM7VRAM) {
         let (arm9_mem, arm7_vram) = DSVideoMemory::new();
+        let v_count = Arc::new(AtomicU16::new(0));
         (Self {
             state:          VideoState::Init,
             cycle_count:    0,
 
             v_count:        0,
+            v_count_out:    v_count.clone(),
             lcd_status:     LCDStatus::default(),
 
             mem:            arm9_mem,
 
             renderer:       renderer,
+        }, ARM7Video {
+            v_count:    v_count,
+            lcd_status: LCDStatus::default()
         }, arm7_vram)
     }
 
@@ -158,6 +167,7 @@ impl<R: Renderer> DSVideo<R> {
             StartFrame => {
                 self.state = Drawing;
                 self.v_count = 0;
+                self.v_count_out.store(0, Ordering::Release);
                 self.lcd_status.remove(LCDStatus::VBLANK_FLAG | LCDStatus::HBLANK_FLAG);
                 self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == self.lcd_status.v_count());
                 self.renderer.start_frame();
@@ -167,6 +177,7 @@ impl<R: Renderer> DSVideo<R> {
             BeginDrawing => {
                 self.state = Drawing;
                 self.v_count += 1;
+                self.v_count_out.fetch_add(1, Ordering::AcqRel);
                 self.lcd_status.remove(LCDStatus::HBLANK_FLAG);
                 self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == self.lcd_status.v_count());
                 self.renderer.render_line(&mut self.mem, self.v_count);
@@ -180,6 +191,7 @@ impl<R: Renderer> DSVideo<R> {
             EnterVBlank => {
                 self.state = VBlank;
                 self.v_count += 1;
+                self.v_count_out.fetch_add(1, Ordering::AcqRel);
                 self.lcd_status.insert(LCDStatus::VBLANK_FLAG);
                 self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == self.lcd_status.v_count());
                 self.renderer.finish_frame();
@@ -193,6 +205,7 @@ impl<R: Renderer> DSVideo<R> {
             ExitVHBlank => {
                 self.state = VBlank;
                 self.v_count += 1;
+                self.v_count_out.fetch_add(1, Ordering::AcqRel);
                 self.lcd_status.remove(LCDStatus::HBLANK_FLAG);
                 self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == self.lcd_status.v_count());
                 (Signal::None, self.v_count_irq())
@@ -249,4 +262,69 @@ enum Transition {
     EnterVBlank,    // Enter V-blank
     EnterVHBlank,   // Enter H-blank while in V-blank
     ExitVHBlank,    // Exit H-blank while in V-blank
+}
+
+/// ARM7 video display status access.
+pub struct ARM7Video {
+    v_count:        Arc<AtomicU16>,
+    lcd_status:     LCDStatus,
+}
+
+impl ARM7Video {
+    pub fn v_blank_enabled(&self) -> bool {
+        self.lcd_status.contains(LCDStatus::VBLANK_IRQ)
+    }
+}
+
+impl MemInterface16 for ARM7Video {
+    fn read_halfword(&mut self, addr: u32) -> u16 {
+        match addr {
+            0x0 => self.lcd_status.bits(),
+            0x2 => self.v_count.load(Ordering::Acquire),
+            _ => panic!("reading invalid arm7 video address {:X}", addr)
+        }
+    }
+
+    fn write_halfword(&mut self, addr: u32, data: u16) {
+        match addr {
+            0x0 => self.set_lcd_status(data),
+            0x2 => self.v_count.store(data, Ordering::Release),
+            _ => panic!("writing invalid arm7 video address {:X}", addr)
+        }
+    }
+}
+
+impl ARM7Video {
+    /*#[inline]
+    fn v_count_irq(&self) -> Interrupts {
+        if self.lcd_status.contains(LCDStatus::VCOUNT_IRQ | LCDStatus::VCOUNT_FLAG) {
+            Interrupts::V_COUNTER
+        } else {
+            Interrupts::empty()
+        }
+    }
+
+    #[inline]
+    fn h_blank_irq(&self) -> Interrupts {
+        if self.lcd_status.contains(LCDStatus::HBLANK_IRQ | LCDStatus::HBLANK_FLAG) {
+            Interrupts::H_BLANK
+        } else {
+            Interrupts::empty()
+        }
+    }
+
+    #[inline]
+    fn v_blank_irq(&self) -> Interrupts {
+        if self.lcd_status.contains(LCDStatus::VBLANK_IRQ | LCDStatus::VBLANK_FLAG) {
+            Interrupts::V_BLANK
+        } else {
+            Interrupts::empty()
+        }
+    }*/
+
+    fn set_lcd_status(&mut self, data: u16) {
+        let old_flags = self.lcd_status.get_flags();
+        let lcd_status = LCDStatus::from_bits_truncate(data & 0xFFF8);
+        self.lcd_status = lcd_status | old_flags;
+    }
 }
