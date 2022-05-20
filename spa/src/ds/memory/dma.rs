@@ -357,6 +357,7 @@ impl DMAChannel {
     fn set_control(&mut self, data: u32) {
         let was_enabled = self.control.contains(Control::ENABLE);
         self.control = Control::from_bits_truncate(data);
+        //println!("SET DMA CTRL: {:X} | bytes: {:X}", data, self.control.word_count());
         let enabled = self.control.contains(Control::ENABLE);
         if enabled && !was_enabled {
             /*self.current_count = if self.fifo_mode() {

@@ -113,7 +113,7 @@ impl NDS {
     pub fn new_debug_7(config: MemoryConfig) -> DebugInterface<UserInput> {
         use crate::common::framecomms::debug::new_debug_frame_comms;
 
-        let (render_width, render_height) = (256, 384);//RendererType::render_size();
+        let (render_width, render_height) = RendererType::render_size();
         let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4, 2);
         let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, UserInput::default());
 
@@ -142,7 +142,7 @@ impl NDS {
 
         //let arm7_no_bios = config.ds7_bios_path.is_none();
         std::thread::Builder::new().name("ARM7-CPU".to_string()).spawn(move || {
-            let mut cpu = new_arm7_cpu(arm7_bus, fast_entry_arm7, false);
+            let cpu = new_arm7_cpu(arm7_bus, fast_entry_arm7, false);
             //let audio_channels = cpu.mut_mem().enable_audio();
             //channel_sender.send(audio_channels).unwrap();
             debug_wrapper.run_debug(cpu);
@@ -157,7 +157,7 @@ impl NDS {
     pub fn new_debug_9(config: MemoryConfig) -> DebugInterface<UserInput> {
         use crate::common::framecomms::debug::new_debug_frame_comms;
 
-        let (render_width, render_height) = (256, 384);//RendererType::render_size();
+        let (render_width, render_height) = RendererType::render_size();
         let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4, 2);
         let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, UserInput::default());
 
@@ -179,7 +179,7 @@ impl NDS {
             if fast_boot {
                 internal_mem.setup_init();
             }
-            let mut cpu = new_arm9_cpu(internal_mem, fast_entry_arm9);
+            let cpu = new_arm9_cpu(internal_mem, fast_entry_arm9);
             debug_wrapper.run_debug(cpu);
         }).unwrap();
 

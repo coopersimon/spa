@@ -75,7 +75,7 @@ impl MemInterface16 for SPI {
                     bytes::u16::make(0, data)
                 },
                 3 => 0, // Reserved
-                x => unreachable!(),
+                _ => unreachable!(),
             },
             _ => unreachable!()
         }
@@ -96,7 +96,7 @@ impl MemInterface16 for SPI {
                 1 => self.firmware.write(bytes::u16::lo(data)),
                 2 => self.touchscreen.write(bytes::u16::lo(data)),
                 3 => {}, // Reserved
-                x => unreachable!(),
+                _ => unreachable!(),
             },
             _ => unreachable!()
         }

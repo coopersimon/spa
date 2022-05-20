@@ -88,7 +88,7 @@ impl DSCardIO {
 
     /// To be called by only the ARM7 processor.
     pub fn clock(&mut self, cycles: usize) {
-        self.card.lock().unwrap().clock(cycles);
+        //self.card.lock().unwrap().clock(cycles);
     }
 
     pub fn get_interrupt(&self) -> Interrupts {
@@ -107,6 +107,11 @@ impl DSCardIO {
 
     pub fn load_data(&self, from_addr: u32, into_buffer: &mut [u8]) {
         self.card.lock().unwrap().load_data(from_addr, into_buffer);
+    }
+
+    /// Fast boot mode setup.
+    pub fn fast_boot(&mut self) {
+        self.card.lock().unwrap().fast_boot();
     }
 }
 
@@ -168,7 +173,7 @@ impl DSCard {
         let mut buffer = vec![0; ROM_BUFFER_SIZE as usize];
 
         rom_file.seek(SeekFrom::Start(0))?;
-        rom_file.read(&mut buffer)?;
+        rom_file.read_exact(&mut buffer)?;
 
         // Game ID code.
         let id_code = u32::from_le_bytes([buffer[0xC], buffer[0xD], buffer[0xE], buffer[0xF]]);
@@ -219,6 +224,12 @@ impl DSCard {
     fn load_data(&mut self, from_addr: u32, into_buffer: &mut [u8]) {
         self.rom_file.seek(SeekFrom::Start(from_addr as u64)).unwrap();
         self.rom_file.read(into_buffer).unwrap();
+    }
+
+    fn fast_boot(&mut self) {
+        // TODO: load seed 0
+        //self.apply_key2_seeds();
+        self.cmd_encrypt_mode = CommandEncryptMode::Key2;
     }
 }
 
@@ -365,7 +376,7 @@ enum DSCardDataState {
 impl DSCard {
     fn trigger_interrupt(&mut self) {
         if self.spi_control.contains(GamecardControl::TRANSFER_IRQ) {
-            println!("trigger int");
+            //println!("trigger int");
             self.interrupt_7.store(true, Ordering::Release);
             self.interrupt_9.store(true, Ordering::Release);
         }
@@ -373,7 +384,7 @@ impl DSCard {
 
     fn write_rom_control_lo(&mut self, data: u16) {
         self.rom_control_lo = RomControlLo::from_bits_truncate(data);
-        println!("Set ROMCTRL: {:X}", data);
+        //println!("Set ROMCTRL lo: {:X}", data);
         if self.rom_control_lo.contains(RomControlLo::KEY2_APPLY) {
             self.apply_key2_seeds();
         }
@@ -381,6 +392,7 @@ impl DSCard {
 
     fn write_rom_control_hi(&mut self, data: u16) {
         self.rom_control_hi = RomControlHi::from_bits_truncate(data);
+        //println!("Set ROMCTRL hi: {:X}", data);
         if self.rom_control_hi.contains(RomControlHi::START_STAT) {
             self.transfer_count = match (self.rom_control_hi & RomControlHi::BLOCK_SIZE).bits() >> 8 {
                 0 => 0,
@@ -398,19 +410,20 @@ impl DSCard {
             Key1 => self.key1_command(),
             Key2 => self.key2_command(),
         };
-        println!("do command {:?} | block size: {:X}", self.data_state, self.transfer_count);
+        //println!("do command {:?} | block size: {:X}", self.data_state, self.transfer_count);
     }
 
     fn apply_key2_seeds(&mut self) {
         self.key2_0 = u64::from_le_bytes(self.seed_0).reverse_bits() >> 25;
         self.key2_1 = u64::from_le_bytes(self.seed_1).reverse_bits() >> 25;
+        println!("KEY2: {:X} | {:X}", self.key2_0, self.key2_1);
         self.trigger_interrupt();
     }
 
     fn unencrypted_command(&mut self) -> DSCardDataState {
         use DSCardDataState::*;
         let command = u64::from_le_bytes(self.command);
-        println!("got command {:X}", command);
+        //println!("got command {:X}", command);
         self.rom_control_hi.insert(RomControlHi::DATA_STATUS);
         match command >> 56 {   // Command is MSB
             0x9F => Dummy,
@@ -463,11 +476,9 @@ impl DSCard {
 
     fn key2_command(&mut self) -> DSCardDataState {
         use DSCardDataState::*;
-        let mut out = [0_u8; 8];
-        for i in 0..8 {
-            out[7-i] = self.encrypt_byte_key2(self.command[7-i]);
-        }
-        let command = u64::from_le_bytes(out);
+        let command = u64::from_le_bytes(self.command);
+        //println!("got command {:X}", command);
+        self.rom_control_hi.insert(RomControlHi::DATA_STATUS);
         match command >> 56 {
             0xB7 => {
                 let addr = (command >> 24) as u32;
@@ -478,7 +489,7 @@ impl DSCard {
                 }
             },
             0xB8 => Key2ID,
-            _ => panic!("unrecognised DS card command: {:X} (key2: {:X})", command, u64::from_le_bytes(self.command))
+            _ => panic!("unrecognised (key2) DS card command: {:X}", command)
         }
     }
 
@@ -504,7 +515,8 @@ impl DSCard {
             },
             Key1ID | Key2ID => {
                 let idx = 4 - self.transfer_count;
-                self.encrypt_byte_key2(ROM_ID[idx])
+                //self.encrypt_byte_key2(ROM_ID[idx])
+                ROM_ID[idx]
             },
             Key2 => {
                 // TODO: calc keys
@@ -514,14 +526,16 @@ impl DSCard {
             SecureBlock(addr) => {
                 let data = self.read_card_byte(addr);
                 self.data_state = SecureBlock(addr + 1);
-                self.encrypt_byte_key2(data)
+                data
+                //self.encrypt_byte_key2(data)
             },
             Key2Disable(_) => 0,
             EnterMain(_) => 0,
             GetData(addr) => {
                 let data = self.read_card_byte(addr);
                 self.data_state = GetData(addr + 1);
-                self.encrypt_byte_key2(data)
+                data
+                //self.encrypt_byte_key2(data)
             }
         };
         //println!("read data: {:X}", data);
@@ -529,7 +543,7 @@ impl DSCard {
         if self.transfer_count == 0 {
             self.data_state = Dummy;
             self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
-            self.trigger_interrupt();
+            //self.trigger_interrupt();
         }
         data
     }
@@ -541,7 +555,7 @@ impl DSCard {
             self.buffer_tag = tag;
             let seek_addr = (tag * ROM_BUFFER_SIZE) as u64;
             self.rom_file.seek(SeekFrom::Start(seek_addr)).unwrap();
-            self.rom_file.read(&mut self.rom_buffer).unwrap();
+            self.rom_file.read_exact(&mut self.rom_buffer).unwrap();
         }
         self.rom_buffer[(addr % ROM_BUFFER_SIZE) as usize]
     }

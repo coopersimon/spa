@@ -903,8 +903,8 @@ impl MemInterface16 for VideoRegisters {
         match addr {
             0x0 => self.lcd_control.bits(),
             0x2 => self.lcd_control_hi.bits(),
-            //0x4 => 0, LCD_STAT
-            //0x6 => 0, V_COUNT
+            0x4 => 0, //LCD_STAT
+            0x6 => 0, //V_COUNT
             0x8 => self.bg0_control.bits(),
             0xA => self.bg1_control.bits(),
             0xC => self.bg2_control.bits(),
@@ -944,21 +944,47 @@ impl MemInterface16 for VideoRegisters {
             0x50 => self.colour_special.bits(),
             0x52 => self.alpha_coeffs,
             0x54 => self.brightness as u16,
-            0x56 => 0,
+            0x56..=0x5F => 0,
+            0x60 => 0,  // DISP3DCNT
+            0x62 => 0,
+            0x64 => 0,  // DISPCAPCNT
+            0x66 => 0,  // DISPCAPCNT
+            0x68 => 0,  // DISP_MMEM_FIFO
+            0x6A => 0,  // DISP_MMEM_FIFO
+            0x6C => 0,  // MASTER BRIGHT
+            0x6E => 0,
             _ => panic!("reading from invalid video register address {:X}", addr)
         }
     }
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0x0 => self.lcd_control = LCDControl::from_bits_truncate(data),
-            0x2 => self.lcd_control_hi = NDSControl::from_bits_truncate(data),
-            //0x4 => LCD_STAT
-            //0x6 => V_COUNT
-            0x8 => self.bg0_control = BGControl::from_bits_truncate(data),
-            0xA => self.bg1_control = BGControl::from_bits_truncate(data),
-            0xC => self.bg2_control = BGControl::from_bits_truncate(data),
-            0xE => self.bg3_control = BGControl::from_bits_truncate(data),
+            0x0 => {
+                //println!("LCD lo: {:X}", data);
+                self.lcd_control = LCDControl::from_bits_truncate(data);
+            },
+            0x2 => {
+                //println!("LCD hi: {:X}", data);
+                self.lcd_control_hi = NDSControl::from_bits_truncate(data);
+            },
+            0x4 => {},  //LCD_STAT
+            0x6 => {},  //V_COUNT
+            0x8 => {
+                //println!("BG0: {:X}", data);
+                self.bg0_control = BGControl::from_bits_truncate(data);
+            },
+            0xA => {
+                //println!("BG1: {:X}", data);
+                self.bg1_control = BGControl::from_bits_truncate(data);
+            },
+            0xC => {
+                //println!("BG2: {:X}", data);
+                self.bg2_control = BGControl::from_bits_truncate(data);
+            },
+            0xE => {
+                //println!("BG3: {:X}", data);
+                self.bg3_control = BGControl::from_bits_truncate(data);
+            },
             0x10 => self.bg0_x_offset = data,
             0x12 => self.bg0_y_offset = data,
             0x14 => self.bg1_x_offset = data,
@@ -1060,7 +1086,15 @@ impl MemInterface16 for VideoRegisters {
             0x50 => self.colour_special = ColourSpecialControl::from_bits_truncate(data),
             0x52 => self.alpha_coeffs = data,
             0x54 => self.brightness = bytes::u16::lo(data),
-            0x56 => {},
+            0x56..=0x5F => {},
+            0x60 => {},  // DISP3DCNT
+            0x62 => {},
+            0x64 => {},  // DISPCAPCNT
+            0x66 => {},  // DISPCAPCNT
+            0x68 => {},  // DISP_MMEM_FIFO
+            0x6A => {},  // DISP_MMEM_FIFO
+            0x6C => {},  // MASTER BRIGHT
+            0x6E => {},
             _ => panic!("writing to invalid video register address {:X}", addr)
         }
     }

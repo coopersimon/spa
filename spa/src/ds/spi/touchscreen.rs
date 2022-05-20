@@ -14,11 +14,11 @@ impl Touchscreen {
     }
 
     pub fn read(&mut self) -> u8 {
-        println!("read tsc");
+        //println!("read tsc");
         0
     }
 
     pub fn write(&mut self, data: u8) {
-        println!("write {:X} to tsc", data);
+        //println!("write {:X} to tsc", data);
     }
 }

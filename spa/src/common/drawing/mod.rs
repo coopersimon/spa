@@ -783,6 +783,28 @@ impl SoftwareRenderer {
             }
         }
     }
+
+    /// Debug: Draws the current VRAM in 4bpp format.
+    pub fn draw_4bpp_tiles<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [u8]) {
+        for tile_num in 0..1024 {
+            for y in 0..8 {
+                for x in 0..8 {
+                    let offset = 0 * 1024;
+                    let texel = mem.vram.bg_tile_texel_4bpp(offset + (tile_num * TILE_BYTES_4BPP), x as u8, y as u8);
+                    let colour = self.palette_cache.get_bg(texel);
+
+                    let tile_x = tile_num % 32;
+                    let tile_y = tile_num / 32;
+                    let pixel_x = (tile_x * 8) + x;
+                    let pixel_y = (tile_y * 8) + y;
+                    let pixel_num = (((pixel_y * 256) + pixel_x) * 4) as usize;
+                    target[pixel_num] = colour.r;
+                    target[pixel_num + 1] = colour.g;
+                    target[pixel_num + 2] = colour.b;
+                }
+            }
+        }
+    }
 }
 
 fn apply_alpha_blend(eva: u16, evb: u16, target_1: Colour, target_2: Colour) -> Colour {

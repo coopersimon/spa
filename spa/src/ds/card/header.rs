@@ -13,6 +13,10 @@ impl CardHeader {
         u32::from_le_bytes(self.0[at..(at + 4)].try_into().unwrap())
     }
 
+    pub fn as_slice<'a>(&'a self) -> &'a [u8] {
+        &self.0
+    }
+
     /// Header-defined game name.
     pub fn game_name(&self) -> String {
         String::from_utf8(self.0[0..0xC].to_vec()).unwrap()

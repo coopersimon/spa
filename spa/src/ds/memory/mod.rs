@@ -166,6 +166,8 @@ impl<R: Renderer> DS9MemoryBus<R> {
     }
 
     /// Setup ARM9 boot area, for fast booting without BIOS.
+    /// 
+    /// Also copies header into RAM.
     pub fn setup_boot_area(&mut self, header: &CardHeader) {
         let boot_area_size = header.arm9_size() as usize;
         let mut buffer = vec![0_u8; boot_area_size];
@@ -175,6 +177,17 @@ impl<R: Renderer> DS9MemoryBus<R> {
         for (n, byte) in buffer.iter().enumerate() {
             self.store_byte(MemCycleType::N, arm9_addr + (n as u32), *byte);
         }
+
+        // Copy header data into top of RAM.
+        for (n, byte) in header.as_slice().iter().enumerate() {
+            self.main_ram.write_byte((0x3F_FE00 + n) as u32, *byte);
+        }
+
+        self.card.fast_boot();
+
+        // Write additional data into RAM.
+        self.main_ram.write_word(0x3F_F800, 0x1FC2);
+        self.main_ram.write_word(0x3F_FC00, 0x1FC2);
     }
 }
 
