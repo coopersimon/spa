@@ -44,9 +44,15 @@ pub struct IPC {
 
     ipc_fifo_control:   IPCFifoControl,
 
+    // To ensure interrupts are edge-triggered.
+    was_send_empty: bool,
+    was_recv_empty: bool,
+
     irq_enable:     bool,
     irq_req_in:     Arc<AtomicBool>,
     irq_req_out:    Arc<AtomicBool>,
+
+    name: String
 }
 
 impl IPC {
@@ -65,9 +71,12 @@ impl IPC {
             atomic_write:       atomic_a.clone(),
             atomic_read:        atomic_b.clone(),
             ipc_fifo_control:   IPCFifoControl::default(),
+            was_send_empty:     true,
+            was_recv_empty:     true,
             irq_enable:         false,
             irq_req_in:         irq_req_a.clone(),
             irq_req_out:        irq_req_b.clone(),
+            name:               "ARM9".to_string(),
         }, Self{
             send:               send_b,
             recv:               recv_a,
@@ -75,22 +84,32 @@ impl IPC {
             atomic_write:       atomic_b,
             atomic_read:        atomic_a,
             ipc_fifo_control:   IPCFifoControl::default(),
+            was_send_empty:     true,
+            was_recv_empty:     true,
             irq_enable:         false,
             irq_req_in:         irq_req_b,
             irq_req_out:        irq_req_a,
+            name:               "ARM7".to_string(),
         })
     }
 
     pub fn get_interrupts(&mut self) -> Interrupts {
         let mut interrupts = Interrupts::default();
-        // TODO: these interrupts should be edge-triggered.
-        if self.ipc_fifo_control.contains(IPCFifoControl::SEND_FIFO_IRQ) && self.send.is_empty() {
-            interrupts.insert(Interrupts::IPC_SEND_EMPTY);
+        if self.ipc_fifo_control.contains(IPCFifoControl::SEND_FIFO_IRQ) {
+            let is_send_empty = self.send.is_empty();
+            if is_send_empty && !self.was_send_empty {
+                interrupts.insert(Interrupts::IPC_SEND_EMPTY);
+            }
+            self.was_send_empty = is_send_empty;
         }
-        if self.ipc_fifo_control.contains(IPCFifoControl::RECV_FIFO_IRQ) && !self.recv.is_empty() {
-            interrupts.insert(Interrupts::IPC_RECV_NEMPTY);
+        if self.ipc_fifo_control.contains(IPCFifoControl::RECV_FIFO_IRQ) {
+            let is_recv_empty = self.recv.is_empty();
+            if !is_recv_empty && self.was_recv_empty {
+                interrupts.insert(Interrupts::IPC_RECV_NEMPTY);
+            }
+            self.was_recv_empty = is_recv_empty;
         }
-        if self.irq_enable && self.irq_req_in.load(Ordering::Acquire) {
+        if self.irq_enable && self.irq_req_in.swap(false, Ordering::AcqRel) {
             interrupts.insert(Interrupts::IPC_SYNC);
         }
         interrupts
@@ -144,10 +163,12 @@ impl IPC {
                 err => panic!("{:?}", err),
             }
         }
+        //println!("READ {:X} from fifo (from {})", self.last_word, self.name);
         self.last_word
     }
 
     fn fifo_write(&mut self, data: u32) {
+        //println!("WRITE {:X} to fifo (from {})", data, self.name);
         if self.ipc_fifo_control.contains(IPCFifoControl::ENABLE_FIFO) {
             match self.send.try_send(data) {
                 Ok(()) => {},
