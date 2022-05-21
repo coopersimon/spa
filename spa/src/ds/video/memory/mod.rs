@@ -13,8 +13,8 @@ use crate::utils::{
 };
 use crate::common::wram::WRAM;
 use crate::common::videomem::VideoMemory;
-use vram::{ARM9VRAM, ARM7VRAMSlots, EngineAVRAM, EngineBVRAM};
-pub use vram::ARM7VRAM;
+use vram::{ARM7VRAMSlots, EngineAVRAM, EngineBVRAM};
+pub use vram::{ARM9VRAM, ARM7VRAM};
 use control::*;
 
 bitflags! {
@@ -44,6 +44,25 @@ pub enum VRAMRegion {
     I
 }
 
+impl TryFrom<usize> for VRAMRegion {
+    type Error = &'static str;
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        use VRAMRegion::*;
+        match value {
+            0 => Ok(A),
+            1 => Ok(B),
+            2 => Ok(C),
+            3 => Ok(D),
+            4 => Ok(E),
+            5 => Ok(F),
+            6 => Ok(G),
+            7 => Ok(H),
+            8 => Ok(I),
+            _ => Err("invalid")
+        }
+    }
+}
+
 struct VRAMControlModule {
     cnt:    VRAMControl,
     slot:   Slot,
@@ -63,7 +82,7 @@ impl VRAMControlModule {
 /// 
 /// Acts as the interface between ARM9 and PPU/GPU.
 pub struct DSVideoMemory {
-    vram:           ARM9VRAM,
+    pub vram:      ARM9VRAM,
 
     mem_control:   [VRAMControlModule; 9],
     pub power_cnt: GraphicsPowerControl,
@@ -121,7 +140,7 @@ impl DSVideoMemory {
             // There was already something in the slot.
             let old = self.lookup_at_slot(to_slot).unwrap();
             self.vram.lcdc[old] = prev_mem;
-            self.mem_control[old].slot = Slot::LCDC(region);    // TODO: convert old to VRAMRegion
+            self.mem_control[old].slot = Slot::LCDC(old.try_into().unwrap());
             println!("writeback {:?} | => {:?}", old, self.mem_control[old].slot);
         }
     }

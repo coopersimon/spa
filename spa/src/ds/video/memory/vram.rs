@@ -61,6 +61,16 @@ impl ARM9VRAM {
             engine_b_vram
         )
     }
+
+    /// Ref a specific VRAM region for display.
+    pub fn ref_block<'a>(&'a self, region: super::VRAMRegion) -> Option<&'a Box<WRAM>> {
+        self.lcdc[region as usize].as_ref()
+    }
+
+    /// Mutably ref a specific VRAM region for capture.
+    pub fn mut_block<'a>(&'a mut self, region: super::VRAMRegion) -> Option<&'a mut Box<WRAM>> {
+        self.lcdc[region as usize].as_mut()
+    }
 }
 
 /// Interface for ARM7 to access regions C and D.

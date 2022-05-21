@@ -86,6 +86,9 @@ impl SoftwareRenderer {
         }
     }
 
+    /// Draw a regular 2D line, with BG and OBJ, and applied effects.
+    /// 
+    /// The only mode for GBA, also used in NDS for 2D engines A and B
     pub fn draw_line<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [u8], line: u8) {
         if mem.registers.in_fblank() {
             for p in target {

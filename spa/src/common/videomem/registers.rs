@@ -308,6 +308,20 @@ impl VideoRegisters {
         self.lcd_control.contains(LCDControl::DISPLAY_OBJ)
     }
 
+    /// Display mode for NDS.
+    /// 0 = Disabled
+    /// 1 = Normal graphics display
+    /// 2 = VRAM display
+    /// 3 = Main RAM display
+    pub fn display_mode(&self) -> u16 {
+        (self.lcd_control_hi & NDSControl::DISP_MODE).bits()
+    }
+
+    /// VRAM block for display and capture for NDS.
+    pub fn vram_block(&self) -> u16 {
+        (self.lcd_control_hi & NDSControl::VRAM_BLOCK).bits() >> 2
+    }
+
     fn bitmap_frame(&self) -> bool {
         self.lcd_control.contains(LCDControl::FRAME_DISPLAY)
     }
