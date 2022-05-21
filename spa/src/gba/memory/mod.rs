@@ -457,25 +457,25 @@ impl Internal {
 impl MemInterface8 for Internal {
     fn read_byte(&mut self, addr: u32) -> u8 {
         match addr {
-            0 => self.post_boot_flag,
-            1 => 0,
-            2 => 0,
-            3 => 0,
+            0x0400_0300 => self.post_boot_flag,
+            0x0400_0301 => 0,
+            0x0400_0302 => 0,
+            0x0400_0303 => 0,
             _ => unreachable!()
         }
     }
 
     fn write_byte(&mut self, addr: u32, data: u8) {
         match addr {
-            0 => self.post_boot_flag = data & 1,
-            1 => if u8::test_bit(data, 7) {
+            0x0400_0300 => self.post_boot_flag = data & 1,
+            0x0400_0301 => if u8::test_bit(data, 7) {
                 println!("Stop!");
                 self.stop = true;
             } else {
                 self.halt = true;
             },
-            2 => {},
-            3 => {},
+            0x0400_0302 => {},
+            0x0400_0303 => {},
             _ => unreachable!()
         }
     }

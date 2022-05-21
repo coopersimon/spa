@@ -105,33 +105,33 @@ impl DMA {
 impl MemInterface16 for DMA {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            0x00..=0x0B => self.channels[0].read_halfword(addr),
-            0x0C..=0x17 => self.channels[1].read_halfword(addr - 0x0C),
-            0x18..=0x23 => self.channels[2].read_halfword(addr - 0x18),
-            0x24..=0x2F => self.channels[3].read_halfword(addr - 0x24),
+            0x0400_00B0..=0x0400_00BB => self.channels[0].read_halfword(addr - 0x0400_00B0),
+            0x0400_00BC..=0x0400_00C7 => self.channels[1].read_halfword(addr - 0x0400_00BC),
+            0x0400_00C8..=0x0400_00D3 => self.channels[2].read_halfword(addr - 0x0400_00C8),
+            0x0400_00D4..=0x0400_00DF => self.channels[3].read_halfword(addr - 0x0400_00D4),
             _ => unreachable!()
         }
     }
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0x00..=0x09 => self.channels[0].write_halfword(addr, data),
-            0x0A        => {
-                self.channels[0].write_halfword(addr, data);
+            0x0400_00B0..=0x0400_00B9 => self.channels[0].write_halfword(addr - 0x0400_00B0, data),
+            0x0400_00BA => {
+                self.channels[0].write_halfword(addr - 0x0400_00B0, data);
                 self.active[0] = self.channels[0].should_start_now();
             },
-            0x0C..=0x15 => self.channels[1].write_halfword(addr - 0x0C, data),
-            0x16        => {
-                self.channels[1].write_halfword(addr - 0x0C, data);
+            0x0400_00BC..=0x0400_00C5 => self.channels[1].write_halfword(addr - 0x0400_00BC, data),
+            0x0400_00C6 => {
+                self.channels[1].write_halfword(addr - 0x0400_00BC, data);
                 self.active[1] = self.channels[1].should_start_now();
             },
-            0x18..=0x21 => self.channels[2].write_halfword(addr - 0x18, data),
-            0x22        => {
-                self.channels[2].write_halfword(addr - 0x18, data);
+            0x0400_00C8..=0x0400_00D1 => self.channels[2].write_halfword(addr - 0x0400_00C8, data),
+            0x0400_00D2 => {
+                self.channels[2].write_halfword(addr - 0x0400_00C8, data);
                 self.active[2] = self.channels[2].should_start_now();
             },
-            0x24..=0x2D => self.channels[3].write_halfword(addr - 0x24, data),
-            0x2E        => {
-                self.channels[3].write_halfword(addr - 0x24, data);
+            0x0400_00D4..=0x0400_00DD => self.channels[3].write_halfword(addr - 0x0400_00D4, data),
+            0x0400_00DE => {
+                self.channels[3].write_halfword(addr - 0x0400_00D4, data);
                 self.active[3] = self.channels[3].should_start_now();
             },
             _ => unreachable!()
@@ -140,24 +140,24 @@ impl MemInterface16 for DMA {
 
     fn write_word(&mut self, addr: u32, data: u32) {
         match addr {
-            0x00..=0x07 => self.channels[0].write_word(addr, data),
-            0x08        => {
-                self.channels[0].write_word(addr, data);
+            0x0400_00B0..=0x0400_00B7 => self.channels[0].write_word(addr - 0x0400_00B0, data),
+            0x0400_00B8 => {
+                self.channels[0].write_word(addr - 0x0400_00B0, data);
                 self.active[0] = self.channels[0].should_start_now();
             },
-            0x0C..=0x13 => self.channels[1].write_word(addr - 0x0C, data),
-            0x14        => {
-                self.channels[1].write_word(addr - 0x0C, data);
+            0x0400_00BC..=0x0400_00C3 => self.channels[1].write_word(addr - 0x0400_00BC, data),
+            0x0400_00C4 => {
+                self.channels[1].write_word(addr - 0x0400_00BC, data);
                 self.active[1] = self.channels[1].should_start_now();
             },
-            0x18..=0x1F => self.channels[2].write_word(addr - 0x18, data),
-            0x20        => {
-                self.channels[2].write_word(addr - 0x18, data);
+            0x0400_00C8..=0x0400_00CF => self.channels[2].write_word(addr - 0x0400_00C8, data),
+            0x0400_00D0 => {
+                self.channels[2].write_word(addr - 0x0400_00C8, data);
                 self.active[2] = self.channels[2].should_start_now();
             },
-            0x24..=0x2B => self.channels[3].write_word(addr - 0x24, data),
-            0x2C        => {
-                self.channels[3].write_word(addr - 0x24, data);
+            0x0400_00D4..=0x0400_00DB => self.channels[3].write_word(addr - 0x0400_00D4, data),
+            0x0400_00DC => {
+                self.channels[3].write_word(addr - 0x0400_00D4, data);
                 self.active[3] = self.channels[3].should_start_now();
             },
             _ => unreachable!()

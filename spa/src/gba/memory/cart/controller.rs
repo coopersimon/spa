@@ -83,15 +83,15 @@ impl GamePakController {
 impl MemInterface16 for GamePakController {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            0 => self.control.bits(),
-            2 => 0,
+            0x0400_0204 => self.control.bits(),
+            0x0400_0206 => 0,
             _ => unreachable!()
         }
     }
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0 => {
+            0x0400_0204 => {
                 self.control = Control::from_bits_truncate(data);
                 self.sram_wait = transfer_cycles((self.control & Control::SRAM_WAIT).bits());
                 self.wait_0_n = transfer_cycles((self.control & Control::WAIT_0_N).bits() >> 2);
@@ -102,7 +102,7 @@ impl MemInterface16 for GamePakController {
                 self.wait_2_s = if self.control.contains(Control::WAIT_0_S) {2} else {9};
                 // TODO: prefetch buffer
             },
-            2 => {},
+            0x0400_0206 => {},
             _ => unreachable!()
         }
     }

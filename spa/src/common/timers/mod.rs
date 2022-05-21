@@ -64,28 +64,33 @@ impl Timers {
     }
 
     pub fn read_byte(&self, addr: u32) -> u8 {
+        let addr = addr - 0x0400_0100;
         let timer = addr / 4;
         let timer_addr = addr % 4;
         self.timers[timer as usize].read_byte(timer_addr)
     }
     pub fn write_byte(&mut self, addr: u32, data: u8) {
+        let addr = addr - 0x0400_0100;
         let timer = addr / 4;
         let timer_addr = addr % 4;
         self.timers[timer as usize].write_byte(timer_addr, data);
     }
 
     pub fn read_halfword(&self, addr: u32) -> u16 {
+        let addr = addr - 0x0400_0100;
         let timer = addr / 4;
         let timer_addr = addr % 4;
         self.timers[timer as usize].read_halfword(timer_addr)
     }
     pub fn write_halfword(&mut self, addr: u32, data: u16) {
+        let addr = addr - 0x0400_0100;
         let timer = addr / 4;
         let timer_addr = addr % 4;
         self.timers[timer as usize].write_halfword(timer_addr, data);
     }
 
     pub fn read_word(&self, addr: u32) -> u32 {
+        let addr = addr - 0x0400_0100;
         let timer = addr / 4;
         let timer_addr = addr % 4;
         let lo = self.timers[timer as usize].read_halfword(timer_addr);
@@ -93,6 +98,7 @@ impl Timers {
         u32::make(hi, lo)
     }
     pub fn write_word(&mut self, addr: u32, data: u32) {
+        let addr = addr - 0x0400_0100;
         let timer = addr / 4;
         let timer_addr = addr % 4;
         self.timers[timer as usize].write_halfword(timer_addr, u32::lo(data));

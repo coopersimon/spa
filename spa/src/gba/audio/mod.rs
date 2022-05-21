@@ -217,33 +217,33 @@ impl MemInterface8 for GBAAudio {
     fn read_byte(&mut self, addr: u32) -> u8 {
         match addr {
 
-            0x00 => self.square_1.sweep_reg,
-            0x02 => self.square_1.duty_length_reg,
-            0x03 => self.square_1.vol_envelope_reg,
-            0x04 => self.square_1.freq_lo_reg,
-            0x05 => self.square_1.freq_hi_reg,
+            0x0400_0060 => self.square_1.sweep_reg,
+            0x0400_0062 => self.square_1.duty_length_reg,
+            0x0400_0063 => self.square_1.vol_envelope_reg,
+            0x0400_0064 => self.square_1.freq_lo_reg,
+            0x0400_0065 => self.square_1.freq_hi_reg,
 
-            0x08 => self.square_2.duty_length_reg,
-            0x09 => self.square_2.vol_envelope_reg,
-            0x0C => self.square_2.freq_lo_reg,
-            0x0D => self.square_2.freq_hi_reg,
+            0x0400_0068 => self.square_2.duty_length_reg,
+            0x0400_0069 => self.square_2.vol_envelope_reg,
+            0x0400_006C => self.square_2.freq_lo_reg,
+            0x0400_006D => self.square_2.freq_hi_reg,
 
-            0x10 => self.wave.playback_reg,
-            0x12 => self.wave.length_reg,
-            0x13 => self.wave.vol_reg,
-            0x14 => self.wave.freq_lo_reg,
-            0x15 => self.wave.freq_hi_reg,
+            0x0400_0070 => self.wave.playback_reg,
+            0x0400_0072 => self.wave.length_reg,
+            0x0400_0073 => self.wave.vol_reg,
+            0x0400_0074 => self.wave.freq_lo_reg,
+            0x0400_0075 => self.wave.freq_hi_reg,
 
-            0x18 => self.noise.length_reg,
-            0x19 => self.noise.vol_envelope_reg,
-            0x1C => self.noise.poly_counter_reg,
-            0x1D => self.noise.trigger_reg,
+            0x0400_0078 => self.noise.length_reg,
+            0x0400_0079 => self.noise.vol_envelope_reg,
+            0x0400_007C => self.noise.poly_counter_reg,
+            0x0400_007D => self.noise.trigger_reg,
 
-            0x20 => self.gb_vol,
-            0x21 => self.gb_enable.bits(),
-            0x22 => self.master_vol.bits(),
-            0x23 => self.fifo_mixing.bits(),
-            0x24 => {
+            0x0400_0080 => self.gb_vol,
+            0x0400_0081 => self.gb_enable.bits(),
+            0x0400_0082 => self.master_vol.bits(),
+            0x0400_0083 => self.fifo_mixing.bits(),
+            0x0400_0084 => {
                 let mut sound_on = PowerControl::default();
                 sound_on.set(PowerControl::PLAYING_1, self.square_1.is_enabled());
                 sound_on.set(PowerControl::PLAYING_2, self.square_2.is_enabled());
@@ -251,10 +251,10 @@ impl MemInterface8 for GBAAudio {
                 sound_on.set(PowerControl::PLAYING_4, self.noise.is_enabled());
                 sound_on.bits()
             },
-            0x28 => u16::lo(self.soundbias),
-            0x29 => u16::hi(self.soundbias),
+            0x0400_0088 => u16::lo(self.soundbias),
+            0x0400_0089 => u16::hi(self.soundbias),
 
-            0x30..=0x3F => self.wave.read_wave(addr - 0x30),
+            0x0400_0090..=0x0400_009F => self.wave.read_wave(addr - 0x0400_0090),
 
             _ => 0
         }
@@ -263,32 +263,32 @@ impl MemInterface8 for GBAAudio {
     fn write_byte(&mut self, addr: u32, data: u8) {
         match addr {
 
-            0x00 => self.square_1.set_sweep_reg(data),
-            0x02 => self.square_1.set_duty_length_reg(data),
-            0x03 => self.square_1.set_vol_envelope_reg(data),
-            0x04 => self.square_1.set_freq_lo_reg(data),
-            0x05 => self.square_1.set_freq_hi_reg(data),
+            0x0400_0060 => self.square_1.set_sweep_reg(data),
+            0x0400_0062 => self.square_1.set_duty_length_reg(data),
+            0x0400_0063 => self.square_1.set_vol_envelope_reg(data),
+            0x0400_0064 => self.square_1.set_freq_lo_reg(data),
+            0x0400_0065 => self.square_1.set_freq_hi_reg(data),
 
-            0x08 => self.square_2.set_duty_length_reg(data),
-            0x09 => self.square_2.set_vol_envelope_reg(data),
-            0x0C => self.square_2.set_freq_lo_reg(data),
-            0x0D => self.square_2.set_freq_hi_reg(data),
+            0x0400_0068 => self.square_2.set_duty_length_reg(data),
+            0x0400_0069 => self.square_2.set_vol_envelope_reg(data),
+            0x0400_006C => self.square_2.set_freq_lo_reg(data),
+            0x0400_006D => self.square_2.set_freq_hi_reg(data),
 
-            0x10 => self.wave.set_playback_reg(data),
-            0x12 => self.wave.set_length_reg(data),
-            0x13 => self.wave.set_vol_reg(data),
-            0x14 => self.wave.set_freq_lo_reg(data),
-            0x15 => self.wave.set_freq_hi_reg(data),
+            0x0400_0070 => self.wave.set_playback_reg(data),
+            0x0400_0072 => self.wave.set_length_reg(data),
+            0x0400_0073 => self.wave.set_vol_reg(data),
+            0x0400_0074 => self.wave.set_freq_lo_reg(data),
+            0x0400_0075 => self.wave.set_freq_hi_reg(data),
 
-            0x18 => self.noise.set_length_reg(data),
-            0x19 => self.noise.set_vol_envelope_reg(data),
-            0x1C => self.noise.set_poly_counter_reg(data),
-            0x1D => self.noise.set_trigger_reg(data),
+            0x0400_0078 => self.noise.set_length_reg(data),
+            0x0400_0079 => self.noise.set_vol_envelope_reg(data),
+            0x0400_007C => self.noise.set_poly_counter_reg(data),
+            0x0400_007D => self.noise.set_trigger_reg(data),
 
-            0x20 => self.gb_vol = data,
-            0x21 => self.gb_enable = ChannelEnables::from_bits_truncate(data),
-            0x22 => self.master_vol = MasterVolume::from_bits_truncate(data),
-            0x23 => {
+            0x0400_0080 => self.gb_vol = data,
+            0x0400_0081 => self.gb_enable = ChannelEnables::from_bits_truncate(data),
+            0x0400_0082 => self.master_vol = MasterVolume::from_bits_truncate(data),
+            0x0400_0083 => {
                 self.fifo_mixing = FifoMixing::from_bits_truncate(data);
                 if self.fifo_mixing.contains(FifoMixing::A_RESET_FIFO) {
                     self.fifo_a.clear();
@@ -297,23 +297,23 @@ impl MemInterface8 for GBAAudio {
                     self.fifo_b.clear();
                 }
             },
-            0x24 => {
+            0x0400_0084 => {
                 let sound_on = PowerControl::from_bits_truncate(data);
                 self.sound_on = sound_on.contains(PowerControl::POWER);
                 if !self.sound_on {
                     self.reset();
                 }
             },
-            0x28 => self.soundbias = u16::set_lo(self.soundbias, data),
-            0x29 => {
+            0x0400_0088 => self.soundbias = u16::set_lo(self.soundbias, data),
+            0x0400_0089 => {
                 let new_bias = u16::set_hi(self.soundbias, data);
                 self.set_sound_bias(new_bias);
             },
 
-            0x30..=0x3F => self.wave.write_wave(addr - 0x30, data),
+            0x0400_0090..=0x0400_009F => self.wave.write_wave(addr - 0x0400_0090, data),
 
-            0x40..=0x43 => self.write_fifo_a(data),
-            0x44..=0x47 => self.write_fifo_b(data),
+            0x0400_00A0..=0x0400_00A3 => self.write_fifo_a(data),
+            0x0400_00A4..=0x0400_00A7 => self.write_fifo_b(data),
 
             _ => {}
         }

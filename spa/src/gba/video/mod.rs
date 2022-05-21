@@ -83,14 +83,12 @@ impl<R: Renderer> GBAVideo<R> {
     }
 }
 
-// Note that IO (register) addresses are from zero -
-// this is due to the mem bus interface.
 impl<R: Renderer> MemInterface16 for GBAVideo<R> {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            0x4 => self.lcd_status.bits(),
-            0x6 => self.v_count as u16,
-            0x00..=0x57 => self.mem.registers.read_halfword(addr),
+            0x0400_0004 => self.lcd_status.bits(),
+            0x0400_0006 => self.v_count as u16,
+            0x0400_0000..=0x0400_0057 => self.mem.registers.read_halfword(addr & 0xFF),
             0x0500_0000..=0x05FF_FFFF => self.mem.palette.read_halfword(addr & 0x3FF),
             0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(addr & 0x1_FFFF),
             0x0700_0000..=0x07FF_FFFF => self.mem.oam.read_halfword(addr & 0x3FF),
@@ -100,9 +98,9 @@ impl<R: Renderer> MemInterface16 for GBAVideo<R> {
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0x4 => self.set_lcd_status(data),
-            0x6 => {},
-            0x00..=0x57 => self.mem.registers.write_halfword(addr, data),
+            0x0400_0004 => self.set_lcd_status(data),
+            0x0400_0006 => {},
+            0x0400_0000..=0x0400_0057 => self.mem.registers.write_halfword(addr & 0xFF, data),
             0x0500_0000..=0x05FF_FFFF => self.mem.palette.write_halfword(addr & 0x3FF, data),
             0x0600_0000..=0x06FF_FFFF => self.vram.write_halfword(addr & 0x1_FFFF, data),
             0x0700_0000..=0x07FF_FFFF => self.mem.oam.write_halfword(addr & 0x3FF, data),

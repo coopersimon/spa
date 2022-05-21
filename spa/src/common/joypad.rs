@@ -59,16 +59,16 @@ impl Joypad {
 
 impl MemInterface16 for Joypad {
     fn read_halfword(&mut self, addr: u32) -> u16 {
-        match addr % 4 {
-            0 => self.buttons_pressed.bits(),
-            2 => self.get_interrupt_control(),
+        match addr {
+            0x0400_0130 => self.buttons_pressed.bits(),
+            0x0400_0132 => self.get_interrupt_control(),
             _ => unreachable!()
         }
     }
     fn write_halfword(&mut self, addr: u32, data: u16) {
-        match addr % 4 {
-            0 => {},    // Buttons are not written via this function. Use `set_button` instead.
-            2 => self.set_interrupt_control(data),
+        match addr {
+            0x0400_0130 => {},    // Buttons are not written via this function. Use `set_button` instead.
+            0x0400_0132 => self.set_interrupt_control(data),
             _ => unreachable!()
         }
     }
