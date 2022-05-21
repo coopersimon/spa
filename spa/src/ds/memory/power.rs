@@ -7,24 +7,6 @@ use crate::utils::{
 
 bitflags! {
     #[derive(Default)]
-    pub struct GraphicsPowerControlHi: u8 {
-        const DISPLAY_SWAP  = u8::bit(7);
-        const ENABLE_B      = u8::bit(1);
-    }
-}
-
-bitflags! {
-    #[derive(Default)]
-    pub struct GraphicsPowerControlLo: u8 {
-        const GEOM_3D       = u8::bit(3);
-        const RENDER_3D     = u8::bit(2);
-        const ENGINE_A      = u8::bit(1);
-        const ENABLE_LCD    = u8::bit(0);
-    }
-}
-
-bitflags! {
-    #[derive(Default)]
     pub struct SoundWifiPowerControl: u8 {
         const WIFI  = u8::bit(1);
         const SOUND = u8::bit(0);
@@ -35,17 +17,13 @@ bitflags! {
 /// ARM9 power control register.
 /// Contains BIOS post-boot flag, which is after BIOS boot procedure is done.
 pub struct DS9PowerControl {
-    post_boot_flag:     u8,
-    graphics_cnt_lo:    GraphicsPowerControlLo,
-    graphics_cnt_hi:    GraphicsPowerControlHi
+    post_boot_flag:     u8
 }
 
 impl DS9PowerControl {
     pub fn new(fast_boot: bool) -> Self {
         Self {
             post_boot_flag:     if fast_boot {1} else {0},
-            graphics_cnt_lo:    GraphicsPowerControlLo::default(),
-            graphics_cnt_hi:    GraphicsPowerControlHi::default()
         }
     }
 }
@@ -54,8 +32,6 @@ impl MemInterface8 for DS9PowerControl {
     fn read_byte(&mut self, addr: u32) -> u8 {
         match addr {
             0x0400_0300 => self.post_boot_flag,
-            0x0400_0304 => self.graphics_cnt_lo.bits(),
-            0x0400_0305 => self.graphics_cnt_hi.bits(),
             _ => 0
         }
     }
@@ -63,8 +39,6 @@ impl MemInterface8 for DS9PowerControl {
     fn write_byte(&mut self, addr: u32, data: u8) {
         match addr {
             0x0400_0300 => self.post_boot_flag = data & 1,
-            0x0400_0304 => self.graphics_cnt_lo = GraphicsPowerControlLo::from_bits_truncate(data),
-            0x0400_0305 => self.graphics_cnt_hi = GraphicsPowerControlHi::from_bits_truncate(data),
             _ => {}
         }
     }

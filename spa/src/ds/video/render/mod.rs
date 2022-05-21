@@ -4,7 +4,7 @@ use std::sync::{
 };
 use crate::common::drawing::{SoftwareRenderer, RendererMode};
 use super::{
-    memory::DSVideoMemory,
+    memory::{DSVideoMemory, GraphicsPowerControl},
     constants::*
 };
 
@@ -49,18 +49,28 @@ impl Renderer for ProceduralRenderer {
     fn render_line(&mut self, mem: &mut DSVideoMemory, line: u16) {
         let start_offset = (line as usize) * (H_RES * 4);
         let end_offset = start_offset + (H_RES * 4);
-        {
+        if mem.power_cnt.contains(GraphicsPowerControl::ENABLE_A) {
             let mut engine_a_mem = mem.engine_a_mem.lock().unwrap();
             self.engine_a.setup_caches(&mut engine_a_mem);
-            // Choose out.
-            let mut target = self.lower.lock().unwrap();    // TODO: SELECT (POWCNT)
+            
+            let mut target = if mem.power_cnt.contains(GraphicsPowerControl::DISPLAY_SWAP) {
+                self.upper.lock().unwrap()
+            } else {
+                self.lower.lock().unwrap()
+            };
+            //let mut target = ;    // TODO: SELECT (POWCNT)
             self.engine_a.draw_line(&engine_a_mem, &mut target[start_offset..end_offset], line as u8);
             // TODO: composite engine A
         }
-        {
+        if mem.power_cnt.contains(GraphicsPowerControl::ENABLE_B) {
             let mut engine_b_mem = mem.engine_b_mem.lock().unwrap();
             self.engine_b.setup_caches(&mut engine_b_mem);
-            let mut target = self.upper.lock().unwrap();    // TODO: SELECT (POWCNT)
+            //let mut target = self.upper.lock().unwrap();    // TODO: SELECT (POWCNT)
+            let mut target = if mem.power_cnt.contains(GraphicsPowerControl::DISPLAY_SWAP) {
+                self.lower.lock().unwrap()
+            } else {
+                self.upper.lock().unwrap()
+            };
             self.engine_b.draw_line(&engine_b_mem, &mut target[start_offset..end_offset], line as u8);
         }
     }

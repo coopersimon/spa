@@ -1,6 +1,7 @@
 mod vram;
 mod control;
 
+use bitflags::bitflags;
 use std::{
     sync::{
         Arc, Mutex, MutexGuard
@@ -8,13 +9,26 @@ use std::{
 };
 use crate::utils::{
     meminterface::MemInterface16,
-    bits::u8
+    bits::{u8, u16}
 };
 use crate::common::wram::WRAM;
 use crate::common::videomem::VideoMemory;
 use vram::{ARM9VRAM, ARM7VRAMSlots, EngineAVRAM, EngineBVRAM};
 pub use vram::ARM7VRAM;
 use control::*;
+
+bitflags! {
+    #[derive(Default)]
+    pub struct GraphicsPowerControl: u16 {
+        const DISPLAY_SWAP  = u16::bit(15);
+        const ENABLE_B      = u16::bit(9);
+
+        const GEOM_3D       = u16::bit(3);
+        const RENDER_3D     = u16::bit(2);
+        const ENABLE_A      = u16::bit(1);
+        const ENABLE_LCD    = u16::bit(0);
+    }
+}
 
 #[repr(usize)]
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -52,6 +66,7 @@ pub struct DSVideoMemory {
     vram:           ARM9VRAM,
 
     mem_control:   [VRAMControlModule; 9],
+    pub power_cnt: GraphicsPowerControl,
 
     arm7_mem:           Arc<Mutex<ARM7VRAMSlots>>,
     pub engine_a_mem:   Arc<Mutex<VideoMemory<EngineAVRAM>>>,
@@ -78,6 +93,7 @@ impl DSVideoMemory {
                 VRAMControlModule::new(Slot::LCDC(VRAMRegion::H)),
                 VRAMControlModule::new(Slot::LCDC(VRAMRegion::I)),
             ],
+            power_cnt:  GraphicsPowerControl::default(),
 
             arm7_mem:       arm7_vram.mem.clone(),
             engine_a_mem:   Arc::new(Mutex::new(VideoMemory::new(eng_a_vram))),
@@ -97,7 +113,7 @@ impl DSVideoMemory {
         let cnt = VRAMControl::from_bits_truncate(data);
         // Set mem in new slot.
         let to_slot = cnt.get_slot(region);
-        //println!("move {:?} | {:?} => {:?}", region, self.mem_control[region as usize].slot, to_slot);
+        println!("move {:?} | {:?} => {:?}", region, self.mem_control[region as usize].slot, to_slot);
         self.mem_control[region as usize].cnt = cnt;
         self.mem_control[region as usize].slot = to_slot;
         let prev_mem = self.swap_mem(to_slot, mem);
@@ -106,6 +122,7 @@ impl DSVideoMemory {
             let old = self.lookup_at_slot(to_slot).unwrap();
             self.vram.lcdc[old] = prev_mem;
             self.mem_control[old].slot = Slot::LCDC(region);    // TODO: convert old to VRAMRegion
+            println!("writeback {:?} | => {:?}", old, self.mem_control[old].slot);
         }
     }
 }
@@ -463,7 +480,7 @@ impl DSVideoMemory {
                     }
                 }
             },
-            Slot::Texture(_) => panic!("TEX unsupported right now"),
+            Slot::Texture(_) => None,//panic!("TEX unsupported right now"),
         }
     }
 

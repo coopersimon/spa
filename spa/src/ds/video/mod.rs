@@ -15,7 +15,7 @@ use crate::utils::{
 };
 use crate::ds::interrupt::Interrupts;
 pub use render::*;
-use memory::DSVideoMemory;
+use memory::{DSVideoMemory, GraphicsPowerControl};
 pub use memory::{ARM7VRAM, VRAMRegion};
 
 use constants::*;
@@ -99,6 +99,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
             0x0400_0004 => self.lcd_status.bits(),
             0x0400_0006 => self.v_count as u16,
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.read_halfword(addr & 0xFF),
+            0x0400_0304 => self.mem.power_cnt.bits(),
             _ => panic!("reading invalid video address {:X}", addr)
         }
     }
@@ -108,6 +109,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
             0x0400_0004 => self.set_lcd_status(data),
             0x0400_0006 => self.v_count = data,
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.write_halfword(addr & 0xFF, data),
+            0x0400_0304 => self.mem.power_cnt = GraphicsPowerControl::from_bits_truncate(data),
             _ => panic!("writing invalid video address {:X}", addr)
         }
     }
@@ -116,6 +118,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
         match addr {
             0x0400_0004 => bytes::u32::make(self.v_count, self.lcd_status.bits()),
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.read_word(addr & 0xFF),
+            0x0400_0304 => bytes::u32::make(0, self.mem.power_cnt.bits()),
             _ => panic!("reading invalid video address {:X}", addr)
         }
     }
@@ -127,6 +130,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
                 self.v_count = bytes::u32::hi(data);
             },
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.write_word(addr & 0xFF, data),
+            0x0400_0304 => self.mem.power_cnt = GraphicsPowerControl::from_bits_truncate(bytes::u32::lo(data)),
             _ => panic!("writing invalid video address {:X}", addr)
         }
     }
@@ -279,16 +283,16 @@ impl ARM7Video {
 impl MemInterface16 for ARM7Video {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            0x0 => self.lcd_status.bits(),
-            0x2 => self.v_count.load(Ordering::Acquire),
+            0x0400_0004 => self.lcd_status.bits(),
+            0x0400_0006 => self.v_count.load(Ordering::Acquire),
             _ => panic!("reading invalid arm7 video address {:X}", addr)
         }
     }
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0x0 => self.set_lcd_status(data),
-            0x2 => self.v_count.store(data, Ordering::Release),
+            0x0400_0004 => self.set_lcd_status(data),
+            0x0400_0006 => self.v_count.store(data, Ordering::Release),
             _ => panic!("writing invalid arm7 video address {:X}", addr)
         }
     }

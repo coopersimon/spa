@@ -431,8 +431,6 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             // I/O
             0x0400_0240..=0x0400_024B => (self.read_mem_control_byte(addr & 0xF), if cycle.is_non_seq() {8} else {2}),
             0x0400_1000..=0x0400_106F => (self.video.mem.mut_engine_b().registers.read_byte(addr & 0xFF), if cycle.is_non_seq() {8} else {2}),
-            0x0410_0000..=0x0410_0003 => (self.ipc.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
-            0x0410_0010..=0x0410_0013 => (self.card.read_byte(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
@@ -468,10 +466,6 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             },
             0x0400_1000..=0x0400_106F => {
                 self.video.mem.mut_engine_b().registers.write_byte(addr & 0xFF, data);
-                if cycle.is_non_seq() {8} else {2}
-            },
-            0x0410_0010..=0x0410_0013 => {
-                self.card.write_byte(addr, data);
                 if cycle.is_non_seq() {8} else {2}
             },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
@@ -514,8 +508,6 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             // I/O
             0x0400_0240..=0x0400_024B => (self.read_mem_control_halfword(addr & 0xF), if cycle.is_non_seq() {8} else {2}),
             0x0400_1000..=0x0400_106F => (self.video.mem.mut_engine_b().registers.read_halfword(addr & 0xFF), 2),
-            0x0410_0000..=0x0410_0003 => (self.ipc.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
-            0x0410_0010..=0x0410_0013 => (self.card.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
@@ -552,10 +544,6 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             },
             0x0400_1000..=0x0400_106F => {
                 self.video.mem.mut_engine_b().registers.write_halfword(addr & 0xFF, data);
-                if cycle.is_non_seq() {8} else {2}
-            },
-            0x0410_0010..=0x0410_0013 => {
-                self.card.write_halfword(addr, data);
                 if cycle.is_non_seq() {8} else {2}
             },
             0x0400_0000..=0x04FF_FFFF => {
@@ -598,8 +586,6 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             // I/O
             0x0400_0240..=0x0400_024B => (self.read_mem_control_word(addr & 0xF), if cycle.is_non_seq() {8} else {2}),
             0x0400_1000..=0x0400_106F => (self.video.mem.mut_engine_b().registers.read_word(addr & 0xFF), 2),
-            0x0410_0000..=0x0410_0003 => (self.ipc.read_word(addr), if cycle.is_non_seq() {8} else {2}),
-            0x0410_0010..=0x0410_0013 => (self.card.read_word(addr), if cycle.is_non_seq() {8} else {2}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
@@ -636,10 +622,6 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             },
             0x0400_1000..=0x0400_106F => {
                 self.video.mem.mut_engine_b().registers.write_word(addr & 0xFF, data);
-                if cycle.is_non_seq() {8} else {2}
-            },
-            0x0410_0010..=0x0410_0013 => {
-                self.card.write_word(addr, data);
                 if cycle.is_non_seq() {8} else {2}
             },
             0x0400_0000..=0x04FF_FFFF => {
@@ -686,7 +668,10 @@ impl<R: Renderer> DS9MemoryBus<R> {
         (0x0400_0204, 0x0400_0207, ex_mem_control),
         (0x0400_0208, 0x0400_0217, interrupt_control),
         (0x0400_0280, 0x0400_02BF, accelerators),
-        (0x0400_0300, 0x0400_0307, power_control)
+        (0x0400_0300, 0x0400_0303, power_control),
+        (0x0400_0304, 0x0400_0307, video),
+        (0x0410_0000, 0x0410_0003, ipc),
+        (0x0410_0010, 0x0410_0013, card)
     }
 }
 
@@ -874,9 +859,7 @@ impl Mem32 for DS7MemoryBus {
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_byte(addr & 0xFFFF), 1),
 
             0x0400_0241 => (self.shared_wram.get_bank_status(), if cycle.is_non_seq() {4} else {1}),
-            0x0410_0000..=0x0410_0003 => (self.ipc.read_byte(addr), if cycle.is_non_seq() {4} else {1}),
-            0x0410_0010..=0x0410_0013 => (self.card.read_byte(addr), if cycle.is_non_seq() {4} else {1}),
-            0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), 1),
+            0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), if cycle.is_non_seq() {4} else {1}),
 
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_byte(addr), 1),
 
@@ -904,13 +887,9 @@ impl Mem32 for DS7MemoryBus {
                 1
             },
 
-            0x0410_0010..=0x0410_0013 => {
-                self.card.write_byte(addr, data);
-                if cycle.is_non_seq() {4} else {1}
-            },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_byte(addr, data);
-                1
+                if cycle.is_non_seq() {4} else {1}
             },
 
             0x0600_0000..=0x06FF_FFFF => {
@@ -938,9 +917,7 @@ impl Mem32 for DS7MemoryBus {
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_halfword(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_halfword(addr & 0xFFFF), 1),
 
-            0x0410_0000..=0x0410_0003 => (self.ipc.read_halfword(addr), if cycle.is_non_seq() {4} else {1}),
-            0x0410_0010..=0x0410_0013 => (self.card.read_halfword(addr), if cycle.is_non_seq() {4} else {1}),
-            0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), 1),
+            0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), if cycle.is_non_seq() {4} else {1}),
 
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_halfword(addr), 1),
 
@@ -968,13 +945,9 @@ impl Mem32 for DS7MemoryBus {
                 1
             },
 
-            0x0410_0010..=0x0410_0013 => {
-                self.card.write_halfword(addr, data);
-                if cycle.is_non_seq() {4} else {1}
-            },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_halfword(addr, data);
-                1
+                if cycle.is_non_seq() {4} else {1}
             },
 
             0x0600_0000..=0x06FF_FFFF => {
@@ -1002,9 +975,7 @@ impl Mem32 for DS7MemoryBus {
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_word(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_word(addr & 0xFFFF), 1),
 
-            0x0410_0000..=0x0410_0003 => (self.ipc.read_word(addr), if cycle.is_non_seq() {4} else {1}),
-            0x0410_0010..=0x0410_0013 => (self.card.read_word(addr), if cycle.is_non_seq() {4} else {1}),
-            0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), 1),
+            0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), if cycle.is_non_seq() {4} else {1}),
 
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_word(addr), 1),
 
@@ -1032,13 +1003,9 @@ impl Mem32 for DS7MemoryBus {
                 1
             },
 
-            0x0410_0010..=0x0410_0013 => {
-                self.card.write_word(addr, data);
-                if cycle.is_non_seq() {4} else {1}
-            },
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_word(addr, data);
-                1
+                if cycle.is_non_seq() {4} else {1}
             },
 
             0x0600_0000..=0x06FF_FFFF => {
@@ -1073,6 +1040,8 @@ impl DS7MemoryBus {
         (0x0400_01C0, 0x0400_01C3, spi),
         (0x0400_0204, 0x0400_0207, ex_mem_status),
         (0x0400_0208, 0x0400_0217, interrupt_control),
-        (0x0400_0300, 0x0400_0307, power_control)
+        (0x0400_0300, 0x0400_0307, power_control),
+        (0x0410_0000, 0x0410_0003, ipc),
+        (0x0410_0010, 0x0410_0013, card)
     }
 }

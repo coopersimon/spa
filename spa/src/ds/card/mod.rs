@@ -259,12 +259,12 @@ impl MemInterface16 for DSCard {
             0x0400_01A1 => self.spi_control = GamecardControl::from_bits_truncate(bytes::u16::set_hi(self.spi_control.bits(), data)),
 
             0x0400_01A8..=0x0400_01AF => {
-                let idx = 0xF - addr;
+                let idx = 0x0400_01AF - addr;
                 self.command[idx as usize] = data;
             },
 
             0x0400_01B0..=0x0400_01B3 => {
-                let idx = addr - 0x10;
+                let idx = addr - 0x0400_01B0;
                 self.seed_0[idx as usize] = data;
             },
             0x0400_01B8 => {
@@ -272,7 +272,7 @@ impl MemInterface16 for DSCard {
                 println!("Seed0: {:?}", self.seed_0);
             },
             0x0400_01B4..=0x0400_01B7 => {
-                let idx = addr - 0x14;
+                let idx = addr - 0x0400_01B4;
                 self.seed_1[idx as usize] = data;
             },
             0x0400_01BA => {
