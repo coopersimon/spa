@@ -182,8 +182,8 @@ impl IPC {
 impl MemInterface32 for IPC {
     fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
-            0x0 => self.read_sync_reg(),
-            0x4 => self.read_control_reg(),
+            0x0400_0180 => self.read_sync_reg(),
+            0x0400_0184 => self.read_control_reg(),
             0x0410_0000 => self.fifo_read(),
             _ => 0,
         }
@@ -191,9 +191,9 @@ impl MemInterface32 for IPC {
 
     fn write_word(&mut self, addr: u32, data: u32) {
         match addr {
-            0x0 => self.write_sync_reg(data),
-            0x4 => self.write_control_reg(data),
-            0x8 => self.fifo_write(data),
+            0x0400_0180 => self.write_sync_reg(data),
+            0x0400_0184 => self.write_control_reg(data),
+            0x0400_0188 => self.fifo_write(data),
             _ => {},
         }
     }

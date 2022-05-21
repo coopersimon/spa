@@ -236,13 +236,12 @@ impl DSCard {
 impl MemInterface16 for DSCard {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            // 0x0400_01A0
-            0x0 => self.spi_control.bits(),   // AUXSPICNT
-            0x2 => 0,   // AUXSPIDATA
-            0x4 => self.rom_control_lo.bits(),   // ROMCTRL
-            0x6 => self.rom_control_hi.bits(), // ROMCTRL
-            0x8..=0xF => 0,     // Command
-            0x10..=0x1F => 0,   // Encryption seeds
+            0x0400_01A0 => self.spi_control.bits(),   // AUXSPICNT
+            0x0400_01A2 => 0,   // AUXSPIDATA
+            0x0400_01A4 => self.rom_control_lo.bits(),   // ROMCTRL
+            0x0400_01A6 => self.rom_control_hi.bits(), // ROMCTRL
+            0x0400_01A8..=0x0400_01AF => 0,     // Command
+            0x0400_01B0..=0x0400_01BF => 0,   // Encryption seeds
 
             0x0410_0010 | 0x0410_0012 => {    // Data out
                 let lo = self.get_data_out();
@@ -256,28 +255,27 @@ impl MemInterface16 for DSCard {
 
     fn write_byte(&mut self, addr: u32, data: u8) {
         match addr {
-            // 0x0400_01A0
-            0x0 => self.spi_control = GamecardControl::from_bits_truncate(bytes::u16::set_lo(self.spi_control.bits(), data)),
-            0x1 => self.spi_control = GamecardControl::from_bits_truncate(bytes::u16::set_hi(self.spi_control.bits(), data)),
+            0x0400_01A0 => self.spi_control = GamecardControl::from_bits_truncate(bytes::u16::set_lo(self.spi_control.bits(), data)),
+            0x0400_01A1 => self.spi_control = GamecardControl::from_bits_truncate(bytes::u16::set_hi(self.spi_control.bits(), data)),
 
-            0x8..=0xF => {
+            0x0400_01A8..=0x0400_01AF => {
                 let idx = 0xF - addr;
                 self.command[idx as usize] = data;
             },
 
-            0x10..=0x13 => {
+            0x0400_01B0..=0x0400_01B3 => {
                 let idx = addr - 0x10;
                 self.seed_0[idx as usize] = data;
             },
-            0x18 => {
+            0x0400_01B8 => {
                 self.seed_0[4] = data & 0x7F;
                 println!("Seed0: {:?}", self.seed_0);
             },
-            0x14..=0x17 => {
+            0x0400_01B4..=0x0400_01B7 => {
                 let idx = addr - 0x14;
                 self.seed_1[idx as usize] = data;
             },
-            0x1A => {
+            0x0400_01BA => {
                 self.seed_1[4] = data & 0x7F;
                 println!("Seed1: {:?}", self.seed_1);
             },
@@ -291,50 +289,49 @@ impl MemInterface16 for DSCard {
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            // 0x0400_01A0
-            0x0 => self.spi_control = GamecardControl::from_bits_truncate(data),   // AUXSPICNT
-            0x2 => {},   // AUXSPIDATA
-            0x4 => self.write_rom_control_lo(data),   // ROMCTRL
-            0x6 => self.write_rom_control_hi(data),   // ROMCTRL
+            0x0400_01A0 => self.spi_control = GamecardControl::from_bits_truncate(data),   // AUXSPICNT
+            0x0400_01A2 => {},   // AUXSPIDATA
+            0x0400_01A4 => self.write_rom_control_lo(data),   // ROMCTRL
+            0x0400_01A6 => self.write_rom_control_hi(data),   // ROMCTRL
 
-            0x8 => {
+            0x0400_01A8 => {
                 self.command[7] = bytes::u16::lo(data);
                 self.command[6] = bytes::u16::hi(data);
             },
-            0xA => {
+            0x0400_01AA => {
                 self.command[5] = bytes::u16::lo(data);
                 self.command[4] = bytes::u16::hi(data);
             },
-            0xC => {
+            0x0400_01AC => {
                 self.command[3] = bytes::u16::lo(data);
                 self.command[2] = bytes::u16::hi(data);
             },
-            0xE => {
+            0x0400_01AE => {
                 self.command[1] = bytes::u16::lo(data);
                 self.command[0] = bytes::u16::hi(data);
             },
 
-            0x10 => {
+            0x0400_01B0 => {
                 self.seed_0[0] = bytes::u16::lo(data);
                 self.seed_0[1] = bytes::u16::hi(data);
             },
-            0x12 => {
+            0x0400_01B2 => {
                 self.seed_0[2] = bytes::u16::lo(data);
                 self.seed_0[3] = bytes::u16::hi(data);
             },
-            0x18 => {
+            0x0400_01B8 => {
                 self.seed_0[4] = bytes::u16::lo(data) & 0x7F;
                 println!("Seed0: {:?}", self.seed_0);
             },
-            0x14 => {
+            0x0400_01B4 => {
                 self.seed_1[0] = bytes::u16::lo(data);
                 self.seed_1[1] = bytes::u16::hi(data);
             },
-            0x16 => {
+            0x0400_01B6 => {
                 self.seed_1[2] = bytes::u16::lo(data);
                 self.seed_1[3] = bytes::u16::hi(data);
             },
-            0x1A => {
+            0x0400_01BA => {
                 self.seed_1[4] = bytes::u16::lo(data) & 0x7F;
                 println!("Seed1: {:?}", self.seed_1);
             },

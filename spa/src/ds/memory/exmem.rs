@@ -54,14 +54,14 @@ impl ExMemControl {
 impl MemInterface16 for ExMemControl {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            0 => self.gba_access.bits() | self.access_rights.load(Ordering::Acquire),
+            0x0400_0204 => self.gba_access.bits() | self.access_rights.load(Ordering::Acquire),
             _ => 0
         }
     }
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0 => {
+            0x0400_0204 => {
                 self.gba_access = GBAAccess::from_bits_truncate(data);
                 let access_rights = AccessRights::from_bits_truncate(data);
                 self.access_rights.store(access_rights.bits(), Ordering::Release);
@@ -80,14 +80,14 @@ pub struct ExMemStatus {
 impl MemInterface16 for ExMemStatus {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            0 => self.gba_access.bits() | self.access_rights.load(Ordering::Acquire),
+            0x0400_0204 => self.gba_access.bits() | self.access_rights.load(Ordering::Acquire),
             _ => 0
         }
     }
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0 => self.gba_access = GBAAccess::from_bits_truncate(data),
+            0x0400_0204 => self.gba_access = GBAAccess::from_bits_truncate(data),
             _ => {}
         }
     }

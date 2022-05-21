@@ -96,37 +96,37 @@ impl<R: Renderer> DSVideo<R> {
 impl<R: Renderer> MemInterface16 for DSVideo<R> {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            0x4 => self.lcd_status.bits(),
-            0x6 => self.v_count as u16,
-            0x00..=0x6F => self.mem.mut_engine_a().registers.read_halfword(addr),
+            0x0400_0004 => self.lcd_status.bits(),
+            0x0400_0006 => self.v_count as u16,
+            0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.read_halfword(addr & 0xFF),
             _ => panic!("reading invalid video address {:X}", addr)
         }
     }
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0x04 => self.set_lcd_status(data),
-            0x06 => self.v_count = data,
-            0x00..=0x6F => self.mem.mut_engine_a().registers.write_halfword(addr, data),
+            0x0400_0004 => self.set_lcd_status(data),
+            0x0400_0006 => self.v_count = data,
+            0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.write_halfword(addr & 0xFF, data),
             _ => panic!("writing invalid video address {:X}", addr)
         }
     }
 
     fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
-            0x04 => bytes::u32::make(self.v_count, self.lcd_status.bits()),
-            0x00..=0x6F => self.mem.mut_engine_a().registers.read_word(addr),
+            0x0400_0004 => bytes::u32::make(self.v_count, self.lcd_status.bits()),
+            0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.read_word(addr & 0xFF),
             _ => panic!("reading invalid video address {:X}", addr)
         }
     }
 
     fn write_word(&mut self, addr: u32, data: u32) {
         match addr {
-            0x04 => {
+            0x0400_0004 => {
                 self.set_lcd_status(bytes::u32::lo(data));
                 self.v_count = bytes::u32::hi(data);
             },
-            0x00..=0x6F => self.mem.mut_engine_a().registers.write_word(addr, data),
+            0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.write_word(addr & 0xFF, data),
             _ => panic!("writing invalid video address {:X}", addr)
         }
     }

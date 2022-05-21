@@ -96,55 +96,55 @@ impl Accelerators {
 impl MemInterface32 for Accelerators {
     fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
-            0x0 => self.div_control.bits(),
-            0x10 => u64::lo(self.div_numerator as u64),
-            0x14 => u64::hi(self.div_numerator as u64),
-            0x18 => u64::lo(self.div_denominator as u64),
-            0x1C => u64::hi(self.div_denominator as u64),
-            0x20 => u64::lo(self.div_result as u64),
-            0x24 => u64::hi(self.div_result as u64),
-            0x28 => u64::lo(self.mod_result as u64),
-            0x2C => u64::hi(self.mod_result as u64),
-            0x30 => self.sqrt_control.bits(),
-            0x34 => self.sqrt_result,
-            0x38 => u64::lo(self.sqrt_param),
-            0x3C => u64::hi(self.sqrt_param),
+            0x0400_0280 => self.div_control.bits(),
+            0x0400_0290 => u64::lo(self.div_numerator as u64),
+            0x0400_0294 => u64::hi(self.div_numerator as u64),
+            0x0400_0298 => u64::lo(self.div_denominator as u64),
+            0x0400_029C => u64::hi(self.div_denominator as u64),
+            0x0400_02A0 => u64::lo(self.div_result as u64),
+            0x0400_02A4 => u64::hi(self.div_result as u64),
+            0x0400_02A8 => u64::lo(self.mod_result as u64),
+            0x0400_02AC => u64::hi(self.mod_result as u64),
+            0x0400_02B0 => self.sqrt_control.bits(),
+            0x0400_02B4 => self.sqrt_result,
+            0x0400_02B8 => u64::lo(self.sqrt_param),
+            0x0400_02BC => u64::hi(self.sqrt_param),
             _ => 0,
         }
     }
 
     fn write_word(&mut self, addr: u32, data: u32) {
         match addr {
-            0x0 => {
+            0x0400_0280 => {
                 self.div_control.remove(DivisionControl::MODE);
                 self.div_control.insert(DivisionControl::from_bits_truncate(data & 0x3));
                 self.start_div();
             },
-            0x10 => {
+            0x0400_0290 => {
                 self.div_numerator = u64::set_lo(self.div_numerator as u64, data) as i64;
                 self.start_div();
             },
-            0x14 => {
+            0x0400_0294 => {
                 self.div_numerator = u64::set_hi(self.div_numerator as u64, data) as i64;
                 self.start_div();
             },
-            0x18 => {
+            0x0400_0298 => {
                 self.div_denominator = u64::set_lo(self.div_denominator as u64, data) as i64;
                 self.start_div();
             },
-            0x1C => {
+            0x0400_029C => {
                 self.div_denominator = u64::set_hi(self.div_denominator as u64, data) as i64;
                 self.start_div();
             },
-            0x30 => {
+            0x0400_02B0 => {
                 self.sqrt_control.set(SqrtControl::MODE, u32::test_bit(data, 1));
                 self.start_sqrt();
             },
-            0x38 => {
+            0x0400_02B8 => {
                 self.sqrt_param = u64::set_lo(self.sqrt_param, data);
                 self.start_sqrt();
             },
-            0x3C => {
+            0x0400_02BC => {
                 self.sqrt_param = u64::set_hi(self.sqrt_param, data);
                 self.start_sqrt();
             },

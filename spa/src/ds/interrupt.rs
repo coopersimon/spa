@@ -65,19 +65,19 @@ impl InterruptControl {
 impl MemInterface32 for InterruptControl {
     fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
-            0x0 => if self.interrupt_master {1} else {0},
-            0x4 => 0,
-            0x8 => self.interrupt_enable.bits(),
-            0xC => self.interrupt_req.bits(),
+            0x0400_0208 => if self.interrupt_master {1} else {0},
+            0x0400_020C => 0,
+            0x0400_0210 => self.interrupt_enable.bits(),
+            0x0400_0214 => self.interrupt_req.bits(),
             _ => panic!("interrupt controller: read unreachable address {:X}", addr)
         }
     }
     fn write_word(&mut self, addr: u32, data: u32) {
         match addr {
-            0x0 => self.interrupt_master = u32::test_bit(data, 0),
-            0x4 => {},
-            0x8 => self.interrupt_enable = Interrupts::from_bits_truncate(data),
-            0xC => self.interrupt_req.remove(Interrupts::from_bits_truncate(data)),
+            0x0400_0208 => self.interrupt_master = u32::test_bit(data, 0),
+            0x0400_020C => {},
+            0x0400_0210 => self.interrupt_enable = Interrupts::from_bits_truncate(data),
+            0x0400_0214 => self.interrupt_req.remove(Interrupts::from_bits_truncate(data)),
             _ => panic!("interrupt controller: write unreachable address {:X}", addr)
         }
     }

@@ -51,8 +51,8 @@ impl SPI {
 impl MemInterface16 for SPI {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            0 => self.control.bits(),
-            2 => match (self.control & SPIControl::DEVICE).bits() >> 8 {
+            0x0400_01C0 => self.control.bits(),
+            0x0400_01C2 => match (self.control & SPIControl::DEVICE).bits() >> 8 {
                 0 => {
                     let data = self.power_man.read();
                     if !self.control.contains(SPIControl::CHIP_HOLD) {
@@ -83,15 +83,15 @@ impl MemInterface16 for SPI {
 
     fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
-            0 => self.control.bits() as u32,
+            0x0400_01C0 => self.control.bits() as u32,
             _ => unreachable!()
         }
     }
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0 => self.control = SPIControl::from_bits_truncate(data),
-            2 => match (self.control & SPIControl::DEVICE).bits() >> 8 {
+            0x0400_01C0 => self.control = SPIControl::from_bits_truncate(data),
+            0x0400_01C2 => match (self.control & SPIControl::DEVICE).bits() >> 8 {
                 0 => self.power_man.write(bytes::u16::lo(data)),
                 1 => self.firmware.write(bytes::u16::lo(data)),
                 2 => self.touchscreen.write(bytes::u16::lo(data)),

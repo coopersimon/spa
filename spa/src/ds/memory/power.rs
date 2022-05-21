@@ -53,18 +53,18 @@ impl DS9PowerControl {
 impl MemInterface8 for DS9PowerControl {
     fn read_byte(&mut self, addr: u32) -> u8 {
         match addr {
-            0 => self.post_boot_flag,
-            4 => self.graphics_cnt_lo.bits(),
-            5 => self.graphics_cnt_hi.bits(),
+            0x0400_0300 => self.post_boot_flag,
+            0x0400_0304 => self.graphics_cnt_lo.bits(),
+            0x0400_0305 => self.graphics_cnt_hi.bits(),
             _ => 0
         }
     }
 
     fn write_byte(&mut self, addr: u32, data: u8) {
         match addr {
-            0 => self.post_boot_flag = data & 1,
-            4 => self.graphics_cnt_lo = GraphicsPowerControlLo::from_bits_truncate(data),
-            5 => self.graphics_cnt_hi = GraphicsPowerControlHi::from_bits_truncate(data),
+            0x0400_0300 => self.post_boot_flag = data & 1,
+            0x0400_0304 => self.graphics_cnt_lo = GraphicsPowerControlLo::from_bits_truncate(data),
+            0x0400_0305 => self.graphics_cnt_hi = GraphicsPowerControlHi::from_bits_truncate(data),
             _ => {}
         }
     }
@@ -94,23 +94,23 @@ impl DS7PowerControl {
 impl MemInterface8 for DS7PowerControl {
     fn read_byte(&mut self, addr: u32) -> u8 {
         match addr {
-            0 => self.post_boot_flag,
-            1 => if self.sleep {
+            0x0400_0300 => self.post_boot_flag,
+            0x0400_0301 => if self.sleep {
                 3 << 6
             } else if self.halt {
                 2 << 6
             } else {
                 0
             },
-            4 => self.sound_wifi_control.bits(),
+            0x0400_0304 => self.sound_wifi_control.bits(),
             _ => 0
         }
     }
 
     fn write_byte(&mut self, addr: u32, data: u8) {
         match addr {
-            0 => self.post_boot_flag = data & 1,
-            1 => if u8::test_bit(data, 7) {
+            0x0400_0300 => self.post_boot_flag = data & 1,
+            0x0400_0301 => if u8::test_bit(data, 7) {
                 if u8::test_bit(data, 6) {
                     println!("Stop!");
                     self.sleep = true;
@@ -118,7 +118,7 @@ impl MemInterface8 for DS7PowerControl {
                     self.halt = true;
                 }
             } else {},
-            4 => self.sound_wifi_control = SoundWifiPowerControl::from_bits_truncate(data),
+            0x0400_0304 => self.sound_wifi_control = SoundWifiPowerControl::from_bits_truncate(data),
             _ => {}
         }
     }
