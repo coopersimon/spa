@@ -64,30 +64,31 @@ DS:
 - Loads of unaligned memory accesses.
 
 ### DS Status of selected games:
-- Animal Crossing Wild World: Crashes at undefined instruction in main RAM
+- Animal Crossing Wild World: Tries to access firmware with instr 6
 - Chrono Trigger: Shows slightly broken screen claiming to load save RAM, and freezes
-- Dragon Quest IX: Shows intro cards (jankily) and then kinda breaks when game begins
-- Dragon Quest V: runs into undefined instruction at 0x28 (ITCM)
+- Dragon Quest IX: Shows intro cards (jankily) and then kinda breaks when game begins. Intro video plays but corrupted
+- Dragon Quest V: Black screen
 - Final Fantasy Tactics A2: Just black screen
 - Final Fantasy III: Black screen
-- Final Fantasy IV: Black screen
+- Final Fantasy IV: Crashes when trying to write to VRAM.
 - Hotel Dusk: Room 215: Black screen
 - Kirby Super Star: Loads up and shows menu background, in pink instead of blue?
-- Mario Kart DS: Tries to access firmware with weird instruction
-- New Super Mario Bros: Tries to read SPSR in USR mode...
-- Phantom Hourglass: Crashes at undefined instruction in main RAM
+- Mario Kart DS: Tries to access firmware with instr 6
+- New Super Mario Bros: Shows a title then crashes with rendering
+- Phantom Hourglass: Black/white screen.
 - Pokemon Mystery Dungeon Explorers of Sky: Black screen
 - Pokemon Mystery Dungeon Blue Rescue Team: Black screen (some detectable stuff in debug view)
-- Pokemon Diamond: Tries to read LCDC image
-- Pokemon Ranger: Crashes at undefined instruction in main RAM
+- Pokemon Diamond: Tries to access firmware with instr 6
+- Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.
 - Super Mario 64 DS: Shows an initial nintendo logo and then freezes
 - The World Ends With You: Black screen
-- Yoshi's Island DS: Shows initial titles ok, shows a corrupted screen after, black screen for a while, then crash on undefined instruction in BIOS (???)
+- Yoshi's Island DS: Shows initial titles ok, shows a corrupted screen after, then menu. Menu looks very off.
 
 #### NDS TODO
 - Audio
 - 3D Video
-- 2D main RAM & LCDC stream video modes
+- 2D main RAM video mode
+- Engine A video capture & blending
 - Touchscreen
 - Microphone
 - Save RAM
