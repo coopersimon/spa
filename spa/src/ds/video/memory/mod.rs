@@ -127,6 +127,9 @@ impl DSVideoMemory {
     }
 
     pub fn set_cnt(&mut self, region: VRAMRegion, data: u8) {
+        if self.mem_control[region as usize].cnt.bits() == data {
+            return;
+        }
         // Get mem from current slot.
         let mem = self.swap_mem(self.mem_control[region as usize].slot, None);
         let cnt = VRAMControl::from_bits_truncate(data);

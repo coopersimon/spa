@@ -70,19 +70,25 @@ const ROM_ID: [u8; 4] = [0xC2, 0x1F, 0x00, 0x00];
 pub struct DSCardIO {
     card:       Arc<Mutex<DSCard>>,
     interrupt:  Arc<AtomicBool>,
+    dma_ready:  Arc<AtomicBool>
 }
 
 impl DSCardIO {
     pub fn new(rom_path: &Path, key1: Vec<u32>) -> Result<(Self, Self)> {
-        let interrupt_7 = Arc::new(AtomicBool::new(false));
-        let interrupt_9 = Arc::new(AtomicBool::new(false));
-        let card = Arc::new(Mutex::new(DSCard::new(rom_path, key1, interrupt_7.clone(), interrupt_9.clone())?));
+        let card = DSCard::new(rom_path, key1)?;
+        let interrupt_7 = card.interrupt_7.clone();
+        let interrupt_9 = card.interrupt_9.clone();
+        let dma_ready_7 = card.dma_ready_7.clone();
+        let dma_ready_9 = card.dma_ready_9.clone();
+        let card_arc = Arc::new(Mutex::new(card));
         Ok((DSCardIO{
-            card: card.clone(),
-            interrupt: interrupt_9
+            card: card_arc.clone(),
+            interrupt: interrupt_9,
+            dma_ready: dma_ready_9
         }, DSCardIO{
-            card: card,
-            interrupt: interrupt_7
+            card: card_arc,
+            interrupt: interrupt_7,
+            dma_ready: dma_ready_7
         }))
     }
 
@@ -97,6 +103,10 @@ impl DSCardIO {
         } else {
             Interrupts::empty()
         }
+    }
+
+    pub fn check_card_dma(&self) -> bool {
+        self.dma_ready.load(Ordering::Acquire)
     }
 
     pub fn get_header(&self) -> CardHeader {
@@ -163,12 +173,15 @@ struct DSCard {
     cmd_encrypt_mode: CommandEncryptMode,
     data_state: DSCardDataState,
 
+    dma_ready_7: Arc<AtomicBool>,
+    dma_ready_9: Arc<AtomicBool>,
+
     interrupt_7: Arc<AtomicBool>,
     interrupt_9: Arc<AtomicBool>
 }
 
 impl DSCard {
-    fn new(rom_path: &Path, key1: Vec<u32>, interrupt_7: Arc<AtomicBool>, interrupt_9: Arc<AtomicBool>) -> Result<Self> {
+    fn new(rom_path: &Path, key1: Vec<u32>) -> Result<Self> {
         let mut rom_file = File::open(rom_path)?;
         let mut buffer = vec![0; ROM_BUFFER_SIZE as usize];
 
@@ -202,8 +215,11 @@ impl DSCard {
             cmd_encrypt_mode: CommandEncryptMode::None,
             data_state: DSCardDataState::Dummy,
 
-            interrupt_7: interrupt_7,
-            interrupt_9: interrupt_9,
+            dma_ready_7: Arc::new(AtomicBool::new(false)),
+            dma_ready_9: Arc::new(AtomicBool::new(false)),
+
+            interrupt_7: Arc::new(AtomicBool::new(false)),
+            interrupt_9: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -371,12 +387,25 @@ enum DSCardDataState {
 
 // Internal
 impl DSCard {
-    fn trigger_interrupt(&mut self) {
+    /// Data transfer is complete.
+    fn transfer_complete(&mut self) {
+        self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
+        self.dma_ready_7.store(false, Ordering::Release);
+        self.dma_ready_9.store(false, Ordering::Release);
         if self.spi_control.contains(GamecardControl::TRANSFER_IRQ) {
             //println!("trigger int");
             self.interrupt_7.store(true, Ordering::Release);
             self.interrupt_9.store(true, Ordering::Release);
         }
+    }
+
+    /// Card data is ready.
+    /// 
+    /// NB: This should be clocked but presently is not.
+    fn card_ready(&mut self) {
+        self.rom_control_hi.insert(RomControlHi::DATA_STATUS);
+        self.dma_ready_7.store(true, Ordering::Release);
+        self.dma_ready_9.store(true, Ordering::Release);
     }
 
     fn write_rom_control_lo(&mut self, data: u16) {
@@ -414,14 +443,14 @@ impl DSCard {
         self.key2_0 = u64::from_le_bytes(self.seed_0).reverse_bits() >> 25;
         self.key2_1 = u64::from_le_bytes(self.seed_1).reverse_bits() >> 25;
         println!("KEY2: {:X} | {:X}", self.key2_0, self.key2_1);
-        self.trigger_interrupt();
+        //self.trigger_interrupt();
     }
 
     fn unencrypted_command(&mut self) -> DSCardDataState {
         use DSCardDataState::*;
         let command = u64::from_le_bytes(self.command);
         //println!("got command {:X}", command);
-        self.rom_control_hi.insert(RomControlHi::DATA_STATUS);
+        self.card_ready();
         match command >> 56 {   // Command is MSB
             0x9F => Dummy,
             0x00 => {
@@ -431,8 +460,7 @@ impl DSCard {
             0x90 => ID,
             0x3C => {
                 self.cmd_encrypt_mode = CommandEncryptMode::Key1;
-                self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
-                //self.trigger_interrupt();
+                self.transfer_complete();
                 Dummy
             },
             _ => panic!("unrecognised DS card command: {:X}", command)
@@ -475,7 +503,7 @@ impl DSCard {
         use DSCardDataState::*;
         let command = u64::from_le_bytes(self.command);
         //println!("got command {:X}", command);
-        self.rom_control_hi.insert(RomControlHi::DATA_STATUS);
+        self.card_ready();
         match command >> 56 {
             0xB7 => {
                 let addr = (command >> 24) as u32;
@@ -506,13 +534,8 @@ impl DSCard {
                 self.data_state = Header(addr + 1);
                 self.read_card_byte(addr)
             },
-            ID => {
+            ID | Key1ID | Key2ID => {
                 let idx = 4 - self.transfer_count;
-                ROM_ID[idx]
-            },
-            Key1ID | Key2ID => {
-                let idx = 4 - self.transfer_count;
-                //self.encrypt_byte_key2(ROM_ID[idx])
                 ROM_ID[idx]
             },
             Key2 => {
@@ -524,7 +547,6 @@ impl DSCard {
                 let data = self.read_card_byte(addr);
                 self.data_state = SecureBlock(addr + 1);
                 data
-                //self.encrypt_byte_key2(data)
             },
             Key2Disable(_) => 0,
             EnterMain(_) => 0,
@@ -532,15 +554,13 @@ impl DSCard {
                 let data = self.read_card_byte(addr);
                 self.data_state = GetData(addr + 1);
                 data
-                //self.encrypt_byte_key2(data)
             }
         };
         //println!("read data: {:X}", data);
         self.transfer_count -= 1;
         if self.transfer_count == 0 {
             self.data_state = Dummy;
-            self.rom_control_hi.remove(RomControlHi::START_STAT | RomControlHi::DATA_STATUS);
-            //self.trigger_interrupt();
+            self.transfer_complete();
         }
         data
     }
@@ -557,11 +577,11 @@ impl DSCard {
         self.rom_buffer[(addr % ROM_BUFFER_SIZE) as usize]
     }
 
-    #[inline]
-    fn encrypt_byte_key2(&mut self, data_in: u8) -> u8 {
-        let (data, key2_0, key2_1) = dscrypto::key_2_encrypt(data_in, self.key2_0, self.key2_1);
-        self.key2_0 = key2_0;
-        self.key2_1 = key2_1;
-        data
-    }
+    //#[inline]
+    //fn encrypt_byte_key2(&mut self, data_in: u8) -> u8 {
+    //    let (data, key2_0, key2_1) = dscrypto::key_2_encrypt(data_in, self.key2_0, self.key2_1);
+    //    self.key2_0 = key2_0;
+    //    self.key2_1 = key2_1;
+    //    data
+    //}
 }

@@ -361,6 +361,10 @@ impl <R: Renderer> DS9MemoryBus<R> {
             Interrupts::empty()
         };
 
+        if self.card.check_card_dma() {
+            self.dma.on_card();
+        }
+
         self.interrupt_control.interrupt_request(
             joypad_irq |
             Interrupts::from_bits_truncate(timer_irq.into()) |
@@ -794,6 +798,11 @@ impl DS7MemoryBus {
         }
 
         self.card.clock(cycles);
+        if self.card.check_card_dma() {
+            // TODO: make this more clear.
+            // H-blank trigger setting on GBA is same as NDS card trigger.
+            self.dma.on_hblank();
+        }
 
         let (timer_irq, _, _) = self.timers.clock(cycles);
         //self.audio.clock(cycles);

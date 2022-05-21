@@ -105,6 +105,13 @@ impl DMA {
             *active = *active || chan.should_start_display();
         }
     }*/
+
+    /// To be called when card data is ready.
+    pub fn on_card(&mut self) {
+        for (active, chan) in self.active.iter_mut().zip(&self.channels) {
+            *active = *active || chan.should_start_card();
+        }
+    }
 }
 
 impl MemInterface32 for DMA {
@@ -254,6 +261,21 @@ impl DMAChannel {
         (self.control & Control::SHOULD_START) == Control::START_HBLANK
     }
 
+    /// Check to see if dma should start upon screen display.
+    pub fn should_start_display(&self) -> bool {
+        (self.control & Control::SHOULD_START) == Control::START_DISPLAY
+    }
+
+    /// Check to see if dma should start when main mem FIFO requests.
+    pub fn should_start_main_mem(&self) -> bool {
+        (self.control & Control::SHOULD_START) == Control::START_MAIN_D
+    }
+
+    /// Check to see if dma should start upon card ready.
+    pub fn should_start_card(&self) -> bool {
+        (self.control & Control::SHOULD_START) == Control::START_DS_CART
+    }
+
     /// Check to see if a 32-bit word should be transferred.
     pub fn transfer_32bit_word(&self) -> bool {
         self.control.contains(Control::WORD_TYPE)
@@ -357,7 +379,7 @@ impl DMAChannel {
     fn set_control(&mut self, data: u32) {
         let was_enabled = self.control.contains(Control::ENABLE);
         self.control = Control::from_bits_truncate(data);
-        //println!("SET DMA CTRL: {:X} | bytes: {:X}", data, self.control.word_count());
+        //println!("SET DMA CTRL: {:X} | len: {:X} | {:X} => {:X}", data, self.control.word_count(), self.src_addr, self.dst_addr);
         let enabled = self.control.contains(Control::ENABLE);
         if enabled && !was_enabled {
             /*self.current_count = if self.fifo_mode() {

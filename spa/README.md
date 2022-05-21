@@ -69,19 +69,19 @@ DS:
 - Dragon Quest IX: Shows intro cards (jankily) and then kinda breaks when game begins. Intro video plays but corrupted
 - Dragon Quest V: Black screen
 - Final Fantasy Tactics A2: Just black screen
-- Final Fantasy III: Black screen
+- Final Fantasy III: Tries to setup card memory, fails and requires restart.
 - Final Fantasy IV: Crashes when trying to write to VRAM.
-- Hotel Dusk: Room 215: Black screen
+- Hotel Dusk: Room 215: Flashing screen?
 - Kirby Super Star: Loads up and shows menu background, in pink instead of blue?
 - Mario Kart DS: Tries to access firmware with instr 6
 - New Super Mario Bros: Shows a title then crashes with rendering
 - Phantom Hourglass: Black/white screen.
-- Pokemon Mystery Dungeon Explorers of Sky: Black screen
+- Pokemon Mystery Dungeon Explorers of Sky: Corrupted intro. Doesn't manage to load menu before instr 6 is attempted
 - Pokemon Mystery Dungeon Blue Rescue Team: Black screen (some detectable stuff in debug view)
 - Pokemon Diamond: Tries to access firmware with instr 6
 - Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.
 - Super Mario 64 DS: Shows an initial nintendo logo and then freezes
-- The World Ends With You: Black screen
+- The World Ends With You: Initial titles, then freezes
 - Yoshi's Island DS: Shows initial titles ok, shows a corrupted screen after, then menu. Menu looks very off.
 
 #### NDS TODO
