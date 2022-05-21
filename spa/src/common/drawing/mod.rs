@@ -375,9 +375,13 @@ impl SoftwareRenderer {
         if texel == 0 {
             None
         } else {
-            if let Some(slot) = bg.ext_palette {
-                let palette_offset = (attrs.palette_num() as u16) * 256;
-                Some(self.palette_cache.get_ext_bg(slot, palette_offset + (texel as u16)))
+            if bg.use_8bpp {
+                if let Some(slot) = bg.ext_palette {
+                    let palette_offset = (attrs.palette_num() as u16) * 256;
+                    Some(self.palette_cache.get_ext_bg(slot, palette_offset + (texel as u16)))
+                } else {
+                    Some(self.palette_cache.get_bg(texel))
+                }
             } else {
                 Some(self.palette_cache.get_bg((attrs.palette_num() * 16) + texel))
             }
@@ -477,7 +481,7 @@ impl SoftwareRenderer {
         let map_y = bg_y / TILE_SIZE;
         let map_width = bg.size / TILE_SIZE;
         // The address of the tile attributes.
-        let tile_map_addr = (bg.tile_map_addr + map_x + (map_y * map_width)) * 2;
+        let tile_map_addr = bg.tile_map_addr + (map_x + (map_y * map_width)) * 2;
         let attrs = vram.tile_map_attrs(tile_map_addr);
         
         let mut tile_x = (bg_x % TILE_SIZE) as u8;
@@ -497,7 +501,7 @@ impl SoftwareRenderer {
                 let palette_offset = (attrs.palette_num() as u16) * 256;
                 Some(self.palette_cache.get_ext_bg(slot, palette_offset + (texel as u16)))
             } else {
-                Some(self.palette_cache.get_bg((attrs.palette_num() * 16) + texel))
+                Some(self.palette_cache.get_bg(texel))
             }
         }
     }
@@ -557,14 +561,14 @@ impl SoftwareRenderer {
         };
 
         if bg.use_15bpp {
-            let colour = vram.bg_bitmap_texel_15bpp(bg.data_addr, bg_x, bg_y, bg.size.1);
-            if u16::test_bit(colour, 15) {
+            let colour = vram.bg_bitmap_texel_15bpp(bg.data_addr, bg_x, bg_y, bg.size.0);
+            if !u16::test_bit(colour, 15) {
                 None
             } else {
                 Some(Colour::from_555(colour))
             }
         } else {
-            let texel = vram.bg_bitmap_texel_8bpp(bg.data_addr, bg_x, bg_y, bg.size.1);
+            let texel = vram.bg_bitmap_texel_8bpp(bg.data_addr, bg_x, bg_y, bg.size.0);
             if texel == 0 {
                 None
             } else {

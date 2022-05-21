@@ -667,6 +667,20 @@ impl VideoRegisters {
     fn get_ext_bg2(&self, large: bool) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
             let ext_data = if self.bg2_control.use_8_bpp() {
+                BackgroundTypeData::ExtBitmapAffine(BitmapAffineBackgroundData{
+                    data_addr:      self.bg2_control.tile_map_block() * 16 * 1024,
+                    use_15bpp:      self.bg2_control.affine_bitmap_direct_col(),
+                
+                    bg_ref_point_x: self.bg2_internal_x,
+                    bg_ref_point_y: self.bg2_internal_y,
+                    matrix_a:       self.bg2_internal_a,
+                    matrix_b:       self.bg2_internal_b,
+                    matrix_c:       self.bg2_internal_c,
+                    matrix_d:       self.bg2_internal_d,
+                    wrap:           self.bg2_control.affine_wraparound(),
+                    size:           self.bg2_control.affine_bitmap_size(),
+                })
+            } else {
                 BackgroundTypeData::ExtTiledAffine(AffineBackgroundData {
                     tile_map_addr:  (self.bg2_control.tile_map_block() * 2 * 1024) + self.lcd_control_hi.bg_map_base(),
                     tile_data_addr: (self.bg2_control.tile_data_block() * 16 * 1024) + self.lcd_control_hi.bg_tile_base(),
@@ -681,20 +695,6 @@ impl VideoRegisters {
                     size:           self.bg2_control.affine_size(),
 
                     ext_palette:    if self.bg_ext_palette() {Some(2)} else {None},
-                })
-            } else {
-                BackgroundTypeData::ExtBitmapAffine(BitmapAffineBackgroundData{
-                    data_addr:      self.bg2_control.tile_map_block() * 16 * 1024,
-                    use_15bpp:      self.bg2_control.affine_bitmap_direct_col(),
-                
-                    bg_ref_point_x: self.bg2_internal_x,
-                    bg_ref_point_y: self.bg2_internal_y,
-                    matrix_a:       self.bg2_internal_a,
-                    matrix_b:       self.bg2_internal_b,
-                    matrix_c:       self.bg2_internal_c,
-                    matrix_d:       self.bg2_internal_d,
-                    wrap:           self.bg2_control.affine_wraparound(),
-                    size:           self.bg2_control.affine_bitmap_size(),
                 })
             };
             Some(BackgroundData {
@@ -720,6 +720,20 @@ impl VideoRegisters {
     fn get_ext_bg3(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG3) {
             let ext_data = if self.bg3_control.use_8_bpp() {
+                BackgroundTypeData::ExtBitmapAffine(BitmapAffineBackgroundData{
+                    data_addr:      self.bg3_control.tile_map_block() * 16 * 1024,
+                    use_15bpp:      self.bg3_control.affine_bitmap_direct_col(),
+                
+                    bg_ref_point_x: self.bg3_internal_x,
+                    bg_ref_point_y: self.bg3_internal_y,
+                    matrix_a:       self.bg3_internal_a,
+                    matrix_b:       self.bg3_internal_b,
+                    matrix_c:       self.bg3_internal_c,
+                    matrix_d:       self.bg3_internal_d,
+                    wrap:           self.bg3_control.affine_wraparound(),
+                    size:           self.bg3_control.affine_bitmap_size(),
+                })
+            } else {
                 BackgroundTypeData::ExtTiledAffine(AffineBackgroundData {
                     tile_map_addr:  (self.bg3_control.tile_map_block() * 2 * 1024) + self.lcd_control_hi.bg_map_base(),
                     tile_data_addr: (self.bg3_control.tile_data_block() * 16 * 1024) + self.lcd_control_hi.bg_tile_base(),
@@ -734,20 +748,6 @@ impl VideoRegisters {
                     size:           self.bg3_control.affine_size(),
 
                     ext_palette:    if self.bg_ext_palette() {Some(3)} else {None},
-                })
-            } else {
-                BackgroundTypeData::ExtBitmapAffine(BitmapAffineBackgroundData{
-                    data_addr:      self.bg3_control.tile_map_block() * 16 * 1024,
-                    use_15bpp:      self.bg3_control.affine_bitmap_direct_col(),
-                
-                    bg_ref_point_x: self.bg3_internal_x,
-                    bg_ref_point_y: self.bg3_internal_y,
-                    matrix_a:       self.bg3_internal_a,
-                    matrix_b:       self.bg3_internal_b,
-                    matrix_c:       self.bg3_internal_c,
-                    matrix_d:       self.bg3_internal_d,
-                    wrap:           self.bg3_control.affine_wraparound(),
-                    size:           self.bg3_control.affine_bitmap_size(),
                 })
             };
             Some(BackgroundData {
