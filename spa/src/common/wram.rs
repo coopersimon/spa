@@ -12,6 +12,13 @@ impl WRAM {
         WRAM(vec![0; size])
     }
 
+    pub fn len(&self) -> u32 {
+        self.0.len() as u32
+    }
+    pub fn mask(&self) -> u32 {
+        self.len() - 1
+    }
+
     pub fn ref_mem<'a>(&'a self) -> &'a [u8] {
         &self.0
     }

@@ -13,7 +13,7 @@ use crate::utils::{
 };
 use crate::common::wram::WRAM;
 use crate::common::videomem::VideoMemory;
-use vram::{ARM7VRAMSlots, EngineAVRAM, EngineBVRAM};
+use vram::{ARM7VRAMSlots, EngineAVRAM, EngineBVRAM, VRAMSlot};
 pub use vram::{ARM9VRAM, ARM7VRAM};
 use control::*;
 
@@ -92,6 +92,16 @@ pub struct DSVideoMemory {
     pub engine_b_mem:   Arc<Mutex<VideoMemory<EngineBVRAM>>>,
 
     // TODO: other + 3D
+    // temp:
+    tex_0:  VRAMSlot,
+    tex_1:  VRAMSlot,
+    tex_2:  VRAMSlot,
+    tex_3:  VRAMSlot,
+
+    tex_palette_0:  VRAMSlot,
+    tex_palette_1:  VRAMSlot,
+    tex_palette_4:  VRAMSlot,
+    tex_palette_5:  VRAMSlot,
 }
 
 impl DSVideoMemory {
@@ -116,7 +126,17 @@ impl DSVideoMemory {
 
             arm7_mem:       arm7_vram.mem.clone(),
             engine_a_mem:   Arc::new(Mutex::new(VideoMemory::new(eng_a_vram))),
-            engine_b_mem:   Arc::new(Mutex::new(VideoMemory::new(eng_b_vram)))
+            engine_b_mem:   Arc::new(Mutex::new(VideoMemory::new(eng_b_vram))),
+
+            tex_0:  None,
+            tex_1:  None,
+            tex_2:  None,
+            tex_3:  None,
+
+            tex_palette_0:  None,
+            tex_palette_1:  None,
+            tex_palette_4:  None,
+            tex_palette_5:  None,
         }, arm7_vram)
     }
 }
@@ -132,10 +152,11 @@ impl DSVideoMemory {
         }
         // Get mem from current slot.
         let mem = self.swap_mem(self.mem_control[region as usize].slot, None);
+        //println!("found {}", mem.is_some());
         let cnt = VRAMControl::from_bits_truncate(data);
         // Set mem in new slot.
         let to_slot = cnt.get_slot(region);
-        println!("move {:?} | {:?} => {:?}", region, self.mem_control[region as usize].slot, to_slot);
+        //println!("move {:?} | {:?} => {:?}", region, self.mem_control[region as usize].slot, to_slot);
         self.mem_control[region as usize].cnt = cnt;
         self.mem_control[region as usize].slot = to_slot;
         let prev_mem = self.swap_mem(to_slot, mem);
@@ -144,7 +165,7 @@ impl DSVideoMemory {
             let old = self.lookup_at_slot(to_slot).unwrap();
             self.vram.lcdc[old] = prev_mem;
             self.mem_control[old].slot = Slot::LCDC(old.try_into().unwrap());
-            println!("writeback {:?} | => {:?}", old, self.mem_control[old].slot);
+            //println!("writeback {:?} | => {:?}", old, self.mem_control[old].slot);
         }
     }
 }
@@ -152,67 +173,10 @@ impl DSVideoMemory {
 // Mem interface: VRAM
 impl DSVideoMemory {
 
-    pub fn read_byte_vram(&mut self, addr: u32) -> u8 {
-        (match addr {
-            0x0600_0000..=0x061F_FFFF => {
-                let addr = addr & 0x7_FFFF;
-                let engine_a = self.engine_a_mem.lock().unwrap();
-                engine_a.vram.lookup_bg(addr)
-                    .map(|(vram, offset)| vram.read_byte(addr - offset))
-            },
-            0x0620_0000..=0x063F_FFFF => {
-                let addr = addr & 0x1_FFFF;
-                let engine_b = self.engine_b_mem.lock().unwrap();
-                engine_b.vram.lookup_bg(addr)
-                    .map(|(vram, offset)| vram.read_byte(addr - offset))
-            },
-            0x0640_0000..=0x065F_FFFF => {
-                let addr = addr & 0x3_FFFF;
-                let engine_a = self.engine_a_mem.lock().unwrap();
-                engine_a.vram.lookup_obj(addr)
-                    .map(|(vram, offset)| vram.read_byte(addr - offset))
-            },
-            0x0660_0000..=0x067F_FFFF => {
-                let addr = addr & 0x1_FFFF;
-                let mut engine_b = self.engine_b_mem.lock().unwrap();
-                engine_b.vram.obj_slot.as_mut().map(|v| v.read_byte(addr))
-            },
-            _ => {
-                let (vram, offset) = self.ref_lcdc_vram(addr);
-                vram.map(|v| v.read_byte(addr - offset))
-            }
-        }).unwrap_or(0)
+    pub fn read_byte_vram(&mut self, _addr: u32) -> u8 {
+        0
     }
-    pub fn write_byte_vram(&mut self, addr: u32, data: u8) {
-        match addr {
-            0x0600_0000..=0x061F_FFFF => {
-                let addr = addr & 0x7_FFFF;
-                let mut engine_a = self.engine_a_mem.lock().unwrap();
-                engine_a.vram.lookup_bg_mut(addr)
-                    .map(|(vram, offset)| vram.write_byte(addr - offset, data));
-            },
-            0x0620_0000..=0x063F_FFFF => {
-                let addr = addr & 0x1_FFFF;
-                let mut engine_b = self.engine_b_mem.lock().unwrap();
-                engine_b.vram.lookup_bg_mut(addr)
-                    .map(|(vram, offset)| vram.write_byte(addr - offset, data));
-            },
-            0x0640_0000..=0x065F_FFFF => {
-                let addr = addr & 0x3_FFFF;
-                let mut engine_a = self.engine_a_mem.lock().unwrap();
-                engine_a.vram.lookup_obj_mut(addr)
-                    .map(|(vram, offset)| vram.write_byte(addr - offset, data));
-            },
-            0x0660_0000..=0x067F_FFFF => {
-                let addr = addr & 0x1_FFFF;
-                let mut engine_b = self.engine_b_mem.lock().unwrap();
-                engine_b.vram.obj_slot.as_mut().map(|v| v.write_byte(addr, data));
-            },
-            _ => {
-                let (vram, offset) = self.ref_lcdc_vram(addr);
-                vram.map(|v| v.write_byte(addr - offset, data));
-            }
-        }
+    pub fn write_byte_vram(&mut self, _addr: u32, _data: u8) {
     }
 
     pub fn read_halfword_vram(&mut self, addr: u32) -> u16 {
@@ -221,24 +185,24 @@ impl DSVideoMemory {
                 let addr = addr & 0x7_FFFF;
                 let engine_a = self.engine_a_mem.lock().unwrap();
                 engine_a.vram.lookup_bg(addr)
-                    .map(|(vram, offset)| vram.read_halfword(addr - offset))
+                    .map(|(mask, vram)| vram.read_halfword(addr & mask))
             },
             0x0620_0000..=0x063F_FFFF => {
                 let addr = addr & 0x1_FFFF;
                 let engine_b = self.engine_b_mem.lock().unwrap();
                 engine_b.vram.lookup_bg(addr)
-                    .map(|(vram, offset)| vram.read_halfword(addr - offset))
+                    .map(|(mask, vram)| vram.read_halfword(addr & mask))
             },
             0x0640_0000..=0x065F_FFFF => {
                 let addr = addr & 0x3_FFFF;
                 let engine_a = self.engine_a_mem.lock().unwrap();
                 engine_a.vram.lookup_obj(addr)
-                    .map(|(vram, offset)| vram.read_halfword(addr - offset))
+                    .map(|(mask, vram)| vram.read_halfword(addr & mask))
             },
             0x0660_0000..=0x067F_FFFF => {
                 let addr = addr & 0x1_FFFF;
                 let mut engine_b = self.engine_b_mem.lock().unwrap();
-                engine_b.vram.obj_slot.as_mut().map(|v| v.read_halfword(addr))
+                engine_b.vram.obj_slot.as_mut().map(|v| v.read_halfword(addr & v.mask()))
             },
             _ => {
                 let (vram, offset) = self.ref_lcdc_vram(addr);
@@ -252,24 +216,24 @@ impl DSVideoMemory {
                 let addr = addr & 0x7_FFFF;
                 let mut engine_a = self.engine_a_mem.lock().unwrap();
                 engine_a.vram.lookup_bg_mut(addr)
-                    .map(|(vram, offset)| vram.write_halfword(addr - offset, data));
+                    .map(|(mask, vram)| vram.write_halfword(addr & mask, data));
             },
             0x0620_0000..=0x063F_FFFF => {
                 let addr = addr & 0x1_FFFF;
                 let mut engine_b = self.engine_b_mem.lock().unwrap();
                 engine_b.vram.lookup_bg_mut(addr)
-                    .map(|(vram, offset)| vram.write_halfword(addr - offset, data));
+                    .map(|(mask, vram)| vram.write_halfword(addr & mask, data));
             },
             0x0640_0000..=0x065F_FFFF => {
                 let addr = addr & 0x3_FFFF;
                 let mut engine_a = self.engine_a_mem.lock().unwrap();
                 engine_a.vram.lookup_obj_mut(addr)
-                    .map(|(vram, offset)| vram.write_halfword(addr - offset, data));
+                    .map(|(mask, vram)| vram.write_halfword(addr & mask, data));
             },
             0x0660_0000..=0x067F_FFFF => {
                 let addr = addr & 0x1_FFFF;
                 let mut engine_b = self.engine_b_mem.lock().unwrap();
-                engine_b.vram.obj_slot.as_mut().map(|v| v.write_halfword(addr, data));
+                engine_b.vram.obj_slot.as_mut().map(|v| v.write_halfword(addr & v.mask(), data));
             },
             _ => {
                 let (vram, offset) = self.ref_lcdc_vram(addr);
@@ -284,24 +248,24 @@ impl DSVideoMemory {
                 let addr = addr & 0x7_FFFF;
                 let engine_a = self.engine_a_mem.lock().unwrap();
                 engine_a.vram.lookup_bg(addr)
-                    .map(|(vram, offset)| vram.read_word(addr - offset))
+                    .map(|(mask ,vram)| vram.read_word(addr & mask))
             },
             0x0620_0000..=0x063F_FFFF => {
                 let addr = addr & 0x1_FFFF;
                 let engine_b = self.engine_b_mem.lock().unwrap();
                 engine_b.vram.lookup_bg(addr)
-                    .map(|(vram, offset)| vram.read_word(addr - offset))
+                    .map(|(mask ,vram)| vram.read_word(addr & mask))
             },
             0x0640_0000..=0x065F_FFFF => {
                 let addr = addr & 0x3_FFFF;
                 let engine_a = self.engine_a_mem.lock().unwrap();
                 engine_a.vram.lookup_obj(addr)
-                    .map(|(vram, offset)| vram.read_word(addr - offset))
+                    .map(|(mask ,vram)| vram.read_word(addr & mask))
             },
             0x0660_0000..=0x067F_FFFF => {
                 let addr = addr & 0x1_FFFF;
                 let mut engine_b = self.engine_b_mem.lock().unwrap();
-                engine_b.vram.obj_slot.as_mut().map(|v| v.read_word(addr))
+                engine_b.vram.obj_slot.as_mut().map(|v| v.read_word(addr & v.mask()))
             },
             _ => {
                 let (vram, offset) = self.ref_lcdc_vram(addr);
@@ -315,24 +279,24 @@ impl DSVideoMemory {
                 let addr = addr & 0x7_FFFF;
                 let mut engine_a = self.engine_a_mem.lock().unwrap();
                 engine_a.vram.lookup_bg_mut(addr)
-                    .map(|(vram, offset)| vram.write_word(addr - offset, data));
+                    .map(|(mask, vram)| vram.write_word(addr & mask, data));
             },
             0x0620_0000..=0x063F_FFFF => {
                 let addr = addr & 0x1_FFFF;
                 let mut engine_b = self.engine_b_mem.lock().unwrap();
                 engine_b.vram.lookup_bg_mut(addr)
-                    .map(|(vram, offset)| vram.write_word(addr - offset, data));
+                    .map(|(mask, vram)| vram.write_word(addr & mask, data));
             },
             0x0640_0000..=0x065F_FFFF => {
                 let addr = addr & 0x3_FFFF;
                 let mut engine_a = self.engine_a_mem.lock().unwrap();
                 engine_a.vram.lookup_obj_mut(addr)
-                    .map(|(vram, offset)| vram.write_word(addr - offset, data));
+                    .map(|(mask, vram)| vram.write_word(addr & mask, data));
             },
             0x0660_0000..=0x067F_FFFF => {
                 let addr = addr & 0x1_FFFF;
                 let mut engine_b = self.engine_b_mem.lock().unwrap();
-                engine_b.vram.obj_slot.as_mut().map(|v| v.write_word(addr, data));
+                engine_b.vram.obj_slot.as_mut().map(|v| v.write_word(addr & v.mask(), data));
             },
             _ => {
                 let (vram, offset) = self.ref_lcdc_vram(addr);
@@ -502,7 +466,20 @@ impl DSVideoMemory {
                     }
                 }
             },
-            Slot::Texture(_) => None,//panic!("TEX unsupported right now"),
+            Slot::Texture(slot) => {
+                use Texture::*;
+                match slot {
+                    Tex0 => std::mem::replace(&mut self.tex_0, new),
+                    Tex1 => std::mem::replace(&mut self.tex_1, new),
+                    Tex2 => std::mem::replace(&mut self.tex_2, new),
+                    Tex3 => std::mem::replace(&mut self.tex_3, new),
+                
+                    Palette0 => std::mem::replace(&mut self.tex_palette_0, new),
+                    Palette1 => std::mem::replace(&mut self.tex_palette_1, new),
+                    Palette4 => std::mem::replace(&mut self.tex_palette_4, new),
+                    Palette5 => std::mem::replace(&mut self.tex_palette_5, new),
+                }
+            }
         }
     }
 

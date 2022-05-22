@@ -143,17 +143,14 @@ impl SoftwareRenderer {
     /// 
     /// 1D mapping: List of 1024 tiles.
     fn obj_1d_bmp_mapping(&self, regs: &VideoRegisters) -> bool {
-        match self.mode {
-            RendererMode::GBA   => regs.gba_obj_1d_tile_mapping(),
-            _                   => regs.nds_obj_1d_tile_mapping(),
-        }
+        regs.obj_1d_bmp_mapping()
     }
 
     /// The shift needed to convert tile number into
     /// VRAM address for bitmaps.
     fn obj_bmp_shift(&self, regs: &VideoRegisters) -> usize {
         match self.mode {
-            RendererMode::NDSA if regs.obj_1d_bmp_large_boundary() => BMP_SHIFT * 2,
+            RendererMode::NDSA if regs.obj_1d_bmp_large_boundary() => BMP_SHIFT + 1,
             _ => BMP_SHIFT,
         }
     }
@@ -242,7 +239,7 @@ impl SoftwareRenderer {
                     let addr = if use_1d_bmp_mapping {
                         let base = base_tile_num << bmp_1d_addr_shift;
                         let offset_x = index_x as u32;
-                        let offset_y = index_y as u32 * source_size.1 as u32;
+                        let offset_y = index_y as u32 * source_size.0 as u32;
                         base + ((offset_x + offset_y) * 2)
                     } else {
                         let base_tile_x = base_tile_num & bmp_2d_mask;

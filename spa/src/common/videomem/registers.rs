@@ -791,6 +791,11 @@ impl VideoRegisters {
         (self.lcd_control_hi & NDSControl::OBJ_TILE_1D_GAP).bits() >> 4
     }
 
+    /// Returns true if bitmaps should map in 1D.
+    pub fn obj_1d_bmp_mapping(&self) -> bool {
+        self.lcd_control.contains(LCDControl::NDS_OBJ_BMP_MAP)
+    }
+
     /// The gap between 1D bitmap for NDS engine A.
     pub fn obj_1d_bmp_large_boundary(&self) -> bool {
         self.lcd_control_hi.contains(NDSControl::OBJ_BMP_1D_GAP)

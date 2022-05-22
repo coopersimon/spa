@@ -32,7 +32,7 @@ pub struct ARM9VRAM {
     pub lcdc:   [VRAMSlot; 9]
 }
 
-type VRAMSlot = Option<Box<WRAM>>; // TODO: does this need to be boxed even?
+pub type VRAMSlot = Option<Box<WRAM>>; // TODO: does this need to be boxed even?
 
 impl ARM9VRAM {
     pub fn new() -> (Self, ARM7VRAM, EngineAVRAM, EngineBVRAM) {
@@ -155,25 +155,25 @@ pub struct EngineAVRAM {
 impl EngineAVRAM {
     /// Get the VRAM slot for the BG addr provided.
     /// 
-    /// Returns the offset (TODO: return mask?)
-    pub fn lookup_bg<'a>(&'a self, addr: u32) -> Option<(&'a Box<WRAM>, u32)> {
+    /// Returns a mask.
+    pub fn lookup_bg<'a>(&'a self, addr: u32) -> Option<(u32, &'a Box<WRAM>)> {
         match addr {
             0x4000..=0x7FFF => match self.bg_slot_01.as_ref() {
-                None => self.bg_slot_0.as_ref().map(|vram| (vram, 0)),
-                Some(vram) => Some((vram, 0x4000))
+                None => self.bg_slot_0.as_ref().map(|vram| (vram.mask(), vram)),
+                Some(vram) => Some((0x3FFF, vram))
             },
             0x1_0000..=0x1_3FFF => match self.bg_slot_02.as_ref() {
-                None => self.bg_slot_0.as_ref().map(|vram| (vram, 0)),
-                Some(vram) => Some((vram, 0x1_0000))
+                None => self.bg_slot_0.as_ref().map(|vram| (vram.mask(), vram)),
+                Some(vram) => Some((0x3FFF, vram))
             },
             0x1_4000..=0x1_7FFF => match self.bg_slot_03.as_ref() {
-                None => self.bg_slot_0.as_ref().map(|vram| (vram, 0)),
-                Some(vram) => Some((vram, 0x1_4000))
+                None => self.bg_slot_0.as_ref().map(|vram| (vram.mask(), vram)),
+                Some(vram) => Some((0x3FFF, vram))
             },
-            0x0..=0x1_FFFF => self.bg_slot_0.as_ref().map(|vram| (vram, 0)),
-            0x2_0000..=0x3_FFFF => self.bg_slot_1.as_ref().map(|vram| (vram, 0x2_0000)),
-            0x4_0000..=0x5_FFFF => self.bg_slot_2.as_ref().map(|vram| (vram, 0x4_0000)),
-            0x6_0000..=0x7_FFFF => self.bg_slot_3.as_ref().map(|vram| (vram, 0x6_0000)),
+            0x0..=0x1_FFFF => self.bg_slot_0.as_ref().map(|vram| (vram.mask(), vram)),
+            0x2_0000..=0x3_FFFF => self.bg_slot_1.as_ref().map(|vram| (0x1_FFFF, vram)),
+            0x4_0000..=0x5_FFFF => self.bg_slot_2.as_ref().map(|vram| (0x1_FFFF, vram)),
+            0x6_0000..=0x7_FFFF => self.bg_slot_3.as_ref().map(|vram| (0x1_FFFF, vram)),
             _ => None
         }
     }
@@ -181,15 +181,15 @@ impl EngineAVRAM {
     /// Get the VRAM slot for the BG addr provided.
     /// 
     /// Returns the offset (TODO: return mask?)
-    pub fn lookup_bg_mut<'a>(&'a mut self, addr: u32) -> Option<(&'a mut Box<WRAM>, u32)> {
+    pub fn lookup_bg_mut<'a>(&'a mut self, addr: u32) -> Option<(u32, &'a mut Box<WRAM>)> {
         match addr {
-            0x4000..=0x7FFF if self.bg_slot_01.is_some() => self.bg_slot_01.as_mut().map(|vram| (vram, 0x4000)),
-            0x1_0000..=0x1_3FFF if self.bg_slot_02.is_some() => self.bg_slot_02.as_mut().map(|vram| (vram, 0x1_0000)),
-            0x1_4000..=0x1_7FFF if self.bg_slot_03.is_some() => self.bg_slot_03.as_mut().map(|vram| (vram, 0x1_4000)),
-            0x0..=0x1_FFFF => self.bg_slot_0.as_mut().map(|vram| (vram, 0)),
-            0x2_0000..=0x3_FFFF => self.bg_slot_1.as_mut().map(|vram| (vram, 0x2_0000)),
-            0x4_0000..=0x5_FFFF => self.bg_slot_2.as_mut().map(|vram| (vram, 0x4_0000)),
-            0x6_0000..=0x7_FFFF => self.bg_slot_3.as_mut().map(|vram| (vram, 0x6_0000)),
+            0x4000..=0x7FFF if self.bg_slot_01.is_some() => self.bg_slot_01.as_mut().map(|vram| (0x3FFF, vram)),
+            0x1_0000..=0x1_3FFF if self.bg_slot_02.is_some() => self.bg_slot_02.as_mut().map(|vram| (0x3FFF, vram)),
+            0x1_4000..=0x1_7FFF if self.bg_slot_03.is_some() => self.bg_slot_03.as_mut().map(|vram| (0x3FFF, vram)),
+            0x0..=0x1_FFFF => self.bg_slot_0.as_mut().map(|vram| (vram.mask(), vram)),
+            0x2_0000..=0x3_FFFF => self.bg_slot_1.as_mut().map(|vram| (0x1_FFFF, vram)),
+            0x4_0000..=0x5_FFFF => self.bg_slot_2.as_mut().map(|vram| (0x1_FFFF, vram)),
+            0x6_0000..=0x7_FFFF => self.bg_slot_3.as_mut().map(|vram| (0x1_FFFF, vram)),
             _ => None
         }
     }
@@ -197,22 +197,22 @@ impl EngineAVRAM {
     /// Get the VRAM slot for the OBJ addr provided.
     /// 
     /// Returns the offset (TODO: return mask?)
-    pub fn lookup_obj<'a>(&'a self, addr: u32) -> Option<(&'a Box<WRAM>, u32)> {
+    pub fn lookup_obj<'a>(&'a self, addr: u32) -> Option<(u32, &'a Box<WRAM>)> {
         match addr {
             0x4000..=0x7FFF => match self.obj_slot_01.as_ref() {
-                None => self.obj_slot_0.as_ref().map(|vram| (vram, 0)),
-                Some(vram) => Some((vram, 0x4000))
+                None => self.obj_slot_0.as_ref().map(|vram| (vram.mask(), vram)),
+                Some(vram) => Some((0x3FFF, vram))
             },
             0x1_0000..=0x1_3FFF => match self.obj_slot_02.as_ref() {
-                None => self.obj_slot_0.as_ref().map(|vram| (vram, 0)),
-                Some(vram) => Some((vram, 0x1_0000))
+                None => self.obj_slot_0.as_ref().map(|vram| (vram.mask(), vram)),
+                Some(vram) => Some((0x3FFF, vram))
             },
             0x1_4000..=0x1_7FFF => match self.obj_slot_03.as_ref() {
-                None => self.obj_slot_0.as_ref().map(|vram| (vram, 0)),
-                Some(vram) => Some((vram, 0x1_4000))
+                None => self.obj_slot_0.as_ref().map(|vram| (vram.mask(), vram)),
+                Some(vram) => Some((0x3FFF, vram))
             },
-            0x0..=0x1_FFFF => self.obj_slot_0.as_ref().map(|vram| (vram, 0)),
-            0x2_0000..=0x3_FFFF => self.obj_slot_1.as_ref().map(|vram| (vram, 0x2_0000)),
+            0x0..=0x1_FFFF => self.obj_slot_0.as_ref().map(|vram| (vram.mask(), vram)),
+            0x2_0000..=0x3_FFFF => self.obj_slot_1.as_ref().map(|vram| (0x1_FFFF, vram)),
             _ => None
         }
     }
@@ -220,13 +220,13 @@ impl EngineAVRAM {
     /// Get the VRAM slot for the OBJ addr provided.
     /// 
     /// Returns the offset (TODO: return mask?)
-    pub fn lookup_obj_mut<'a>(&'a mut self, addr: u32) -> Option<(&'a mut Box<WRAM>, u32)> {
+    pub fn lookup_obj_mut<'a>(&'a mut self, addr: u32) -> Option<(u32, &'a mut Box<WRAM>)> {
         match addr {
-            0x4000..=0x7FFF if self.obj_slot_01.is_some() => self.obj_slot_01.as_mut().map(|vram| (vram, 0x4000)),
-            0x1_0000..=0x1_3FFF if self.obj_slot_02.is_some() => self.obj_slot_02.as_mut().map(|vram| (vram, 0x1_0000)),
-            0x1_4000..=0x1_7FFF if self.obj_slot_03.is_some() => self.obj_slot_03.as_mut().map(|vram| (vram, 0x1_4000)),
-            0x0..=0x1_FFFF => self.obj_slot_0.as_mut().map(|vram| (vram, 0)),
-            0x2_0000..=0x3_FFFF => self.obj_slot_1.as_mut().map(|vram| (vram, 0x2_0000)),
+            0x4000..=0x7FFF if self.obj_slot_01.is_some() => self.obj_slot_01.as_mut().map(|vram| (0x3FFF, vram)),
+            0x1_0000..=0x1_3FFF if self.obj_slot_02.is_some() => self.obj_slot_02.as_mut().map(|vram| (0x3FFF, vram)),
+            0x1_4000..=0x1_7FFF if self.obj_slot_03.is_some() => self.obj_slot_03.as_mut().map(|vram| (0x3FFF, vram)),
+            0x0..=0x1_FFFF => self.obj_slot_0.as_mut().map(|vram| (vram.mask(), vram)),
+            0x2_0000..=0x3_FFFF => self.obj_slot_1.as_mut().map(|vram| (0x1_FFFF, vram)),
             _ => None
         }
     }
@@ -234,8 +234,8 @@ impl EngineAVRAM {
 
 impl VRAM2D for EngineAVRAM {
     fn get_bg_byte(&self, addr: u32) -> u8 {
-        if let Some((vram, offset)) = self.lookup_bg(addr) {
-            vram.read_byte(addr - offset)
+        if let Some((mask, vram)) = self.lookup_bg(addr) {
+            vram.read_byte(addr & mask)
         } else {
             //panic!("reading from strange addr (ENG_A_BG: {:X})", addr)
             0
@@ -243,8 +243,8 @@ impl VRAM2D for EngineAVRAM {
     }
 
     fn get_bg_halfword(&self, addr: u32) -> u16 {
-        if let Some((vram, offset)) = self.lookup_bg(addr) {
-            vram.read_halfword(addr - offset)
+        if let Some((mask, vram)) = self.lookup_bg(addr) {
+            vram.read_halfword(addr & mask)
         } else {
             //panic!("reading from strange addr (ENG_A_BG: {:X})", addr)
             0
@@ -252,8 +252,8 @@ impl VRAM2D for EngineAVRAM {
     }
 
     fn get_obj_byte(&self, addr: u32) -> u8 {
-        if let Some((vram, offset)) = self.lookup_obj(addr) {
-            vram.read_byte(addr - offset)
+        if let Some((mask, vram)) = self.lookup_obj(addr) {
+            vram.read_byte(addr & mask)
         } else {
             //panic!("reading from strange addr (ENG_A_OBJ: {:X})", addr)
             0
@@ -261,8 +261,8 @@ impl VRAM2D for EngineAVRAM {
     }
 
     fn get_obj_halfword(&self, addr: u32) -> u16 {
-        if let Some((vram, offset)) = self.lookup_obj(addr) {
-            vram.read_halfword(addr - offset)
+        if let Some((mask, vram)) = self.lookup_obj(addr) {
+            vram.read_halfword(addr & mask)
         } else {
             //panic!("reading from strange addr (ENG_A_OBJ: {:X})", addr)
             0
@@ -320,13 +320,13 @@ impl EngineBVRAM {
     /// Get the VRAM slot for the BG addr provided.
     /// 
     /// Returns the offset (TODO: return mask?)
-    pub fn lookup_bg<'a>(&'a self, addr: u32) -> Option<(&'a Box<WRAM>, u32)> {
+    pub fn lookup_bg<'a>(&'a self, addr: u32) -> Option<(u32, &'a Box<WRAM>)> {
         match addr {
             0x8000..=0xBFFF => match self.bg_slot_01.as_ref() {
-                None => self.bg_slot_0.as_ref().map(|vram| (vram, 0)),
-                Some(vram) => Some((vram, 0x8000))
+                None => self.bg_slot_0.as_ref().map(|vram| (vram.mask(), vram)),
+                Some(vram) => Some((0x3FFF, vram))
             },
-            0x0..=0x1_FFFF => self.bg_slot_0.as_ref().map(|vram| (vram, 0)),
+            0x0..=0x1_FFFF => self.bg_slot_0.as_ref().map(|vram| (vram.mask(), vram)),
             _ => None
         }
     }
@@ -334,10 +334,10 @@ impl EngineBVRAM {
     /// Get the VRAM slot for the BG addr provided.
     /// 
     /// Returns the offset (TODO: return mask?)
-    pub fn lookup_bg_mut<'a>(&'a mut self, addr: u32) -> Option<(&'a mut Box<WRAM>, u32)> {
+    pub fn lookup_bg_mut<'a>(&'a mut self, addr: u32) -> Option<(u32, &'a mut Box<WRAM>)> {
         match addr {
-            0x8000..=0xBFFF if self.bg_slot_01.is_some() => self.bg_slot_01.as_mut().map(|vram| (vram, 0x8000)),
-            0x0..=0x1_FFFF => self.bg_slot_0.as_mut().map(|vram| (vram, 0)),
+            0x8000..=0xBFFF if self.bg_slot_01.is_some() => self.bg_slot_01.as_mut().map(|vram| (0x3FFF, vram)),
+            0x0..=0x1_FFFF => self.bg_slot_0.as_mut().map(|vram| (vram.mask(), vram)),
             _ => None
         }
     }
@@ -345,8 +345,8 @@ impl EngineBVRAM {
 
 impl VRAM2D for EngineBVRAM {
     fn get_bg_byte(&self, addr: u32) -> u8 {
-        if let Some((vram, offset)) = self.lookup_bg(addr) {
-            vram.read_byte(addr - offset)
+        if let Some((mask, vram)) = self.lookup_bg(addr) {
+            vram.read_byte(addr & mask)
         } else {
             //panic!("reading from strange addr (ENG_B_BG: {:X})", addr)
             0
@@ -354,8 +354,8 @@ impl VRAM2D for EngineBVRAM {
     }
 
     fn get_bg_halfword(&self, addr: u32) -> u16 {
-        if let Some((vram, offset)) = self.lookup_bg(addr) {
-            vram.read_halfword(addr - offset)
+        if let Some((mask, vram)) = self.lookup_bg(addr) {
+            vram.read_halfword(addr & mask)
         } else {
             //panic!("reading from strange addr (ENG_B_BG: {:X})", addr)
             0
@@ -363,11 +363,11 @@ impl VRAM2D for EngineBVRAM {
     }
 
     fn get_obj_byte(&self, addr: u32) -> u8 {
-        self.obj_slot.as_ref().map(|v| v.read_byte(addr)).unwrap_or(0)
+        self.obj_slot.as_ref().map(|v| v.read_byte(addr & v.mask())).unwrap_or(0)
     }
 
     fn get_obj_halfword(&self, addr: u32) -> u16 {
-        self.obj_slot.as_ref().map(|v| v.read_halfword(addr)).unwrap_or(0)
+        self.obj_slot.as_ref().map(|v| v.read_halfword(addr & v.mask())).unwrap_or(0)
     }
 
     fn ref_ext_bg_palette<'a>(&'a mut self) -> [Option<&'a [u8]>; 4] {
