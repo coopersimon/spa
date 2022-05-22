@@ -117,33 +117,22 @@ impl SoftwareRenderer {
     }
 
     /// The shift needed to convert tile number into
-    /// VRAM address.
-    fn obj_tile_shift(&self, regs: &VideoRegisters) -> usize {
+    /// VRAM address, for 1D objects.
+    fn obj_1d_tile_shift(&self, regs: &VideoRegisters) -> usize {
         match self.mode {
-            RendererMode::NDSA if regs.nds_obj_1d_tile_mapping() => match regs.nds_obj_1d_tile_boundary() {
+            RendererMode::NDSA => match regs.nds_obj_1d_tile_boundary() {
                 0 => TILE_SHIFT_4BPP,
                 1 => TILE_SHIFT_4BPP + 1,
                 2 => TILE_SHIFT_4BPP + 2,
                 _ => TILE_SHIFT_4BPP + 3,
             },
-            RendererMode::NDSB if regs.nds_obj_1d_tile_mapping() => match regs.nds_obj_1d_tile_boundary() {
+            RendererMode::NDSB => match regs.nds_obj_1d_tile_boundary() {
                 0 => TILE_SHIFT_4BPP,
                 1 => TILE_SHIFT_4BPP + 1,
                 _ => TILE_SHIFT_4BPP + 2,
             }
             _ => TILE_SHIFT_4BPP,
         }
-    }
-
-    /// Check if bitmap objects should use 2D or 1D mapping.
-    /// 
-    /// 2D mapping: grid of 32x32 tiles. An object that
-    /// is larger than 1 tile will expand into x and y
-    /// dimensions appropriately.
-    /// 
-    /// 1D mapping: List of 1024 tiles.
-    fn obj_1d_bmp_mapping(&self, regs: &VideoRegisters) -> bool {
-        regs.obj_1d_bmp_mapping()
     }
 
     /// The shift needed to convert tile number into
@@ -162,11 +151,13 @@ impl SoftwareRenderer {
     fn draw_obj_line<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [Option<ObjectPixel>], obj_window: &mut [bool], y: u8) {
         // Global settings
         let use_1d_tile_mapping = self.obj_1d_tile_mapping(&mem.registers);
-        let tile_addr_shift = self.obj_tile_shift(&mem.registers);
-        let use_1d_bmp_mapping = self.obj_1d_bmp_mapping(&mem.registers);
+        let tile_1d_start_shift = self.obj_1d_tile_shift(&mem.registers);
+
+        let use_1d_bmp_mapping = mem.registers.obj_1d_bmp_mapping();
         let bmp_1d_addr_shift = self.obj_bmp_shift(&mem.registers);
         let bmp_2d_width = if mem.registers.obj_2d_wide_bmp() {BMP_MAP_SIZE * 2} else {BMP_MAP_SIZE};
         let bmp_2d_mask = bmp_2d_width - 1;
+
         let mosaic_x = mem.registers.obj_mosaic_x();
         let mosaic_y = mem.registers.obj_mosaic_y();
 
@@ -260,10 +251,11 @@ impl SoftwareRenderer {
                 } else {
                     let tile_x = (index_x / 8) as u32;
                     let tile_y = (index_y / 8) as u32;
-                    let tile_num = if use_1d_tile_mapping {
-                        let tile_width = (source_size.0 / 8) as u32;
+                    let tile_addr = if use_1d_tile_mapping {
+                        let start = base_tile_num << tile_1d_start_shift;
+                        let tile_width = (source_size.0 / 8) as u32;    // Width of object in tiles.
                         let offset = (tile_x + (tile_y * tile_width)) << tile_shift;
-                        base_tile_num + offset
+                        start + (offset << TILE_SHIFT_4BPP)
                     } else {
                         const TILE_GRID_WIDTH: u32 = 0x20;
                         const TILE_GRID_HEIGHT: u32 = 0x20;
@@ -271,10 +263,9 @@ impl SoftwareRenderer {
                         let base_tile_y = base_tile_num / TILE_GRID_WIDTH;
                         let target_tile_x = base_tile_x.wrapping_add(tile_x << tile_shift) % TILE_GRID_WIDTH;
                         let target_tile_y = base_tile_y.wrapping_add(tile_y) % TILE_GRID_HEIGHT;
-                        target_tile_x + (target_tile_y * TILE_GRID_WIDTH)
+                        (target_tile_x + (target_tile_y * TILE_GRID_WIDTH)) << TILE_SHIFT_4BPP
                     };
                     
-                    let tile_addr = tile_num << tile_addr_shift;
                     let texel = if use_8bpp {
                         mem.vram.obj_tile_texel_8bpp(tile_addr, index_x % 8, index_y % 8)
                     } else {

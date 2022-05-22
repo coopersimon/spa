@@ -791,7 +791,14 @@ impl VideoRegisters {
         (self.lcd_control_hi & NDSControl::OBJ_TILE_1D_GAP).bits() >> 4
     }
 
-    /// Returns true if bitmaps should map in 1D.
+    /// Check if bitmap objects should use 2D or 1D mapping.
+    /// Returns true if 1D should be used.
+    /// 
+    /// 2D mapping: grid of 32x32 tiles. An object that
+    /// is larger than 1 tile will expand into x and y
+    /// dimensions appropriately.
+    /// 
+    /// 1D mapping: List of 1024 tiles.
     pub fn obj_1d_bmp_mapping(&self) -> bool {
         self.lcd_control.contains(LCDControl::NDS_OBJ_BMP_MAP)
     }
