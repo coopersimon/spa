@@ -479,7 +479,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
             // VRAM
             0x0500_0000..=0x05FF_FFFF => {
-                self.video.mem.write_byte_palette(addr, data);
+                self.video.mem.write_byte_palette(addr & 0x7FF, data);
                 2
             },
             0x0600_0000..=0x06FF_FFFF => {
@@ -487,7 +487,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
                 2
             },
             0x0700_0000..=0x07FF_FFFF => {
-                self.video.mem.write_byte_oam(addr, data);
+                self.video.mem.write_byte_oam(addr & 0x7FF, data);
                 2
             },
 
@@ -557,7 +557,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
             // VRAM
             0x0500_0000..=0x05FF_FFFF => {
-                self.video.mem.write_halfword_palette(addr, data);
+                self.video.mem.write_halfword_palette(addr & 0x7FF, data);
                 2
             },
             0x0600_0000..=0x06FF_FFFF => {
@@ -565,7 +565,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
                 2
             },
             0x0700_0000..=0x07FF_FFFF => {
-                self.video.mem.write_halfword_oam(addr, data);
+                self.video.mem.write_halfword_oam(addr & 0x7FF, data);
                 2
             },
 
@@ -635,7 +635,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
             // VRAM
             0x0500_0000..=0x05FF_FFFF => {
-                self.video.mem.write_word_palette(addr, data);
+                self.video.mem.write_word_palette(addr & 0x7FF, data);
                 4
             },
             0x0600_0000..=0x06FF_FFFF => {
@@ -643,7 +643,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
                 4
             },
             0x0700_0000..=0x07FF_FFFF => {
-                self.video.mem.write_word_oam(addr, data);
+                self.video.mem.write_word_oam(addr & 0x7FF, data);
                 2
             },
 
@@ -867,6 +867,7 @@ impl Mem32 for DS7MemoryBus {
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_byte(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_byte(addr & 0xFFFF), 1),
 
+            0x0400_0240 => (self.vram.get_status(), if cycle.is_non_seq() {4} else {1}),
             0x0400_0241 => (self.shared_wram.get_bank_status(), if cycle.is_non_seq() {4} else {1}),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), if cycle.is_non_seq() {4} else {1}),
 
