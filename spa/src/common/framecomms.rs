@@ -1,8 +1,8 @@
 
 use crossbeam_channel::{Sender, Receiver, bounded};
+use parking_lot::Mutex;
 use std::{
-    sync::Arc,
-    sync::Mutex,
+    sync::Arc
 };
 use crate::FrameBuffer;
 
@@ -64,7 +64,7 @@ impl<I> FrameRequester<I> {
         self.rx.recv().expect("couldn't get from cpu thread");
         // Copy frame into buffer.
         for (frame_buffer, out_buffer) in self.frame_buffers.iter().zip(buffers) {
-            let frame = frame_buffer.lock().unwrap();
+            let frame = frame_buffer.lock();
             out_buffer.copy_from_slice(&(*frame));
         }
         // Let CPU thread know processing can continue.

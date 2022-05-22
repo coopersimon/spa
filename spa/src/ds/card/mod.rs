@@ -2,7 +2,7 @@ mod header;
 mod save;
 
 use bitflags::bitflags;
-
+use parking_lot::Mutex;
 use std::{
     io::{
         Result,
@@ -13,8 +13,7 @@ use std::{
     fs::File,
     path::Path,
     sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering}
+        Arc, atomic::{AtomicBool, Ordering}
     }
 };
 
@@ -96,7 +95,7 @@ impl DSCardIO {
 
     /// To be called by only the ARM7 processor.
     pub fn clock(&mut self, cycles: usize) {
-        //self.card.lock().unwrap().clock(cycles);
+        //self.card.lock().clock(cycles);
     }
 
     pub fn get_interrupt(&self) -> Interrupts {
@@ -113,40 +112,40 @@ impl DSCardIO {
 
     pub fn get_header(&self) -> CardHeader {
         let mut data = vec![0; 0x200];
-        self.card.lock().unwrap().load_data(0, &mut data);
+        self.card.lock().load_data(0, &mut data);
         CardHeader::new(data)
     }
 
     pub fn load_data(&self, from_addr: u32, into_buffer: &mut [u8]) {
-        self.card.lock().unwrap().load_data(from_addr, into_buffer);
+        self.card.lock().load_data(from_addr, into_buffer);
     }
 
     /// Fast boot mode setup.
     pub fn fast_boot(&mut self) {
-        self.card.lock().unwrap().fast_boot();
+        self.card.lock().fast_boot();
     }
 }
 
 impl MemInterface32 for DSCardIO {
     fn read_byte(&mut self, addr: u32) -> u8 {
-        self.card.lock().unwrap().read_byte(addr)
+        self.card.lock().read_byte(addr)
     }
     fn write_byte(&mut self, addr: u32, data: u8) {
-        self.card.lock().unwrap().write_byte(addr, data);
+        self.card.lock().write_byte(addr, data);
     }
 
     fn read_halfword(&mut self, addr: u32) -> u16 {
-        self.card.lock().unwrap().read_halfword(addr)
+        self.card.lock().read_halfword(addr)
     }
     fn write_halfword(&mut self, addr: u32, data: u16) {
-        self.card.lock().unwrap().write_halfword(addr, data);
+        self.card.lock().write_halfword(addr, data);
     }
 
     fn read_word(&mut self, addr: u32) -> u32 {
-        self.card.lock().unwrap().read_word(addr)
+        self.card.lock().read_word(addr)
     }
     fn write_word(&mut self, addr: u32, data: u32) {
-        self.card.lock().unwrap().write_word(addr, data);
+        self.card.lock().write_word(addr, data);
     }
 }
 

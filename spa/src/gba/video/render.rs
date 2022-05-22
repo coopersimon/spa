@@ -1,8 +1,7 @@
 /// Rendering the video.
 
-use std::sync::{
-    Arc, Mutex
-};
+use parking_lot::Mutex;
+use std::sync::Arc;
 use super::memory::VRAMRenderRef;
 use super::constants::*;
 use crate::common::drawing::{SoftwareRenderer, RendererMode};
@@ -42,7 +41,7 @@ impl Renderer for ProceduralRenderer {
         self.renderer.setup_caches(mem);
         let start_offset = (line as usize) * (H_RES * 4);
         let end_offset = start_offset + (H_RES * 4);
-        let mut target = self.target.lock().unwrap();
+        let mut target = self.target.lock();
         self.renderer.draw_line(mem, &mut target[start_offset..end_offset], line);
         mem.registers.inc_v_count();
     }
@@ -77,7 +76,7 @@ impl Renderer for DebugTileRenderer {
     fn render_line(&mut self, mem: &mut VideoMemory<VRAMRenderRef>, line: u8) {
         self.renderer.setup_caches(mem);
         if line == 0 {
-            let mut target = self.target.lock().unwrap();
+            let mut target = self.target.lock();
             self.renderer.draw_8bpp_tiles(mem, &mut target);
         }
     }

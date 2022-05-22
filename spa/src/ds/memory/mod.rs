@@ -285,7 +285,7 @@ impl <R: Renderer> DS9MemoryBus<R> {
                 // Check if DMA channel has changed since last transfer.
                 let access = if last_active != c {
                     last_active = c;
-                    if self.do_clock(2) {
+                    if self.do_clock(4) {
                         self.frame_end();
                     }
                     arm::MemCycleType::N
@@ -425,7 +425,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => (
                 self.main_ram.read_byte(addr & 0x3F_FFFF),
-                if cycle.is_non_seq() {1} else {2}
+                if cycle.is_non_seq() {18} else {2}
             ),
             0x0300_0000..=0x03FF_FFFF => (
                 self.shared_wram.read_byte(addr),
@@ -438,9 +438,9 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
-            0x0500_0000..=0x05FF_FFFF => (self.video.mem.read_byte_palette(addr & 0x7FF), 2),
-            0x0600_0000..=0x06FF_FFFF => (self.video.mem.read_byte_vram(addr), 2),
-            0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_byte_oam(addr & 0x7FF), 2),
+            0x0500_0000..=0x05FF_FFFF => (self.video.mem.read_byte_palette(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
+            0x0600_0000..=0x06FF_FFFF => (self.video.mem.read_byte_vram(addr), if cycle.is_non_seq() {8} else {2}),
+            0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_byte_oam(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
 
             // TODO: GBA slot
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_0(cycle)),
@@ -457,7 +457,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_byte(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {1} else {2}
+                if cycle.is_non_seq() {18} else {2}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared RAM
                 self.shared_wram.write_byte(addr, data);
@@ -480,15 +480,15 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             // VRAM
             0x0500_0000..=0x05FF_FFFF => {
                 self.video.mem.write_byte_palette(addr & 0x7FF, data);
-                2
+                if cycle.is_non_seq() {8} else {2}
             },
             0x0600_0000..=0x06FF_FFFF => {
                 self.video.mem.write_byte_vram(addr, data);
-                2
+                if cycle.is_non_seq() {8} else {2}
             },
             0x0700_0000..=0x07FF_FFFF => {
                 self.video.mem.write_byte_oam(addr & 0x7FF, data);
-                2
+                if cycle.is_non_seq() {8} else {2}
             },
 
             // TODO: GBA slot
@@ -506,7 +506,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {1} else {2}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {18} else {2}),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -515,9 +515,9 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
-            0x0500_0000..=0x05FF_FFFF => (self.video.mem.read_halfword_palette(addr & 0x7FF), 2),
-            0x0600_0000..=0x06FF_FFFF => (self.video.mem.read_halfword_vram(addr), 2),
-            0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_halfword_oam(addr & 0x7FF), 2),
+            0x0500_0000..=0x05FF_FFFF => (self.video.mem.read_halfword_palette(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
+            0x0600_0000..=0x06FF_FFFF => (self.video.mem.read_halfword_vram(addr), if cycle.is_non_seq() {8} else {2}),
+            0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_halfword_oam(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_0(cycle)),
@@ -534,7 +534,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_halfword(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {1} else {2}
+                if cycle.is_non_seq() {18} else {2}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_halfword(addr, data);
@@ -558,15 +558,15 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             // VRAM
             0x0500_0000..=0x05FF_FFFF => {
                 self.video.mem.write_halfword_palette(addr & 0x7FF, data);
-                2
+                if cycle.is_non_seq() {8} else {2}
             },
             0x0600_0000..=0x06FF_FFFF => {
                 self.video.mem.write_halfword_vram(addr, data);
-                2
+                if cycle.is_non_seq() {8} else {2}
             },
             0x0700_0000..=0x07FF_FFFF => {
                 self.video.mem.write_halfword_oam(addr & 0x7FF, data);
-                2
+                if cycle.is_non_seq() {8} else {2}
             },
 
             // Cart
@@ -584,7 +584,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {2} else {4}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {20} else {4}),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -593,9 +593,9 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
-            0x0500_0000..=0x05FF_FFFF => (self.video.mem.read_word_palette(addr & 0x7FF), 4),
-            0x0600_0000..=0x06FF_FFFF => (self.video.mem.read_word_vram(addr), 4),
-            0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_word_oam(addr & 0x7FF), 2),
+            0x0500_0000..=0x05FF_FFFF => (self.video.mem.read_word_palette(addr & 0x7FF), if cycle.is_non_seq() {10} else {4}),
+            0x0600_0000..=0x06FF_FFFF => (self.video.mem.read_word_vram(addr), if cycle.is_non_seq() {10} else {4}),
+            0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_word_oam(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_0(cycle) << 1),
@@ -612,7 +612,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_word(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {2} else {4}
+                if cycle.is_non_seq() {20} else {4}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_word(addr, data);
@@ -636,15 +636,15 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             // VRAM
             0x0500_0000..=0x05FF_FFFF => {
                 self.video.mem.write_word_palette(addr & 0x7FF, data);
-                4
+                if cycle.is_non_seq() {10} else {4}
             },
             0x0600_0000..=0x06FF_FFFF => {
                 self.video.mem.write_word_vram(addr, data);
-                4
+                if cycle.is_non_seq() {10} else {4}
             },
             0x0700_0000..=0x07FF_FFFF => {
                 self.video.mem.write_word_oam(addr & 0x7FF, data);
-                2
+                if cycle.is_non_seq() {8} else {2}
             },
 
             // Cart
@@ -867,9 +867,9 @@ impl Mem32 for DS7MemoryBus {
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_byte(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_byte(addr & 0xFFFF), 1),
 
-            0x0400_0240 => (self.vram.get_status(), if cycle.is_non_seq() {4} else {1}),
-            0x0400_0241 => (self.shared_wram.get_bank_status(), if cycle.is_non_seq() {4} else {1}),
-            0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), if cycle.is_non_seq() {4} else {1}),
+            0x0400_0240 => (self.vram.get_status(), 1),
+            0x0400_0241 => (self.shared_wram.get_bank_status(), 1),
+            0x0400_0000..=0x04FF_FFFF => (self.io_read_byte(addr), 1),
 
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_byte(addr), 1),
 
@@ -899,7 +899,7 @@ impl Mem32 for DS7MemoryBus {
 
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_byte(addr, data);
-                if cycle.is_non_seq() {4} else {1}
+                1
             },
 
             0x0600_0000..=0x06FF_FFFF => {
@@ -927,7 +927,7 @@ impl Mem32 for DS7MemoryBus {
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_halfword(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_halfword(addr & 0xFFFF), 1),
 
-            0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), if cycle.is_non_seq() {4} else {1}),
+            0x0400_0000..=0x04FF_FFFF => (self.io_read_halfword(addr), 1),
 
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_halfword(addr), 1),
 
@@ -957,7 +957,7 @@ impl Mem32 for DS7MemoryBus {
 
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_halfword(addr, data);
-                if cycle.is_non_seq() {4} else {1}
+                1
             },
 
             0x0600_0000..=0x06FF_FFFF => {
@@ -985,9 +985,9 @@ impl Mem32 for DS7MemoryBus {
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_word(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_word(addr & 0xFFFF), 1),
 
-            0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), if cycle.is_non_seq() {4} else {1}),
+            0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), 1),
 
-            0x0600_0000..=0x06FF_FFFF => (self.vram.read_word(addr), 1),
+            0x0600_0000..=0x06FF_FFFF => (self.vram.read_word(addr), 2),
 
             // Cart
             //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_0(cycle) << 1),
@@ -1015,12 +1015,12 @@ impl Mem32 for DS7MemoryBus {
 
             0x0400_0000..=0x04FF_FFFF => {  // I/O
                 self.io_write_word(addr, data);
-                if cycle.is_non_seq() {4} else {1}
+                1
             },
 
             0x0600_0000..=0x06FF_FFFF => {
                 self.vram.write_word(addr, data);
-                1
+                2
             },
 
             // Cart

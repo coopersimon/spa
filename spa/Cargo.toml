@@ -11,6 +11,7 @@ bitflags = "1.2"
 fixed = "1.12"
 regex = "1"
 crossbeam-channel = "0.5"
+parking_lot = "0.12"
 
 [dependencies.dasp]
 version = "0.11"

@@ -1,10 +1,7 @@
 
 use bitflags::bitflags;
-use std::{
-    sync::{
-        Arc, Mutex
-    },
-};
+use parking_lot::Mutex;
+use std::sync::Arc;
 use crate::utils::{
     meminterface::MemInterface16,
     bits::u8
@@ -87,7 +84,7 @@ pub struct ARM7VRAMSlots {
 
 impl ARM7VRAM {
     pub fn get_status(&self) -> u8 {
-        let slots = self.mem.lock().unwrap();
+        let slots = self.mem.lock();
         let mut status = VRAMStatus::empty();
         status.set(VRAMStatus::VRAM_C, slots.c.is_some());
         status.set(VRAMStatus::VRAM_D, slots.d.is_some());
@@ -97,7 +94,7 @@ impl ARM7VRAM {
 
 impl MemInterface16 for ARM7VRAM {
     fn read_halfword(&mut self, addr: u32) -> u16 {
-        let slots = self.mem.lock().unwrap();
+        let slots = self.mem.lock();
         match addr {
             0x0600_0000..=0x0601_FFFF => match slots.c.as_ref() {
                 Some(vram) => vram.read_halfword(addr - 0x0600_0000),
@@ -112,7 +109,7 @@ impl MemInterface16 for ARM7VRAM {
     }
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
-        let mut slots = self.mem.lock().unwrap();
+        let mut slots = self.mem.lock();
         match addr {
             0x0600_0000..=0x0601_FFFF => match slots.c.as_mut() {
                 Some(vram) => vram.write_halfword(addr - 0x0600_0000, data),

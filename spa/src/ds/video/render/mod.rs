@@ -1,7 +1,6 @@
 
-use std::sync::{
-    Arc, Mutex
-};
+use parking_lot::Mutex;
+use std::sync::Arc;
 use crate::common::{
     videomem::VideoRegisters,
     drawing::{SoftwareRenderer, RendererMode}
@@ -54,12 +53,12 @@ impl Renderer for ProceduralRenderer {
         let end_offset = start_offset + (H_RES * 4);
 
         if mem.power_cnt.contains(GraphicsPowerControl::ENABLE_A) {
-            let mut engine_a_mem = mem.engine_a_mem.lock().unwrap();
+            let mut engine_a_mem = mem.engine_a_mem.lock();
             
             let mut target = if mem.power_cnt.contains(GraphicsPowerControl::DISPLAY_SWAP) {
-                self.upper.lock().unwrap()
+                self.upper.lock()
             } else {
-                self.lower.lock().unwrap()
+                self.lower.lock()
             };
 
             match engine_a_mem.registers.display_mode() {
@@ -77,12 +76,12 @@ impl Renderer for ProceduralRenderer {
         }
 
         if mem.power_cnt.contains(GraphicsPowerControl::ENABLE_B) {
-            let mut engine_b_mem = mem.engine_b_mem.lock().unwrap();
+            let mut engine_b_mem = mem.engine_b_mem.lock();
 
             let mut target = if mem.power_cnt.contains(GraphicsPowerControl::DISPLAY_SWAP) {
-                self.lower.lock().unwrap()
+                self.lower.lock()
             } else {
-                self.upper.lock().unwrap()
+                self.upper.lock()
             };
 
             match engine_b_mem.registers.display_mode() {
@@ -163,16 +162,16 @@ impl Renderer for DebugTileRenderer {
     fn render_line(&mut self, mem: &mut DSVideoMemory, line: u16) {
         if line == 0 {
             {
-                let mut engine_a_mem = mem.engine_a_mem.lock().unwrap();
+                let mut engine_a_mem = mem.engine_a_mem.lock();
                 self.engine_a.setup_caches(&mut engine_a_mem);
                 // Choose out.
-                let mut target = self.lower.lock().unwrap();    // TODO: SELECT (POWCNT)
+                let mut target = self.lower.lock();    // TODO: SELECT (POWCNT)
                 self.engine_a.draw_4bpp_tiles(&engine_a_mem, &mut target);
             }
             {
-                let mut engine_b_mem = mem.engine_b_mem.lock().unwrap();
+                let mut engine_b_mem = mem.engine_b_mem.lock();
                 self.engine_b.setup_caches(&mut engine_b_mem);
-                let mut target = self.upper.lock().unwrap();    // TODO: SELECT (POWCNT)
+                let mut target = self.upper.lock();    // TODO: SELECT (POWCNT)
                 self.engine_b.draw_4bpp_tiles(&engine_b_mem, &mut target);
             }
         }

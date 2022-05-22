@@ -1,7 +1,7 @@
 
+use parking_lot::{Mutex, MutexGuard};
 use std::sync::{
     Arc,
-    Mutex, MutexGuard,
     atomic::{AtomicU8, Ordering}
 };
 use crate::common::wram::WRAM;
@@ -92,12 +92,12 @@ impl SharedRAM for ARM9SharedRAM {
     fn get_bank(&self, addr: u32) -> Option<MutexGuard<WRAM>> {
         match self.bank_control {
             0 => if u32::test_bit(addr, 14) {   // 0x4000
-                self.hi_bank.lock().ok()
+                Some(self.hi_bank.lock())
             } else {
-                self.lo_bank.lock().ok()
+                Some(self.lo_bank.lock())
             },
-            1 => self.hi_bank.lock().ok(),
-            2 => self.lo_bank.lock().ok(),
+            1 => Some(self.hi_bank.lock()),
+            2 => Some(self.lo_bank.lock()),
             _ => None,  // unmapped
         }
     }
@@ -121,12 +121,12 @@ impl ARM7SharedRAM {
 impl SharedRAM for ARM7SharedRAM {
     fn get_bank(&self, addr: u32) -> Option<MutexGuard<WRAM>> {
         match self.bank_status.load(Ordering::Acquire) {
-            1 => self.lo_bank.lock().ok(),
-            2 => self.hi_bank.lock().ok(),
+            1 => Some(self.lo_bank.lock()),
+            2 => Some(self.hi_bank.lock()),
             3 => if u32::test_bit(addr, 14) {   // 0x4000
-                self.hi_bank.lock().ok()
+                Some(self.hi_bank.lock())
             } else {
-                self.lo_bank.lock().ok()
+                Some(self.lo_bank.lock())
             },
             _ => None,  // unmapped
         }
