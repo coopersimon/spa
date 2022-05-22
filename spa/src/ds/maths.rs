@@ -61,21 +61,31 @@ impl Accelerators {
     }*/
 
     pub fn start_div(&mut self) {
-        if self.div_denominator == 0 {
-            self.div_control.insert(DivisionControl::DIV_BY_ZERO);
-            return;
-        }
-
         match (self.div_control & DivisionControl::MODE).bits() {
             0 => {
-                self.div_result = ((self.div_numerator as i32) / (self.div_denominator as i32)) as i64;
-                self.mod_result = ((self.div_numerator as i32) % (self.div_denominator as i32)) as i64;
+                let numerator = self.div_numerator as i32;
+                let denominator = self.div_denominator as i32;
+                if denominator == 0 {
+                    self.div_control.insert(DivisionControl::DIV_BY_ZERO);
+                    return;
+                }
+                self.div_result = (numerator / denominator) as i64;
+                self.mod_result = (numerator % denominator) as i64;
             },
             1 => {
-                self.div_result = self.div_numerator / ((self.div_denominator as i32) as i64);
-                self.mod_result = self.div_numerator % ((self.div_denominator as i32) as i64);
+                let denominator = self.div_denominator as i32 as i64;
+                if denominator == 0 {
+                    self.div_control.insert(DivisionControl::DIV_BY_ZERO);
+                    return;
+                }
+                self.div_result = self.div_numerator / denominator;
+                self.mod_result = self.div_numerator % denominator;
             },
             _ => {
+                if self.div_denominator == 0 {
+                    self.div_control.insert(DivisionControl::DIV_BY_ZERO);
+                    return;
+                }
                 self.div_result = self.div_numerator / self.div_denominator;
                 self.mod_result = self.div_numerator % self.div_denominator;
             },
