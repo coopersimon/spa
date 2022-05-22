@@ -64,25 +64,25 @@ DS:
 - Loads of unaligned memory accesses.
 
 ### DS Status of selected games:
-- Animal Crossing Wild World: Tries to access firmware with instr 6
-- Chrono Trigger: Shows slightly broken screen claiming to load save RAM, and freezes
+- Animal Crossing Wild World: Blank screen (firmware/save issues)
+- Chrono Trigger: Sets up save RAM, then shows (broken) intro video. Doesn't seem to be able to skip ahead.
 - Dragon Quest IX: Shows intro cards (jankily) and then kinda breaks when game begins. Intro video plays but corrupted
 - Dragon Quest V: Black screen
-- Final Fantasy Tactics A2: Just black screen
-- Final Fantasy III: Tries to setup card memory, fails and requires restart.
-- Final Fantasy IV: Crashes when trying to write to VRAM.
-- Hotel Dusk: Room 215: Flashing screen?
-- Kirby Super Star: Loads up and shows menu background, in pink instead of blue?
-- Mario Kart DS: Tries to access firmware with instr 6
-- New Super Mario Bros: Shows a title then crashes with rendering
+- Final Fantasy Tactics A2: Shows a static screen after loading for a bit.
+- Final Fantasy III: Sets up save ram, shows titles, white screen instead of menu.
+- Final Fantasy IV: Sets up save ram, then crashes when trying to do "save op 11".
+- Hotel Dusk: Room 215: Blank screen.
+- Kirby Super Star: Loads up and shows menu background in pink with some corrupted text ontop. Then shows some broken screens.
+- Mario Kart DS: Blank screen (firmware/save issues)
+- New Super Mario Bros: Shows titles, looks generally ok, freezes if you leave it too long.
 - Phantom Hourglass: Black/white screen.
-- Pokemon Mystery Dungeon Explorers of Sky: Corrupted intro. Doesn't manage to load menu before instr 6 is attempted
-- Pokemon Mystery Dungeon Blue Rescue Team: Black screen (some detectable stuff in debug view)
-- Pokemon Diamond: Tries to access firmware with instr 6
+- Pokemon Mystery Dungeon Explorers of Sky: Intro plays. Sprites look wrong, and it's super slow.
+- Pokemon Mystery Dungeon Blue Rescue Team: Intro plays. Gets to menu then crashes with "save op 0xA"
+- Pokemon Diamond: Blank screen (firmware/save issues)
 - Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.
-- Super Mario 64 DS: Shows an initial nintendo logo and then freezes
-- The World Ends With You: Initial titles, then freezes
-- Yoshi's Island DS: Shows initial titles ok, shows a corrupted screen after, then menu. Menu looks very off.
+- Super Mario 64 DS: Shows an initial nintendo logo and then freezes (waiting for 3d?)
+- The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)
+- Yoshi's Island DS: Shows initial titles ok, intro is kind of ok but crashes trying to access ext obj palette. If skipped menu loads up OK.
 
 #### NDS TODO
 - Audio

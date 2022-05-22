@@ -24,7 +24,8 @@ pub struct Firmware {
     addr:       u32,
 
     data:       Vec<u8>,
-    can_read:   bool
+    can_read:   bool,
+    can_write:  bool,
 }
 
 impl Firmware {
@@ -47,6 +48,7 @@ impl Firmware {
 
             data:       data,
             can_read:   false,
+            can_write:  false,
         })
     }
 
@@ -76,6 +78,8 @@ impl Firmware {
             None => match data {
                 0x03 => self.instr = Read(3),
                 0x05 => self.instr = ReadStatus,
+                0x06 => self.can_write = true,
+                0x04 => self.can_write = false,
                 _ => panic!("unsupported instr {:X}", data),
             },
             Read(0) => { // Dummy write

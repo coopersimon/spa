@@ -1,4 +1,5 @@
 mod header;
+mod save;
 
 use bitflags::bitflags;
 
@@ -24,6 +25,7 @@ use crate::utils::{
 };
 use crate::ds::interrupt::Interrupts;
 pub use header::CardHeader;
+use save::SPI;
 
 bitflags!{
     #[derive(Default)]
@@ -154,7 +156,9 @@ struct DSCard {
     rom_buffer: Vec<u8>,
     buffer_tag: u32,
 
-    spi_control: GamecardControl,
+    spi_control:    GamecardControl,
+    spi:            SPI,
+
     rom_control_lo: RomControlLo,
     rom_control_hi: RomControlHi,
 
@@ -197,7 +201,8 @@ impl DSCard {
             rom_buffer: buffer,
             buffer_tag: 0,
 
-            spi_control: GamecardControl::default(),
+            spi_control:    GamecardControl::default(),
+            spi:            SPI::new(),
             rom_control_lo: RomControlLo::default(),
             rom_control_hi: RomControlHi::default(),
 
@@ -252,10 +257,10 @@ impl DSCard {
 impl MemInterface16 for DSCard {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            0x0400_01A0 => self.spi_control.bits(),   // AUXSPICNT
-            0x0400_01A2 => 0,   // AUXSPIDATA
-            0x0400_01A4 => self.rom_control_lo.bits(),   // ROMCTRL
-            0x0400_01A6 => self.rom_control_hi.bits(), // ROMCTRL
+            0x0400_01A0 => self.spi_control.bits(),
+            0x0400_01A2 => self.spi.read() as u16,
+            0x0400_01A4 => self.rom_control_lo.bits(),
+            0x0400_01A6 => self.rom_control_hi.bits(),
             0x0400_01A8..=0x0400_01AF => 0,     // Command
             0x0400_01B0..=0x0400_01BF => 0,   // Encryption seeds
 
@@ -305,10 +310,15 @@ impl MemInterface16 for DSCard {
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0x0400_01A0 => self.spi_control = GamecardControl::from_bits_truncate(data),   // AUXSPICNT
-            0x0400_01A2 => {},   // AUXSPIDATA
-            0x0400_01A4 => self.write_rom_control_lo(data),   // ROMCTRL
-            0x0400_01A6 => self.write_rom_control_hi(data),   // ROMCTRL
+            0x0400_01A0 => {
+                self.spi_control = GamecardControl::from_bits_truncate(data);
+                if !self.spi_control.contains(GamecardControl::SPI_HOLD) {
+                    self.spi.deselect();
+                }
+            },
+            0x0400_01A2 => self.spi.write(data as u8),
+            0x0400_01A4 => self.write_rom_control_lo(data),
+            0x0400_01A6 => self.write_rom_control_hi(data),
 
             0x0400_01A8 => {
                 self.command[7] = bytes::u16::lo(data);
