@@ -192,9 +192,9 @@ pub fn run_nds(config: ds::MemoryConfig, mute: bool) {
         alpha_to_coverage_enabled: false,
     });
 
-    /*let mut last_frame_time = chrono::Utc::now();
+    let mut last_frame_time = chrono::Utc::now();
     let nanos = 1_000_000_000 / 60;
-    let frame_time = chrono::Duration::nanoseconds(nanos);*/
+    let frame_time = chrono::Duration::nanoseconds(nanos);
 
     // AUDIO
     //let audio_stream = make_audio_stream(&mut gba);
@@ -210,10 +210,13 @@ pub fn run_nds(config: ds::MemoryConfig, mute: bool) {
         match event {
             Event::LoopDestroyed => (),//debug::debug_mode(&mut nds),
             Event::MainEventsCleared => {
-                //let now = chrono::Utc::now();
-                //let since_last = now.signed_duration_since(last_frame_time);
+                let now = chrono::Utc::now();
+                let since_last = now.signed_duration_since(last_frame_time);
+                if since_last < frame_time {
+                    return;
+                }
                 //println!("Frame time: {}", since_last);
-                //last_frame_time = now;
+                last_frame_time = now;
 
                 let buf = device.create_buffer_mapped(&wgpu::BufferDescriptor {
                     label: None,
