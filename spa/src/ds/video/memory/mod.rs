@@ -458,7 +458,7 @@ impl DSVideoMemory {
                         std::mem::replace(&mut engine_b.vram.ext_bg_palette, new)
                     },
                     ObjExtPalette => {
-                        engine_b.vram.ext_bg_palette_dirty = true;
+                        engine_b.vram.ext_obj_palette_dirty = true;
                         std::mem::replace(&mut engine_b.vram.ext_obj_palette, new)
                     }
                 }

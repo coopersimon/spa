@@ -2,7 +2,7 @@
 
 
 /// Cycles needed to draw a single pixel on-screen.
-pub const DOT_TIME: usize = 6;
+pub const DOT_TIME: usize = 12;
 /// Visible horizontal resolution.
 pub const H_RES: usize = 256;
 /// Number of dots spent in H-blank.
