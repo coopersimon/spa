@@ -65,24 +65,30 @@ DS:
 
 ### DS Status of selected games:
 - Animal Crossing Wild World: Blank screen (firmware/save issues)
-- Chrono Trigger: Sets up save RAM, then shows (broken) intro video. Needs touchscreen?
-- Dragon Quest IX: Shows intro cards (jankily) and then kinda breaks when game begins. Intro video plays but corrupted
+- Chrono Trigger: Sets up save RAM, then shows intro video. Needs touchscreen.
+- Dragon Quest IX: Shows intro cards and video. Magenta screen when game begins.
+- Dragon Quest IV: Black screen
 - Dragon Quest V: Black screen
+- Dragon Quest VI: Black screen
 - Final Fantasy Tactics A2: Shows a static screen after loading for a bit.
-- Final Fantasy III: Sets up save ram, shows titles, white screen instead of menu.
-- Final Fantasy IV: Sets up save ram, then crashes when trying to do "save op 11".
+- Final Fantasy III: Sets up save ram, shows titles, plays intro video, main menu, then black screen when game begins.
+- Final Fantasy IV: Sets up save ram, shows titles, plays intro video, main menu, then black screen when game begins.
 - Hotel Dusk: Room 215: Blank screen.
 - Kirby Super Star: Initialises save data, then shows some screens with incorrect colour. Is it trying to blend stuff here?
 - Mario Kart DS: Blank screen (firmware/save issues)
+- Mario and Luigi: Bowser's Inside Story: Blank screen (firmware/save issues)
+- Mario and Luigi: Partners in Time: Loads up mostly ok with some glitches, menu title is glitched, intro has serious graphical issues
+- Mario Party DS: Loads up and shows menus OK, needs touchscreen.
+- Metroid Prime Hunters: Aggressive flashing instead of titles. Plays intro video mostly OK (issues with screen swapping). Menu is broken.
 - New Super Mario Bros: Shows titles, looks generally ok, freezes if you leave it too long and when gameplay begins (waiting for 3d?)
-- Phantom Hourglass: Black/white screen.
+- Phantom Hourglass: Shows titles then freezes.
 - Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. After intro, in gameplay, it seems to freeze.
-- Pokemon Mystery Dungeon Blue Rescue Team: Intro plays. Gets to menu then crashes with "save op 0xA"
+- Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
 - Pokemon Diamond: Blank screen (firmware/save issues)
 - Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.
-- Super Mario 64 DS: Shows an initial nintendo logo and then freezes (waiting for 3d?)
+- Super Mario 64 DS: Shows an initial nintendo logo, takes a long time to load before showing pre-menu screen, then freezes.
 - The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)
-- Yoshi's Island DS: Shows initial titles ok, intro is kind of ok but crashes trying to access ext obj palette. If skipped menu loads up OK, when gameplay begins, crashes due to ext obj palette again.
+- Yoshi's Island DS: Shows titles, intro, menu, pre-gameplay video, and gameplay correctly!
 
 #### NDS TODO
 - Audio

@@ -291,7 +291,7 @@ impl SoftwareRenderer {
                     obj_window[x as usize] = true;
                 } else {
                     let obj_type = if bitmap {
-                        ObjType::Bitmap(object.palette_bank() as u16)
+                        ObjType::Bitmap((object.palette_bank() + 1) as u16)
                     } else if semi_transparent {
                         ObjType::SemiTransparent
                     } else {
@@ -586,6 +586,7 @@ impl SoftwareRenderer {
             let dest = x * 4;
             // Prio 0
             let colour = self.eval_pixel(mem, obj_line[x], obj_window[x], &bg_data, x as u8, line);
+            let colour = mem.registers.apply_brightness(colour);
             target[dest] = colour.r;
             target[dest + 1] = colour.g;
             target[dest + 2] = colour.b;

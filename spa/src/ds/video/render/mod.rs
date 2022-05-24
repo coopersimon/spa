@@ -132,7 +132,7 @@ impl ProceduralRenderer {
             for x in 0..H_RES {
                 let dest = x * 4;
                 let data = vram.read_halfword(read_offset + (x as u32) * 2);
-                let colour = crate::common::drawing::colour::Colour::from_555(data);
+                let colour = registers.apply_brightness(crate::common::drawing::colour::Colour::from_555(data));
                 target[dest] = colour.r;
                 target[dest + 1] = colour.g;
                 target[dest + 2] = colour.b;

@@ -200,6 +200,14 @@ impl Into<ColourEffect> for ColourSpecialControl {
     }
 }
 
+bitflags! {
+    #[derive(Default)]
+    struct MasterBrightness: u16 {
+        const MODE      = u16::bits(14, 15);
+        const FACTOR    = u16::bits(0, 4);
+    }
+}
+
 #[derive(Default)]
 pub struct VideoRegisters {
     lcd_control:    LCDControl,
@@ -268,6 +276,8 @@ pub struct VideoRegisters {
     colour_special: ColourSpecialControl,
     alpha_coeffs:   u16,
     brightness:     u8,
+
+    master_bright:  MasterBrightness
 }
 
 impl VideoRegisters {
@@ -922,6 +932,37 @@ impl VideoRegisters {
         let mosaic = ((self.mosaic >> 12) & 0xF) as u8;
         mosaic + 1
     }
+
+    // DS Brightness
+    // TODO: move this?
+    pub fn apply_brightness(&self, input: crate::common::drawing::colour::Colour) -> crate::common::drawing::colour::Colour {
+        match (self.master_bright & MasterBrightness::MODE).bits() >> 14 {
+            0b00 => input,
+            0b01 => {
+                let factor = (self.master_bright & MasterBrightness::FACTOR).bits() as u32;
+                let r_diff = ((255 - (input.r as u32)) * factor) / 16;
+                let g_diff = ((255 - (input.g as u32)) * factor) / 16;
+                let b_diff = ((255 - (input.b as u32)) * factor) / 16;
+                crate::common::drawing::colour::Colour {
+                    r: input.r.saturating_add(r_diff as u8),
+                    g: input.g.saturating_add(g_diff as u8),
+                    b: input.b.saturating_add(b_diff as u8),
+                }
+            },
+            0b10 => {
+                let factor = (self.master_bright & MasterBrightness::FACTOR).bits() as u32;
+                let r_diff = ((input.r as u32) * factor) / 16;
+                let g_diff = ((input.g as u32) * factor) / 16;
+                let b_diff = ((input.b as u32) * factor) / 16;
+                crate::common::drawing::colour::Colour {
+                    r: input.r.saturating_sub(r_diff as u8),
+                    g: input.g.saturating_sub(g_diff as u8),
+                    b: input.b.saturating_sub(b_diff as u8),
+                }
+            },
+            _ => unreachable!()
+        }
+    }
 }
 
 impl MemInterface16 for VideoRegisters {
@@ -977,7 +1018,7 @@ impl MemInterface16 for VideoRegisters {
             0x66 => 0,  // DISPCAPCNT
             0x68 => 0,  // DISP_MMEM_FIFO
             0x6A => 0,  // DISP_MMEM_FIFO
-            0x6C => 0,  // MASTER BRIGHT
+            0x6C => self.master_bright.bits(),
             0x6E => 0,
             _ => panic!("reading from invalid video register address {:X}", addr)
         }
@@ -1119,7 +1160,9 @@ impl MemInterface16 for VideoRegisters {
             0x66 => {},  // DISPCAPCNT
             0x68 => {},  // DISP_MMEM_FIFO
             0x6A => {},  // DISP_MMEM_FIFO
-            0x6C => {},  // MASTER BRIGHT
+            0x6C => {
+                self.master_bright = MasterBrightness::from_bits_truncate(data)
+            },
             0x6E => {},
             _ => panic!("writing to invalid video register address {:X}", addr)
         }

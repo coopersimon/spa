@@ -41,7 +41,7 @@ pub struct SPI {
 impl SPI {
     pub fn new() -> Self {
         Self {
-            ram: vec![0; 64 * 1024],
+            ram: vec![0; 512 * 1024],
         
             status:     Status::default(),
         
@@ -57,7 +57,7 @@ impl SPI {
 
     pub fn read(&mut self) -> u8 {
         use State::*;
-        match self.state {
+        let data = match self.state {
             ReadStatus if self.can_read => {
                 self.state = Idle;
                 self.status.bits()
@@ -68,10 +68,13 @@ impl SPI {
                 data
             },
             _ => 0,
-        }
+        };
+        //println!("READ {:X}", data);
+        data
     }
 
     pub fn write(&mut self, data: u8) {
+        //println!("WRITE {:X}", data);
         use State::*;
         match self.state {
             Idle => match data {
@@ -81,6 +84,7 @@ impl SPI {
                 0x01 => self.state = WriteStatus,
                 0x03 => self.state = PrepRead { byte: 0, addr: 0 },
                 0x02 => self.state = PrepWrite { byte: 0, addr: 0 },
+                0x0A => self.state = PrepWrite { byte: 0, addr: 0 },
                 0x0 => {},
                 _ => panic!("unsupported save ram op {:X}", data),
             },
