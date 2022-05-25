@@ -6,10 +6,12 @@ pub mod background;
 use fixed::types::I24F8;
 use crate::utils::bits::u16;
 use crate::common::videomem::{
-    VideoMemory, VideoRegisters, VRAM2D
+    VideoMemory, VideoRegisters, VRAM2D, LCDCMem
 };
 use colour::*;
 use background::*;
+
+use super::videomem::{DispCapSourceB, DispCapMode, DispCapSourceA};
 
 const TILE_SIZE: u32 = 8;
 const TILE_SHIFT_4BPP: usize = 5;
@@ -36,9 +38,9 @@ pub enum RendererMode {
 }
 
 pub struct SoftwareRenderer {
-    mode:   RendererMode,
-    h_res:  usize,
-    palette_cache:  PaletteCache
+    mode:           RendererMode,
+    h_res:          usize,
+    palette_cache:  PaletteCache,
 }
 
 impl SoftwareRenderer {
@@ -51,7 +53,7 @@ impl SoftwareRenderer {
         Self {
             mode:   mode,
             h_res:  h_res,
-            palette_cache:  PaletteCache::new()
+            palette_cache:  PaletteCache::new(),
         }
     }
 
@@ -87,15 +89,106 @@ impl SoftwareRenderer {
     }
 
     /// Draw a regular 2D line, with BG and OBJ, and applied effects.
-    /// 
-    /// The only mode for GBA, also used in NDS for 2D engines A and B
-    pub fn draw_line<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [u8], line: u8) {
+    pub fn draw_line_gba<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [u8], line: u8) {
         if mem.registers.in_fblank() {
             for p in target {
                 *p = 0;
             }
         } else {
-            self.draw(mem, target, line);
+            let mut line_cache = vec![Colour::black(); 240];
+            self.draw(mem, &mut line_cache, line);
+            for (colour, out) in line_cache.iter().zip(target.chunks_exact_mut(4)) {
+                out[0] = colour.r;
+                out[1] = colour.g;
+                out[2] = colour.b;
+            }
+        }
+    }
+
+    /// Draw a full line for NDS A engine. Also applies master brightness
+    /// 
+    /// Also is responsible for video capture output.
+    /// 
+    /// TODO: 3D
+    pub fn draw_line_nds_a<V: VRAM2D, L: LCDCMem>(&self, mem: &VideoMemory<V>, lcdc: &mut L, target: &mut [u8], line: u8) {
+        let mut drawn = false;
+        let mut line_cache = vec![Colour::black(); 256];
+
+        if mem.registers.in_fblank() {
+            for p in target {
+                *p = 0;
+            }
+        } else {
+            match mem.registers.display_mode() {
+                0 => self.draw_blank_line(target),
+                1 => {
+                    self.draw(mem, &mut line_cache, line);
+                    for (colour, out) in line_cache.iter().zip(target.chunks_exact_mut(4)) {
+                        let colour = mem.registers.apply_brightness(colour.clone());
+                        out[0] = colour.r;
+                        out[1] = colour.g;
+                        out[2] = colour.b;
+                    }
+                    drawn = true;
+                },
+                2 => {
+                    self.draw_vram(lcdc, &mem.registers, target, line as u32);
+                },
+                3 => panic!("main mem display not implemented yet!"),
+                _ => unreachable!()
+            }
+        }
+
+        if let Some(disp_cap_mode) = mem.registers.display_capture_mode() {
+            // TODO: out
+            match disp_cap_mode {
+                DispCapMode::A(src_a) => match src_a {
+                    DispCapSourceA::Engine => {
+                        if !drawn {
+                            self.draw(mem, &mut line_cache, line);
+                        }
+                        // output
+                    },
+                    DispCapSourceA::_3D => {
+                        // TODO
+                    }
+                },
+                DispCapMode::B(src_b) => match src_b {
+                    DispCapSourceB::VRAM => {
+                        // TODO
+                    },
+                    DispCapSourceB::MainRAM => panic!("main mem capture not implemented yet!"),
+                },
+                DispCapMode::Blend{src_a, src_b, eva, evb} => {
+                    
+                }
+            }
+        }
+    }
+
+    /// Draw a full line for NDS B engine.
+    /// 
+    /// Also applies master brightness.
+    pub fn draw_line_nds_b<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [u8], line: u8) {
+        if mem.registers.in_fblank() {
+            for p in target {
+                *p = 0;
+            }
+        } else {
+            match mem.registers.display_mode() {
+                0 => self.draw_blank_line(target),
+                1 => {
+                    let mut line_cache = vec![Colour::black(); 256];
+                    self.draw(mem, &mut line_cache, line);
+                    for (colour, out) in line_cache.iter().zip(target.chunks_exact_mut(4)) {
+                        let colour = mem.registers.apply_brightness(colour.clone());
+                        out[0] = colour.r;
+                        out[1] = colour.g;
+                        out[2] = colour.b;
+                    }
+                },
+                _ => unreachable!()
+            }
         }
     }
 }
@@ -568,7 +661,8 @@ impl SoftwareRenderer {
 
 // Internal: draw modes
 impl SoftwareRenderer {
-    fn draw<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [u8], line: u8) {
+    // Evaluate 2D backgrounds.
+    fn draw<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [Colour], line: u8) {
         // Gather the backgrounds.
         let bg_data = match self.mode {
             RendererMode::GBA => mem.registers.gba_bg_data_for_mode(),
@@ -583,13 +677,7 @@ impl SoftwareRenderer {
             self.draw_obj_line(mem, &mut obj_line, &mut obj_window, line);
         }
         for x in 0..self.h_res {
-            let dest = x * 4;
-            // Prio 0
-            let colour = self.eval_pixel(mem, obj_line[x], obj_window[x], &bg_data, x as u8, line);
-            let colour = mem.registers.apply_brightness(colour);
-            target[dest] = colour.r;
-            target[dest + 1] = colour.g;
-            target[dest + 2] = colour.b;
+            target[x] = self.eval_pixel(mem, obj_line[x], obj_window[x], &bg_data, x as u8, line);
         }
     }
 
@@ -722,6 +810,32 @@ impl SoftwareRenderer {
                     },
                     _ => Colour(colour)
                 }
+            }
+        }
+    }
+}
+
+// NDS drawing
+impl SoftwareRenderer {
+    /// NDS: For when drawing mode is disabled.
+    fn draw_blank_line(&self, target: &mut [u8]) {
+        for p in target {
+            *p = 0xFF;
+        }
+    }
+
+    /// Draw bitmap from VRAM.
+    fn draw_vram<L: LCDCMem>(&self, mem: &L, registers: &VideoRegisters, target: &mut [u8], line: u32) {
+        let read_offset = line * (self.h_res as u32) * 2;
+        // TODO: what to do if this fails?
+        if let Some(vram) = mem.ref_region(registers.read_vram_block()) {
+            for x in 0..self.h_res {
+                let dest = x * 4;
+                let data = vram.read_halfword(read_offset + (x as u32) * 2);
+                let colour = registers.apply_brightness(Colour::from_555(data));
+                target[dest] = colour.r;
+                target[dest + 1] = colour.g;
+                target[dest + 2] = colour.b;
             }
         }
     }

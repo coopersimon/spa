@@ -7,7 +7,7 @@ use crate::utils::{
     bits::u8
 };
 use crate::common::{
-    videomem::VRAM2D,
+    videomem::{VRAM2D, LCDCMem},
     wram::WRAM
 };
 
@@ -58,14 +58,14 @@ impl ARM9VRAM {
             engine_b_vram
         )
     }
+}
 
-    /// Ref a specific VRAM region for display.
-    pub fn ref_block<'a>(&'a self, region: super::VRAMRegion) -> Option<&'a Box<WRAM>> {
+impl LCDCMem for ARM9VRAM {
+    fn ref_region<'a>(&'a self, region: u16) -> Option<&'a Box<WRAM>> {
         self.lcdc[region as usize].as_ref()
     }
 
-    /// Mutably ref a specific VRAM region for capture.
-    pub fn mut_block<'a>(&'a mut self, region: super::VRAMRegion) -> Option<&'a mut Box<WRAM>> {
+    fn mut_region<'a>(&'a mut self, region: u16) -> Option<&'a mut Box<WRAM>> {
         self.lcdc[region as usize].as_mut()
     }
 }

@@ -10,6 +10,7 @@ use crate::utils::{
     meminterface::MemInterface16
 };
 use crate::common::drawing::background::*;
+use super::dispcap::*;
 
 bitflags! {
     #[derive(Default)]
@@ -277,7 +278,10 @@ pub struct VideoRegisters {
     alpha_coeffs:   u16,
     brightness:     u8,
 
-    master_bright:  MasterBrightness
+    master_bright:  MasterBrightness,
+
+    disp_capture_lo:    DisplayCaptureLo,
+    disp_capture_hi:    DisplayCaptureHi
 }
 
 impl VideoRegisters {
@@ -328,8 +332,13 @@ impl VideoRegisters {
     }
 
     /// VRAM block for display and capture for NDS.
-    pub fn vram_block(&self) -> u16 {
+    pub fn read_vram_block(&self) -> u16 {
         (self.lcd_control_hi & NDSControl::VRAM_BLOCK).bits() >> 2
+    }
+
+    /// VRAM block for display and capture for NDS.
+    pub fn write_vram_block(&self) -> u16 {
+        (self.disp_capture_hi & DisplayCaptureHi::VRAM_DEST).bits()
     }
 
     fn bitmap_frame(&self) -> bool {
@@ -674,7 +683,7 @@ impl VideoRegisters {
         }
     }
 
-    fn get_ext_bg2(&self, large: bool) -> Option<BackgroundData> {
+    fn get_ext_bg2(&self, _large: bool) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
             let ext_data = if self.bg2_control.use_8_bpp() {
                 BackgroundTypeData::ExtBitmapAffine(BitmapAffineBackgroundData{
@@ -933,6 +942,11 @@ impl VideoRegisters {
         mosaic + 1
     }
 
+    // DS Display capture
+    pub fn display_capture_mode(&self) -> Option<DispCapMode> {
+        self.disp_capture_hi.mode(self.disp_capture_lo)
+    }
+
     // DS Brightness
     // TODO: move this?
     pub fn apply_brightness(&self, input: crate::common::drawing::colour::Colour) -> crate::common::drawing::colour::Colour {
@@ -940,9 +954,9 @@ impl VideoRegisters {
             0b00 => input,
             0b01 => {
                 let factor = (self.master_bright & MasterBrightness::FACTOR).bits() as u32;
-                let r_diff = ((255 - (input.r as u32)) * factor) / 16;
-                let g_diff = ((255 - (input.g as u32)) * factor) / 16;
-                let b_diff = ((255 - (input.b as u32)) * factor) / 16;
+                let r_diff = ((0xFF - (input.r as u32)) * factor) / 16;
+                let g_diff = ((0xFF - (input.g as u32)) * factor) / 16;
+                let b_diff = ((0xFF - (input.b as u32)) * factor) / 16;
                 crate::common::drawing::colour::Colour {
                     r: input.r.saturating_add(r_diff as u8),
                     g: input.g.saturating_add(g_diff as u8),
@@ -1014,8 +1028,8 @@ impl MemInterface16 for VideoRegisters {
             0x56..=0x5F => 0,
             0x60 => 0,  // DISP3DCNT
             0x62 => 0,
-            0x64 => 0,  // DISPCAPCNT
-            0x66 => 0,  // DISPCAPCNT
+            0x64 => self.disp_capture_lo.bits(),
+            0x66 => self.disp_capture_hi.bits(),
             0x68 => 0,  // DISP_MMEM_FIFO
             0x6A => 0,  // DISP_MMEM_FIFO
             0x6C => self.master_bright.bits(),
@@ -1027,11 +1041,15 @@ impl MemInterface16 for VideoRegisters {
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
             0x0 => {
-                //println!("LCD lo: {:X}", data);
+                //if data != self.lcd_control.bits() {
+                //    println!("LCD lo: {:X}", data);
+                //}
                 self.lcd_control = LCDControl::from_bits_truncate(data);
             },
             0x2 => {
-                //println!("LCD hi: {:X}", data);
+                //if data != self.lcd_control_hi.bits() {
+                //    println!("LCD hi: {:X}", data);
+                //}
                 self.lcd_control_hi = NDSControl::from_bits_truncate(data);
             },
             0x4 => {},  //LCD_STAT
@@ -1156,8 +1174,8 @@ impl MemInterface16 for VideoRegisters {
             0x56..=0x5F => {},
             0x60 => {},  // DISP3DCNT
             0x62 => {},
-            0x64 => {},  // DISPCAPCNT
-            0x66 => {},  // DISPCAPCNT
+            0x64 => self.disp_capture_lo = DisplayCaptureLo::from_bits_truncate(data),
+            0x66 => self.disp_capture_hi = DisplayCaptureHi::from_bits_truncate(data),
             0x68 => {},  // DISP_MMEM_FIFO
             0x6A => {},  // DISP_MMEM_FIFO
             0x6C => {

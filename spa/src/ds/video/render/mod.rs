@@ -1,12 +1,9 @@
 
 use parking_lot::Mutex;
 use std::sync::Arc;
-use crate::common::{
-    videomem::VideoRegisters,
-    drawing::{SoftwareRenderer, RendererMode}
-};
+use crate::common::drawing::{SoftwareRenderer, RendererMode};
 use super::{
-    memory::{DSVideoMemory, GraphicsPowerControl, VRAMRegion, ARM9VRAM},
+    memory::{DSVideoMemory, GraphicsPowerControl},
     constants::*
 };
 
@@ -32,8 +29,6 @@ pub struct ProceduralRenderer {
 
     upper: RenderTarget,
     lower: RenderTarget,
-
-    engine_a_output: Vec<u8>
 }
 
 impl Renderer for ProceduralRenderer {
@@ -43,8 +38,6 @@ impl Renderer for ProceduralRenderer {
             engine_b:   SoftwareRenderer::new(RendererMode::NDSB),
 
             upper, lower,
-
-            engine_a_output: vec![0; V_RES * H_RES * 4]
         }
     }
 
@@ -61,18 +54,8 @@ impl Renderer for ProceduralRenderer {
                 self.lower.lock()
             };
 
-            match engine_a_mem.registers.display_mode() {
-                0 => self.draw_blank_line(&mut target[start_offset..end_offset]),
-                1 => {
-                    self.engine_a.setup_caches(&mut engine_a_mem);
-                    self.engine_a.draw_line(&engine_a_mem, &mut target[start_offset..end_offset], line as u8)
-                },
-                2 => self.draw_vram(&mem.vram, &engine_a_mem.registers, &mut target[start_offset..end_offset], line as u32),
-                //3 => self.draw_blank_line(&mut target[start_offset..end_offset]),// TODO
-                _ => unreachable!()
-            }
-
-            // TODO: capture
+            self.engine_a.setup_caches(&mut engine_a_mem);
+            self.engine_a.draw_line_nds_a(&engine_a_mem, &mut mem.vram, &mut target[start_offset..end_offset], line as u8);
             engine_a_mem.registers.inc_v_count();
         }
 
@@ -85,14 +68,8 @@ impl Renderer for ProceduralRenderer {
                 self.upper.lock()
             };
 
-            match engine_b_mem.registers.display_mode() {
-                0 => self.draw_blank_line(&mut target[start_offset..end_offset]),
-                1 => {
-                    self.engine_b.setup_caches(&mut engine_b_mem);
-                    self.engine_b.draw_line(&engine_b_mem, &mut target[start_offset..end_offset], line as u8)
-                },
-                _ => unreachable!()
-            }
+            self.engine_b.setup_caches(&mut engine_b_mem);
+            self.engine_b.draw_line_nds_b(&engine_b_mem, &mut target[start_offset..end_offset], line as u8);
             engine_b_mem.registers.inc_v_count();
         }
     }
@@ -109,39 +86,6 @@ impl Renderer for ProceduralRenderer {
 
     fn render_size() -> (usize, usize) {
         (H_RES, V_RES)
-    }
-}
-
-impl ProceduralRenderer {
-    /// For when drawing mode is disabled.
-    fn draw_blank_line(&self, target: &mut [u8]) {
-        for p in target {
-            *p = 0xFF;
-        }
-    }
-
-    // TODO: move to drawing module?
-    /// Draw bitmap from VRAM.
-    pub fn draw_vram(&self, mem: &ARM9VRAM, registers: &VideoRegisters, target: &mut [u8], line: u32) {
-        let read_offset = line * (H_RES as u32) * 2;
-        let region = match registers.vram_block() {
-            0 => VRAMRegion::A,
-            1 => VRAMRegion::B,
-            2 => VRAMRegion::C,
-            3 => VRAMRegion::D,
-            _ => unreachable!(),
-        };
-        // TODO: what to do if this fails?
-        if let Some(vram) = mem.ref_block(region) {
-            for x in 0..H_RES {
-                let dest = x * 4;
-                let data = vram.read_halfword(read_offset + (x as u32) * 2);
-                let colour = registers.apply_brightness(crate::common::drawing::colour::Colour::from_555(data));
-                target[dest] = colour.r;
-                target[dest + 1] = colour.g;
-                target[dest + 2] = colour.b;
-            }
-        }
     }
 }
 
@@ -181,7 +125,7 @@ impl Renderer for DebugTileRenderer {
         }
     }
 
-    fn start_frame(&mut self, mem: &mut DSVideoMemory) {
+    fn start_frame(&mut self, _mem: &mut DSVideoMemory) {
         //println!("Start frame");
     }
 

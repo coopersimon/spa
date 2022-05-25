@@ -1,5 +1,6 @@
 
 use bitflags::bitflags;
+use crate::common::wram::WRAM;
 use crate::utils::bits::{u8, u16};
 
 bitflags! {
@@ -94,12 +95,10 @@ pub trait VRAM2D {
     }
 
     /// Get a bitmap texel, using direct colour.
-    /// Bitmap size is 240x160.
     fn bg_bitmap_texel_15bpp(&self, addr: u32, x: u32, y: u32, width: u32) -> u16 {
         let y_offset = y * width * 2;
         let x_offset = x * 2;
-        let texel_addr = addr + y_offset + x_offset;
-        self.get_bg_halfword(texel_addr)
+        self.get_bg_halfword(addr + y_offset + x_offset)
     }
 
     /// Get a texel for a particular object tile, using 16-colour palette.
@@ -120,4 +119,15 @@ pub trait VRAM2D {
         let x_offset = x as u32;
         self.get_obj_byte(addr + y_offset + x_offset)
     }
+}
+
+/// VRAM for display and capture.
+pub trait LCDCMem {
+    /// Immutably reference a region of VRAM mapped to LCDC.
+    /// Supports A-D.
+    fn ref_region<'a>(&'a self, region: u16) -> Option<&'a Box<WRAM>>;
+
+    /// Immutably reference a region of VRAM mapped to LCDC.
+    /// Supports A-D.
+    fn mut_region<'a>(&'a mut self, region: u16) -> Option<&'a mut Box<WRAM>>;
 }

@@ -42,7 +42,7 @@ impl Renderer for ProceduralRenderer {
         let start_offset = (line as usize) * (H_RES * 4);
         let end_offset = start_offset + (H_RES * 4);
         let mut target = self.target.lock();
-        self.renderer.draw_line(mem, &mut target[start_offset..end_offset], line);
+        self.renderer.draw_line_gba(mem, &mut target[start_offset..end_offset], line);
         mem.registers.inc_v_count();
     }
 
