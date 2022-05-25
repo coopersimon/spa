@@ -174,7 +174,7 @@ impl<R: Renderer> DSVideo<R> {
                 self.v_count_out.store(0, Ordering::Release);
                 self.lcd_status.remove(LCDStatus::VBLANK_FLAG | LCDStatus::HBLANK_FLAG);
                 self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == self.lcd_status.v_count());
-                self.renderer.start_frame();
+                self.renderer.start_frame(&mut self.mem);
                 self.renderer.render_line(&mut self.mem, 0);
                 (Signal::None, self.v_count_irq())
             },
@@ -277,6 +277,10 @@ pub struct ARM7Video {
 impl ARM7Video {
     pub fn v_blank_enabled(&self) -> bool {
         self.lcd_status.contains(LCDStatus::VBLANK_IRQ)
+    }
+
+    pub fn v_count_irq(&self) -> bool {
+        self.lcd_status.contains(LCDStatus::VCOUNT_IRQ) && self.lcd_status.v_count() == self.v_count.load(Ordering::Acquire)
     }
 }
 

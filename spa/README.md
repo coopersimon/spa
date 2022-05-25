@@ -77,7 +77,7 @@ DS:
 - Kirby Super Star: Initialises save data, then shows some screens with incorrect colour. Is it trying to blend stuff here?
 - Mario Kart DS: Blank screen (firmware/save issues)
 - Mario and Luigi: Bowser's Inside Story: Blank screen (firmware/save issues)
-- Mario and Luigi: Partners in Time: Loads up mostly ok with some glitches, menu title is glitched, intro has serious graphical issues
+- Mario and Luigi: Partners in Time: Loads up mostly ok with some glitches, menu title is glitched (3D), intro has serious graphical issues
 - Mario Party DS: Loads up and shows menus OK, needs touchscreen.
 - Metroid Prime Hunters: Aggressive flashing instead of titles. Plays intro video mostly OK (issues with screen swapping). Menu is broken.
 - New Super Mario Bros: Shows titles, looks generally ok, freezes if you leave it too long and when gameplay begins (waiting for 3d?)

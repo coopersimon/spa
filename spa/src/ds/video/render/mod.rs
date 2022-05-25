@@ -19,7 +19,7 @@ pub trait Renderer {
     /// Render a single line.
     fn render_line(&mut self, mem: &mut DSVideoMemory, line: u16);
     /// Start rendering the frame.
-    fn start_frame(&mut self);
+    fn start_frame(&mut self, mem: &mut DSVideoMemory);
     /// Complete rendering the frame.
     fn finish_frame(&mut self);
     /// Get the size of each render target in pixels.
@@ -73,6 +73,7 @@ impl Renderer for ProceduralRenderer {
             }
 
             // TODO: capture
+            engine_a_mem.registers.inc_v_count();
         }
 
         if mem.power_cnt.contains(GraphicsPowerControl::ENABLE_B) {
@@ -92,10 +93,13 @@ impl Renderer for ProceduralRenderer {
                 },
                 _ => unreachable!()
             }
+            engine_b_mem.registers.inc_v_count();
         }
     }
 
-    fn start_frame(&mut self) {
+    fn start_frame(&mut self, mem: &mut DSVideoMemory) {
+        mem.engine_a_mem.lock().registers.reset_v_count();
+        mem.engine_b_mem.lock().registers.reset_v_count();
         //println!("Start frame");
     }
 
@@ -177,7 +181,7 @@ impl Renderer for DebugTileRenderer {
         }
     }
 
-    fn start_frame(&mut self) {
+    fn start_frame(&mut self, mem: &mut DSVideoMemory) {
         //println!("Start frame");
     }
 
