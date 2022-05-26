@@ -947,19 +947,19 @@ impl VideoRegisters {
         (self.disp_capture_hi & DisplayCaptureHi::VRAM_DEST).bits()
     }
 
-    /// Offset for reading VRAM for capture for NDS.
+    /// Offset for reading VRAM for capture for NDS (in pixels).
     pub fn vram_capture_read_offset(&self) -> usize {
         let select = (self.disp_capture_hi & DisplayCaptureHi::READ_OFFSET).bits() >> 10;
         (select as usize) * 0x4000
     }
 
-    /// Offset for writing VRAM from capture for NDS.
+    /// Offset for writing VRAM from capture for NDS (in pixels).
     pub fn vram_capture_write_offset(&self) -> usize {
         let select = (self.disp_capture_hi & DisplayCaptureHi::WRITE_OFFSET).bits() >> 2;
         (select as usize) * 0x4000
     }
 
-    /// Offset for writing VRAM from capture for NDS.
+    /// Size of captured image to write to VRAM.
     pub fn vram_capture_write_size(&self) -> (usize, usize) {
         let select = (self.disp_capture_hi & DisplayCaptureHi::WRITE_SIZE).bits() >> 4;
         match select {

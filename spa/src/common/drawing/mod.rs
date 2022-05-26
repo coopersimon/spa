@@ -125,7 +125,7 @@ impl SoftwareRenderer {
                 1 => {
                     self.draw(mem, &mut line_cache, line);
                     for (colour, out) in line_cache.iter().zip(target.chunks_exact_mut(4)) {
-                        let colour = mem.registers.apply_brightness(colour.clone());
+                        let colour = mem.registers.apply_brightness(*colour);
                         out[0] = colour.r;
                         out[1] = colour.g;
                         out[2] = colour.b;
@@ -136,7 +136,7 @@ impl SoftwareRenderer {
                     let read_offset = (line as usize) * self.h_res;
                     self.draw_from_vram(lcdc, &mem.registers, &mut line_cache, read_offset);
                     for (colour, out) in line_cache.iter().zip(target.chunks_exact_mut(4)) {
-                        let colour = mem.registers.apply_brightness(colour.clone());
+                        let colour = mem.registers.apply_brightness(*colour);
                         out[0] = colour.r;
                         out[1] = colour.g;
                         out[2] = colour.b;
@@ -218,7 +218,7 @@ impl SoftwareRenderer {
                     let mut line_cache = vec![Colour::black(); 256];
                     self.draw(mem, &mut line_cache, line);
                     for (colour, out) in line_cache.iter().zip(target.chunks_exact_mut(4)) {
-                        let colour = mem.registers.apply_brightness(colour.clone());
+                        let colour = mem.registers.apply_brightness(*colour);
                         out[0] = colour.r;
                         out[1] = colour.g;
                         out[2] = colour.b;
@@ -361,13 +361,13 @@ impl SoftwareRenderer {
                         let base = base_tile_num << bmp_1d_addr_shift;
                         let offset_x = index_x as u32;
                         let offset_y = index_y as u32 * source_size.0 as u32;
-                        base + ((offset_x + offset_y) * 2)
+                        (base + offset_x + offset_y) * 2
                     } else {
-                        let base_tile_x = base_tile_num & bmp_2d_mask;
-                        let base_tile_y = base_tile_num & (!bmp_2d_mask);
-                        let target_tile_x = base_tile_x * BMP_MAP_SIZE;                 // In pixels
-                        let target_tile_y = base_tile_y * (BMP_MAP_SIZE * TILE_SIZE);   // In pixels
-                        let base = target_tile_x + target_tile_y;
+                        let base_tile_x = base_tile_num & bmp_2d_mask;      // Tile X
+                        let base_tile_y = base_tile_num & (!bmp_2d_mask);   // Tile Y << (4 or 5)
+                        let target_tile_x = base_tile_x * TILE_SIZE;        // Pixel index of tile
+                        let target_tile_y = base_tile_y * (TILE_SIZE * TILE_SIZE);
+                        let base = target_tile_x + target_tile_y;   // Top-left corner
                         let offset_x = index_x as u32;
                         let offset_y = (index_y as u32) * (bmp_2d_width * TILE_SIZE);
                         (base + offset_x + offset_y) * 2
@@ -877,10 +877,10 @@ impl SoftwareRenderer {
     /// Write capture to VRAM.
     /// 
     /// Read offset is in pixels (16-bit chunks)
-    fn write_to_vram<L: LCDCMem>(&self, mem: &mut L, registers: &VideoRegisters, target: &[Colour], write_offset: usize) {
+    fn write_to_vram<L: LCDCMem>(&self, mem: &mut L, registers: &VideoRegisters, source: &[Colour], write_offset: usize) {
         if let Some(vram) = mem.mut_region(registers.write_vram_block()) {
             let vram_bytes = vram.mut_mem().chunks_exact_mut(2).skip(write_offset);
-            for (colour, data) in target.iter().zip(vram_bytes) {
+            for (colour, data) in source.iter().zip(vram_bytes) {
                 let raw_colour = colour.to_555().to_le_bytes();
                 data[0] = raw_colour[0];
                 data[1] = raw_colour[1] | 0x80; // TODO: alpha channel

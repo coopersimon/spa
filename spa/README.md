@@ -79,7 +79,7 @@ DS:
 - Mario and Luigi: Bowser's Inside Story: Blank screen (firmware/save issues)
 - Mario and Luigi: Partners in Time: Loads up mostly ok with some glitches, menu title is glitched (3D), intro has serious graphical issues
 - Mario Party DS: Loads up and shows menus OK, needs touchscreen.
-- Metroid Prime Hunters: Aggressive flashing instead of titles. Plays intro video mostly OK (issues with screen swapping). Menu is broken.
+- Metroid Prime Hunters: Initial titles are broken. Shows intro video. Menu looks corrupted.
 - New Super Mario Bros: Shows titles, looks generally ok, freezes if you leave it too long and when gameplay begins (waiting for 3d?)
 - Phantom Hourglass: Shows titles then freezes.
 - Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. After intro, in gameplay, it seems to freeze.
