@@ -46,7 +46,7 @@ use power::*;
 use exmem::*;
 
 /// How many cycles the ARM7 should run for before syncing.
-const ARM7_THREAD_SYNC_CYCLES: usize = 100;
+const ARM7_THREAD_SYNC_CYCLES: usize = 500;
 /// How many cycles the ARM9 should run for before syncing.
 const ARM9_THREAD_SYNC_CYCLES: usize = ARM7_THREAD_SYNC_CYCLES * 2;
 
@@ -84,6 +84,7 @@ pub struct DS9MemoryBus<R: Renderer> {
     card:               DSCardIO,
 
     // sync
+    inner_counter:      usize,
     counter:            usize,
     barrier:            Arc<Barrier>,
     frame_sender:       FrameSender<UserInput>,
@@ -124,10 +125,11 @@ impl<R: Renderer> DS9MemoryBus<R> {
             joypad:             Joypad::new(),
             accelerators:       Accelerators::new(),
             dma:                DMA::new(),
-            interrupt_control:  InterruptControl::new(),
+            interrupt_control:  InterruptControl::new("ARM9"),
             ex_mem_control:     ex_mem_control,
             card:               card_9,
             
+            inner_counter:      0,
             counter:            0,
             barrier:            barrier.clone(),
             frame_sender:       frame_sender,
@@ -151,10 +153,11 @@ impl<R: Renderer> DS9MemoryBus<R> {
             spi:                spi,
 
             dma:                ds7DMA::new(),
-            interrupt_control:  InterruptControl::new(),
+            interrupt_control:  InterruptControl::new("ARM7"),
             ex_mem_status:      ex_mem_status,
             card:               card_7,
 
+            inner_counter:      0,
             counter:            0,
             barrier:            barrier,
             input_recv:         input_recv
@@ -394,15 +397,21 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
-        if self.do_clock(cycles) {
+        self.inner_counter += cycles;
+        if self.inner_counter < 4 {
+            return None;
+        }
+
+        if self.do_clock(self.inner_counter) {
             self.frame_end();
         }
         self.do_dma();
+        self.inner_counter = 0;
 
         // Check if CPU is halted.
         if self.halt {
             loop {
-                if self.do_clock(1) {
+                if self.do_clock(4) {
                     self.frame_end();
                 }
                 self.do_dma();
@@ -704,6 +713,7 @@ pub struct DS7MemoryBus {
     ex_mem_status:      ExMemStatus,
     card:               DSCardIO,
 
+    inner_counter:      usize,
     counter:            usize,
     barrier:            Arc<Barrier>,
     input_recv:         Receiver<UserInput>
@@ -803,6 +813,11 @@ impl DS7MemoryBus {
             // H-blank trigger setting on GBA is same as NDS card trigger.
             self.dma.on_hblank();
         }
+        let v_count_irq = if self.video.v_count_irq() {
+            Interrupts::V_COUNTER
+        } else {
+            Interrupts::empty()
+        };
 
         let (timer_irq, _, _) = self.timers.clock(cycles);
         //self.audio.clock(cycles);
@@ -818,6 +833,7 @@ impl DS7MemoryBus {
             Interrupts::from_bits_truncate(timer_irq.into()) |
             self.ipc.get_interrupts() |
             self.card.get_interrupt() |
+            v_count_irq |
             vblank
         );
     }
@@ -837,13 +853,19 @@ impl Mem32 for DS7MemoryBus {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
-        self.do_clock(cycles);
+        self.inner_counter += cycles;
+        if self.inner_counter < 4 {
+            return None;
+        }
+
+        self.do_clock(self.inner_counter);
         self.do_dma();
+        self.inner_counter = 0;
 
         // Check if CPU is halted.
         if self.power_control.halt {
             loop {
-                self.do_clock(1);
+                self.do_clock(4);
                 self.do_dma();
                 if self.check_irq() {
                     self.power_control.halt = false;

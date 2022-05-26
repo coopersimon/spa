@@ -293,16 +293,6 @@ impl DMAChannel {
             0b11 => panic!("invalid src addr mode 3"),
             _ => unreachable!()
         };
-        /*self.current_dst_addr = if self.fifo_mode() {
-            self.current_dst_addr
-        } else {
-            match (self.control & Control::DST_ADDR_MODE).bits() >> 5 {
-                0b00 | 0b11 => self.current_dst_addr.wrapping_add(self.word_size),
-                0b01 => self.current_dst_addr.wrapping_sub(self.word_size),
-                0b10 => self.current_dst_addr,
-                _ => unreachable!()
-            }
-        };*/
         self.current_dst_addr = match (self.control & Control::DST_ADDR_MODE).bits() >> 21 {
             0b00 | 0b11 => self.current_dst_addr.wrapping_add(self.word_size),
             0b01 => self.current_dst_addr.wrapping_sub(self.word_size),
@@ -345,8 +335,8 @@ impl MemInterface32 for DMAChannel {
             0x4 => self.dst_addr = bytes::u32::set_lo(self.dst_addr, data),
             0x6 => self.dst_addr = bytes::u32::set_hi(self.dst_addr, data),
             0x8 => {
-                let control = bytes::u32::set_lo(self.control.bits(), data);
-                self.set_control(control);
+                self.control = Control::from_bits_truncate(bytes::u32::set_lo(self.control.bits(), data));
+                //self.set_control(control);
             },
             0xA => {
                 let control = bytes::u32::set_hi(self.control.bits(), data);
@@ -378,15 +368,14 @@ impl MemInterface32 for DMAChannel {
 impl DMAChannel {
     fn set_control(&mut self, data: u32) {
         let was_enabled = self.control.contains(Control::ENABLE);
-        self.control = Control::from_bits_truncate(data);
-        //println!("SET DMA CTRL: {:X} | len: {:X} | {:X} => {:X}", data, self.control.word_count(), self.src_addr, self.dst_addr);
-        let enabled = self.control.contains(Control::ENABLE);
+        let new_control = Control::from_bits_truncate(data);
+        let enabled = new_control.contains(Control::ENABLE);
+        self.control = new_control;
+        //if enabled != was_enabled {
+        //    self.control = new_control;
+        //    //println!("SET DMA CTRL: {:X} | len: {:X} | {:X} => {:X}", data, self.control.word_count(), self.src_addr, self.dst_addr);
+        //}
         if enabled && !was_enabled {
-            /*self.current_count = if self.fifo_mode() {
-                4
-            } else {
-                self.word_count
-            };*/
             self.current_count = self.control.word_count();
 
             if self.transfer_32bit_word() {
@@ -404,15 +393,14 @@ impl DMAChannel {
     /// Call on completion of DMA transfer.
     fn reset(&mut self) -> Interrupts {
         if self.control.contains(Control::REPEAT) {
-            /*let fifo_mode = self.fifo_mode();
-            self.current_count = if fifo_mode {
-                4
-            } else {
-                self.word_count
-            };*/
             self.current_count = self.control.word_count();
+
             if (self.control & Control::DST_ADDR_MODE).bits() == u32::bits(21, 22) {
-                self.current_dst_addr = self.dst_addr;
+                if self.transfer_32bit_word() {
+                    self.current_dst_addr = self.dst_addr & 0x0FFF_FFFC;
+                } else {
+                    self.current_dst_addr = self.dst_addr & 0x0FFF_FFFE;
+                }
             }
         } else {
             self.control.remove(Control::ENABLE);
@@ -424,8 +412,4 @@ impl DMAChannel {
             Interrupts::empty()
         }
     }
-
-    /*fn fifo_mode(&self) -> bool {
-        self.fifo_special && self.should_start_special()
-    }*/
 }

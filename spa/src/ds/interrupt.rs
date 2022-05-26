@@ -40,14 +40,16 @@ pub struct InterruptControl {
     interrupt_enable:   Interrupts,
     interrupt_req:      Interrupts,
     interrupt_master:   bool,
+    name: String
 }
 
 impl InterruptControl {
-    pub fn new() -> Self {
+    pub fn new(name: &str) -> Self {
         Self {
             interrupt_enable:   Interrupts::default(),
             interrupt_req:      Interrupts::default(),
             interrupt_master:   false,
+            name: name.to_string()
         }
     }
 
@@ -76,7 +78,10 @@ impl MemInterface32 for InterruptControl {
         match addr {
             0x0400_0208 => self.interrupt_master = u32::test_bit(data, 0),
             0x0400_020C => {},
-            0x0400_0210 => self.interrupt_enable = Interrupts::from_bits_truncate(data),
+            0x0400_0210 => {
+                //println!("{} enable: {:X}", self.name, data);
+                self.interrupt_enable = Interrupts::from_bits_truncate(data)
+            },
             0x0400_0214 => self.interrupt_req.remove(Interrupts::from_bits_truncate(data)),
             _ => panic!("interrupt controller: write unreachable address {:X}", addr)
         }
