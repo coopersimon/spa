@@ -22,6 +22,9 @@ impl WRAM {
     pub fn ref_mem<'a>(&'a self) -> &'a [u8] {
         &self.0
     }
+    pub fn mut_mem<'a>(&'a mut self) -> &'a mut [u8] {
+        &mut self.0
+    }
 
     pub fn read_byte(&self, addr: u32) -> u8 {
         self.0[addr as usize]

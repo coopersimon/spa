@@ -31,7 +31,7 @@ pub enum ObjType {
 }
 
 /// A colour in R8G8B8 format.
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct Colour {
     pub r: u8,
     pub g: u8,
@@ -70,6 +70,13 @@ impl Colour {
         Self {
             r: 0, g: 0, b: 0
         }
+    }
+
+    pub fn to_555(self) -> u16 {
+        let r = (self.r >> 3) as u16;
+        let g = (self.g >> 3) as u16;
+        let b = (self.b >> 3) as u16;
+        r | (g << 5) | (b << 10)
     }
 }
 

@@ -112,6 +112,7 @@ impl SoftwareRenderer {
     /// TODO: 3D
     pub fn draw_line_nds_a<V: VRAM2D, L: LCDCMem>(&self, mem: &VideoMemory<V>, lcdc: &mut L, target: &mut [u8], line: u8) {
         let mut drawn = false;
+        // TODO: avoid alloc every time
         let mut line_cache = vec![Colour::black(); 256];
 
         if mem.registers.in_fblank() {
@@ -132,7 +133,14 @@ impl SoftwareRenderer {
                     drawn = true;
                 },
                 2 => {
-                    self.draw_vram(lcdc, &mem.registers, target, line as u32);
+                    let read_offset = (line as usize) * self.h_res;
+                    self.draw_from_vram(lcdc, &mem.registers, &mut line_cache, read_offset);
+                    for (colour, out) in line_cache.iter().zip(target.chunks_exact_mut(4)) {
+                        let colour = mem.registers.apply_brightness(colour.clone());
+                        out[0] = colour.r;
+                        out[1] = colour.g;
+                        out[2] = colour.b;
+                    }
                 },
                 3 => panic!("main mem display not implemented yet!"),
                 _ => unreachable!()
@@ -140,14 +148,18 @@ impl SoftwareRenderer {
         }
 
         if let Some(disp_cap_mode) = mem.registers.display_capture_mode() {
-            // TODO: out
+            let write_size = mem.registers.vram_capture_write_size();
+            if (line as usize) >= write_size.1 {
+                // Outside of writing bounds.
+                return;
+            }
+
             match disp_cap_mode {
                 DispCapMode::A(src_a) => match src_a {
                     DispCapSourceA::Engine => {
                         if !drawn {
                             self.draw(mem, &mut line_cache, line);
                         }
-                        // output
                     },
                     DispCapSourceA::_3D => {
                         // TODO
@@ -155,14 +167,39 @@ impl SoftwareRenderer {
                 },
                 DispCapMode::B(src_b) => match src_b {
                     DispCapSourceB::VRAM => {
-                        // TODO
+                        let read_offset = mem.registers.vram_capture_read_offset() + (line as usize) * self.h_res;
+                        self.draw_from_vram(lcdc, &mem.registers, &mut line_cache, read_offset);
                     },
                     DispCapSourceB::MainRAM => panic!("main mem capture not implemented yet!"),
                 },
                 DispCapMode::Blend{src_a, src_b, eva, evb} => {
-                    
+                    let mut line_cache_b = vec![Colour::black(); 256];
+                    match src_a {
+                        DispCapSourceA::Engine => {
+                            if !drawn {
+                                self.draw(mem, &mut line_cache, line);
+                            }
+                        },
+                        DispCapSourceA::_3D => {
+                            // TODO
+                        }
+                    }
+                    match src_b {
+                        DispCapSourceB::VRAM => {
+                            let read_offset = mem.registers.vram_capture_read_offset() + (line as usize) * self.h_res;
+                            self.draw_from_vram(lcdc, &mem.registers, &mut line_cache_b, read_offset);
+                        },
+                        DispCapSourceB::MainRAM => panic!("main mem capture not implemented yet!"),
+                    }
+                    // Blend.
+                    for (a, b) in line_cache.iter_mut().zip(&line_cache_b) {
+                        *a = apply_alpha_blend(eva, evb, *a, *b);
+                    }
                 }
             }
+
+            let write_offset = mem.registers.vram_capture_write_offset() + (line as usize) * write_size.0;
+            self.write_to_vram(lcdc, &mem.registers, &line_cache[0..write_size.0], write_offset);
         }
     }
 
@@ -825,17 +862,28 @@ impl SoftwareRenderer {
     }
 
     /// Draw bitmap from VRAM.
-    fn draw_vram<L: LCDCMem>(&self, mem: &L, registers: &VideoRegisters, target: &mut [u8], line: u32) {
-        let read_offset = line * (self.h_res as u32) * 2;
-        // TODO: what to do if this fails?
+    /// 
+    /// Read offset is in pixels (16-bit chunks)
+    fn draw_from_vram<L: LCDCMem>(&self, mem: &L, registers: &VideoRegisters, target: &mut [Colour], read_offset: usize) {
         if let Some(vram) = mem.ref_region(registers.read_vram_block()) {
-            for x in 0..self.h_res {
-                let dest = x * 4;
-                let data = vram.read_halfword(read_offset + (x as u32) * 2);
-                let colour = registers.apply_brightness(Colour::from_555(data));
-                target[dest] = colour.r;
-                target[dest + 1] = colour.g;
-                target[dest + 2] = colour.b;
+            let vram_bytes = vram.ref_mem().chunks_exact(2).skip(read_offset);
+            for (out, data) in target.iter_mut().zip(vram_bytes) {
+                let raw_colour = u16::from_le_bytes(data.try_into().unwrap());
+                *out = Colour::from_555(raw_colour);
+            }
+        }
+    }
+
+    /// Write capture to VRAM.
+    /// 
+    /// Read offset is in pixels (16-bit chunks)
+    fn write_to_vram<L: LCDCMem>(&self, mem: &mut L, registers: &VideoRegisters, target: &[Colour], write_offset: usize) {
+        if let Some(vram) = mem.mut_region(registers.write_vram_block()) {
+            let vram_bytes = vram.mut_mem().chunks_exact_mut(2).skip(write_offset);
+            for (colour, data) in target.iter().zip(vram_bytes) {
+                let raw_colour = colour.to_555().to_le_bytes();
+                data[0] = raw_colour[0];
+                data[1] = raw_colour[1] | 0x80; // TODO: alpha channel
             }
         }
     }

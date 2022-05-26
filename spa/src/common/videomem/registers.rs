@@ -336,11 +336,6 @@ impl VideoRegisters {
         (self.lcd_control_hi & NDSControl::VRAM_BLOCK).bits() >> 2
     }
 
-    /// VRAM block for display and capture for NDS.
-    pub fn write_vram_block(&self) -> u16 {
-        (self.disp_capture_hi & DisplayCaptureHi::VRAM_DEST).bits()
-    }
-
     fn bitmap_frame(&self) -> bool {
         self.lcd_control.contains(LCDControl::FRAME_DISPLAY)
     }
@@ -945,6 +940,34 @@ impl VideoRegisters {
     // DS Display capture
     pub fn display_capture_mode(&self) -> Option<DispCapMode> {
         self.disp_capture_hi.mode(self.disp_capture_lo)
+    }
+
+    /// VRAM block for display and capture for NDS.
+    pub fn write_vram_block(&self) -> u16 {
+        (self.disp_capture_hi & DisplayCaptureHi::VRAM_DEST).bits()
+    }
+
+    /// Offset for reading VRAM for capture for NDS.
+    pub fn vram_capture_read_offset(&self) -> usize {
+        let select = (self.disp_capture_hi & DisplayCaptureHi::READ_OFFSET).bits() >> 10;
+        (select as usize) * 0x4000
+    }
+
+    /// Offset for writing VRAM from capture for NDS.
+    pub fn vram_capture_write_offset(&self) -> usize {
+        let select = (self.disp_capture_hi & DisplayCaptureHi::WRITE_OFFSET).bits() >> 2;
+        (select as usize) * 0x4000
+    }
+
+    /// Offset for writing VRAM from capture for NDS.
+    pub fn vram_capture_write_size(&self) -> (usize, usize) {
+        let select = (self.disp_capture_hi & DisplayCaptureHi::WRITE_SIZE).bits() >> 4;
+        match select {
+            0b00 => (128, 128),
+            0b01 => (256, 64),
+            0b10 => (256, 128),
+            _ => (256, 192),
+        }
     }
 
     // DS Brightness
