@@ -829,6 +829,7 @@ impl DS7MemoryBus {
     fn set_input(&mut self, new_input: UserInput) {
         self.joypad.set_all_buttons(new_input.buttons);
         self.ds_joypad.set_all_buttons(new_input.ds_buttons);
+        self.spi.write_tsc_values(new_input.touchscreen);
     }
 }
 

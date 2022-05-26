@@ -101,7 +101,13 @@ impl NDS {
         self.current_input.set_button(button, pressed);
     }
 
-    // TODO: touchpad
+    /// Call with Some((x, y)) when the touchscreen is pressed.
+    /// Coordinates should be between 0.0 and 1.0.
+    /// 
+    /// Call with None when the touchscreen is released.
+    pub fn touchscreen_pressed(&mut self, coords: Option<(f64, f64)>) {
+        self.current_input.set_touchscreen(coords);
+    }
 }
 
 // Debug

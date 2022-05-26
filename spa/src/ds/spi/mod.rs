@@ -46,6 +46,10 @@ impl SPI {
             touchscreen:    Touchscreen::new(),
         }
     }
+
+    pub fn write_tsc_values(&mut self, coords: Option<(f64, f64)>) {
+        self.touchscreen.write_tsc_values(coords);
+    }
 }
 
 impl MemInterface16 for SPI {

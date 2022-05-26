@@ -23,14 +23,16 @@ pub struct UserInput {
     pub buttons:    Buttons,
     pub ds_buttons: DSButtons,
 
-    // TODO: touchpad
+    pub touchscreen:    Option<(f64, f64)>
 }
 
 impl Default for UserInput {
     fn default() -> Self {
         Self {
             buttons:    Buttons::from_bits_truncate(0xFFFF),
-            ds_buttons: DSButtons::from_bits_truncate(0x3)
+            ds_buttons: DSButtons::from_bits_truncate(0x3),
+
+            touchscreen:    None,
         }
     }
 }
@@ -52,5 +54,10 @@ impl UserInput {
             L => self.buttons.set(Buttons::L, !pressed),
             R => self.buttons.set(Buttons::R, !pressed)
         }
+    }
+
+    pub fn set_touchscreen(&mut self, coords: Option<(f64, f64)>) {
+        self.ds_buttons.set(DSButtons::PEN_DOWN, !coords.is_some());
+        self.touchscreen = coords;
     }
 }

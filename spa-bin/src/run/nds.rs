@@ -2,12 +2,12 @@ use spa::ds;
 
 use winit::{
     dpi::{
-        Size, LogicalSize
+        Size, LogicalSize, PhysicalPosition
     },
     event::{
         Event, WindowEvent,
         ElementState,
-        VirtualKeyCode,
+        VirtualKeyCode, MouseButton,
     },
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder
@@ -205,6 +205,8 @@ pub fn run_nds(config: ds::MemoryConfig, mute: bool) {
     let screen_tex_size = render_size.0 * render_size.1 * 4;
     let mut upper_buffer = vec![0_u8; screen_tex_size];
     let mut lower_buffer = vec![0_u8; screen_tex_size];
+
+    let mut coords = None;
     
     event_loop.run(move |event, _, control_flow| {
         match event {
@@ -274,6 +276,31 @@ pub fn run_nds(config: ds::MemoryConfig, mute: bool) {
             } => match w {
                 WindowEvent::CloseRequested => {
                     ::std::process::exit(0);
+                },
+                WindowEvent::CursorMoved {
+                    device_id: _,
+                    position: PhysicalPosition {x, y},
+                    modifiers: _
+                } => {
+                    let y = y / (window.inner_size().height as f64);
+                    if y >= 0.5 {
+                        let x = x / (window.inner_size().width as f64);
+                        let y = (y - 0.5) * 2.0;
+                        coords = Some((x, y));
+                    } else {
+                        coords = None;
+                    }
+                },
+                WindowEvent::MouseInput {
+                    device_id: _,
+                    state,
+                    button: MouseButton::Left,
+                    modifiers: _
+                } => {
+                    match state {
+                        ElementState::Pressed => nds.touchscreen_pressed(coords),
+                        ElementState::Released => nds.touchscreen_pressed(None),
+                    }
                 },
                 WindowEvent::KeyboardInput {
                     device_id: _,

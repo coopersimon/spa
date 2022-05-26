@@ -65,7 +65,7 @@ DS:
 
 ### DS Status of selected games:
 - Animal Crossing Wild World: Blank screen (firmware/save issues)
-- Chrono Trigger: Sets up save RAM, then shows intro video. Needs touchscreen.
+- Chrono Trigger: Sets up save RAM, then shows intro video. Game loads up and runs ok!
 - Dragon Quest IX: Shows intro cards and video. Magenta screen when game begins.
 - Dragon Quest IV: Black screen
 - Dragon Quest V: Black screen
@@ -78,7 +78,7 @@ DS:
 - Mario Kart DS: Blank screen (firmware/save issues)
 - Mario and Luigi: Bowser's Inside Story: Blank screen (firmware/save issues)
 - Mario and Luigi: Partners in Time: Loads up mostly ok with some glitches, menu title is glitched (3D), intro has serious graphical issues
-- Mario Party DS: Loads up and shows menus OK, needs touchscreen.
+- Mario Party DS: Loads up and shows menus OK, shows intro video OK.
 - Metroid Prime Hunters: Initial titles are broken. Shows intro video. Menu looks corrupted.
 - New Super Mario Bros: Shows titles, looks generally ok, freezes if you leave it too long and when gameplay begins (waiting for 3d?)
 - Phantom Hourglass: Shows titles then freezes.
@@ -94,8 +94,8 @@ DS:
 - Audio
 - 3D Video
 - 2D main RAM video mode
-- Engine A video capture & blending
-- Touchscreen
+- Engine A video capture & blending fixes
+- Touchscreen precision
 - Microphone
 - Save RAM
 - Booting via BIOS

@@ -52,7 +52,7 @@ impl Touchscreen {
     /// X and Y should be 0.0 - 1.0
     pub fn write_tsc_values(&mut self, coords: Option<(f64, f64)>) {
         const X_DIFF: f64 = (0xED0 - 0x100) as f64;
-        const Y_DIFF: f64 = (0x0B0 - 0xF20) as f64;
+        const Y_DIFF: f64 = (0xF20 - 0x0B0) as f64;
         if let Some((x, y)) = coords {
             self.x = (x * X_DIFF) as u16;
             self.y = (y * Y_DIFF) as u16;
