@@ -1,7 +1,7 @@
 
-use spa::gba::DebugInterface;
+use spa::DebugInterface;
 
-pub fn debug_mode(mut debug_interface: DebugInterface) {
+pub fn debug_mode<I: Clone>(mut debug_interface: DebugInterface<I>) {
     println!("Debug mode.");
     println!("Enter 'h' for help.");
 
@@ -80,7 +80,7 @@ pub fn debug_mode(mut debug_interface: DebugInterface) {
     }
 }
 
-fn print(s: &str, debug_interface: &mut DebugInterface) {
+fn print<I: Clone>(s: &str, debug_interface: &mut DebugInterface<I>) {
     if let Some(reg) = s.strip_prefix("r") {
         match usize::from_str_radix(reg, 10) {
             Ok(num) => println!("r{}: ${:08X}", num, debug_interface.get_state().regs[num]),
@@ -138,7 +138,7 @@ fn print(s: &str, debug_interface: &mut DebugInterface) {
     }
 }
 
-fn print_all(debug_interface: &mut DebugInterface) {
+fn print_all<I: Clone>(debug_interface: &mut DebugInterface<I>) {
     let state = debug_interface.get_state();
     println!(" 0: {:08X} {:08X} {:08X} {:08X}", state.regs[0], state.regs[1], state.regs[2], state.regs[3]);
     println!(" 4: {:08X} {:08X} {:08X} {:08X}", state.regs[4], state.regs[5], state.regs[6], state.regs[7]);
@@ -162,7 +162,7 @@ fn help() {
 }
 
 // Step the CPU, and add the PC to the stack trace if it calls.
-fn step_and_trace(debug_interface: &mut DebugInterface, _stack_trace: &mut Vec<u32>, print: bool) {
+fn step_and_trace<I: Clone>(debug_interface: &mut DebugInterface<I>, _stack_trace: &mut Vec<u32>, print: bool) {
     let state = debug_interface.get_state();
     let instr = state.pipeline;
     if let Some(_executing) = &instr[2] {

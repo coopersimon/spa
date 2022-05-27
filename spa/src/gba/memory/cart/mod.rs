@@ -8,9 +8,10 @@ use std::{
         Result, Read
     },
     fs::File,
-    convert::TryInto
+    convert::TryInto,
+    path::Path
 };
-use crate::common::{
+use crate::utils::{
     bytes::u16,
     meminterface::MemInterface16
 };
@@ -28,7 +29,7 @@ pub struct GamePak {
 }
 
 impl GamePak {
-    pub fn new(rom_path: String, save_path: Option<String>) -> Result<Self> {
+    pub fn new(rom_path: &Path, save_path: Option<&Path>) -> Result<Self> {
         let mut rom_file = File::open(rom_path)?;
         let mut buffer = Vec::new();
         rom_file.read_to_end(&mut buffer)?;

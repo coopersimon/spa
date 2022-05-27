@@ -1,12 +1,14 @@
 use arm::{
-    Mem32, MemCycleType, ARM7TDMI, ARMCore
+    Mem32, MemCycleType, ARM7TDMI, ARMDriver, ARMCore
 };
 
-use crate::common::{
+use std::path::{PathBuf, Path};
+
+use crate::utils::{
     bytes::u16,
     meminterface::MemInterface8
 };
-use super::super::bios::BIOS;
+use crate::common::bios::BIOS;
 use super::emulated_swi;
 
 const TEST_RAM_SIZE: u32 = 32 * 1024;
@@ -23,10 +25,15 @@ pub struct TestMem {
 }
 
 impl TestMem {
-    pub fn new(bios_path: Option<String>) -> Box<Self> {
+    pub fn new(bios_path: Option<&Path>) -> Box<Self> {
+        let bios = if let Some(path) = bios_path {
+            BIOS::new_from_file(path).unwrap()
+        } else {
+            super::super::construct_bios()
+        };
         Box::new(Self {
             ram: vec![0; TEST_RAM_SIZE as usize],
-            bios: BIOS::new(bios_path).unwrap(),
+            bios: bios,
 
             halted: false,
             bios_i_flags: 3,    // VBLANK | HBLANK
@@ -123,7 +130,7 @@ impl Mem32 for TestMem {
 
 fn run_real_bios(regs: &[u32; 4], swi_call: u8) -> (usize, [u32; 3]) {
     // SETUP
-    let mem = TestMem::new(Some("../spa-bin/gba_bios.bin".to_string()));
+    let mem = TestMem::new(Some(&PathBuf::from("../spa-bin/gba_bios.bin")));
     let mut cpu = ARM7TDMI::new(mem).build();
     cpu.do_branch(0x0800_0000);
     cpu.write_cpsr(arm::CPSR::SVC);
@@ -163,7 +170,7 @@ fn run_real_bios(regs: &[u32; 4], swi_call: u8) -> (usize, [u32; 3]) {
 // Returns the same size block of memory from `mem_out_addr`
 fn run_real_bios_mem(regs: &[u32; 4], mem_write_addr: u32, mem_set: &[u8], mem_out_addr: u32, swi_call: u8) -> (usize, Vec<u8>) {
     // SETUP
-    let mut mem = TestMem::new(Some("../spa-bin/gba_bios.bin".to_string()));
+    let mut mem = TestMem::new(Some(&PathBuf::from("../spa-bin/gba_bios.bin")));
     for (i, data) in mem_set.iter().enumerate() {
         mem.write_byte(mem_write_addr + (i as u32), *data);
     }

@@ -2,7 +2,7 @@
 name = "spa"
 version = "0.1.0"
 authors = ["Simon Cooper <simon.d.cooper@hotmail.co.uk>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,10 +11,14 @@ bitflags = "1.2"
 fixed = "1.12"
 regex = "1"
 crossbeam-channel = "0.5"
+parking_lot = "0.12"
 
 [dependencies.dasp]
 version = "0.11"
 features = ["interpolate", "interpolate-sinc", "ring_buffer", "signal"]
+
+[dependencies.dscrypto]
+path = "../dscrypto"
 
 [dependencies.arm]
 git = "https://github.com/coopersimon/e-arm"

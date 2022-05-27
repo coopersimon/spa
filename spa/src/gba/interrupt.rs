@@ -1,7 +1,7 @@
 /// Interrupt controller.
 
 use bitflags::bitflags;
-use crate::common::{
+use crate::utils::{
     bits::u16,
     meminterface::MemInterface16,
 };
@@ -55,19 +55,19 @@ impl InterruptControl {
 impl MemInterface16 for InterruptControl {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            0x0 => self.interrupt_enable.bits(),
-            0x2 => self.interrupt_req.bits(),
-            0x8 => if self.interrupt_master {1} else {0},
-            0xA => 0,
+            0x0400_0200 => self.interrupt_enable.bits(),
+            0x0400_0202 => self.interrupt_req.bits(),
+            0x0400_0208 => if self.interrupt_master {1} else {0},
+            0x0400_020A => 0,
             _ => panic!("interrupt controller: read unreachable address {:X}", addr)
         }
     }
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0x0 => self.interrupt_enable = Interrupts::from_bits_truncate(data),
-            0x2 => self.interrupt_req.remove(Interrupts::from_bits_truncate(data)),
-            0x8 => self.interrupt_master = u16::test_bit(data, 0),
-            0xA => {},
+            0x0400_0200 => self.interrupt_enable = Interrupts::from_bits_truncate(data),
+            0x0400_0202 => self.interrupt_req.remove(Interrupts::from_bits_truncate(data)),
+            0x0400_0208 => self.interrupt_master = u16::test_bit(data, 0),
+            0x0400_020A => {},
             _ => panic!("interrupt controller: write unreachable address {:X}", addr)
         }
     }

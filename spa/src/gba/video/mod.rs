@@ -1,16 +1,20 @@
 /// GBA video
 
-mod background;
+mod constants;
 mod memory;
 mod render;
 
-use crate::common::meminterface::MemInterface16;
-use crate::gba::{
-    constants::*,
-    interrupt::Interrupts
+use bitflags::bitflags;
+use crate::utils::{
+    meminterface::MemInterface16,
+    bits::u16,
+    bytes
 };
-use memory::VideoMemory;
+use crate::common::videomem::VideoMemory;
+use crate::gba::interrupt::Interrupts;
 pub use render::*;
+use memory::{VRAM, VRAMRenderRef};
+use constants::*;
 
 /// Signal from the video unit.
 pub enum Signal {
@@ -27,24 +31,29 @@ pub enum Signal {
 /// - The renderer (which converts memory to image)
 pub struct GBAVideo<R: Renderer> {
     state:          VideoState,
-
     cycle_count:    usize,
+
+    lcd_status:     LCDStatus,
     v_count:        u8,
 
-    mem:            VideoMemory,
+    vram:           VRAM,
+    mem:            VideoMemory<VRAMRenderRef>,
 
     renderer:       R,
 }
 
 impl<R: Renderer> GBAVideo<R> {
     pub fn new(renderer: R) -> Self {
+        let (vram, render_ref) = VRAM::new();
         Self {
             state:          VideoState::Init,
-
             cycle_count:    0,
+
+            lcd_status:     LCDStatus::default(),
             v_count:        0,
 
-            mem:            VideoMemory::new(),
+            vram:           vram,
+            mem:            VideoMemory::new(render_ref),
 
             renderer:       renderer,
         }
@@ -74,14 +83,14 @@ impl<R: Renderer> GBAVideo<R> {
     }
 }
 
-// Note that IO (register) addresses are from zero -
-// this is due to the mem bus interface.
 impl<R: Renderer> MemInterface16 for GBAVideo<R> {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            0x00..=0x57 => self.mem.registers.read_halfword(addr),
+            0x0400_0004 => self.lcd_status.bits(),
+            0x0400_0006 => self.v_count as u16,
+            0x0400_0000..=0x0400_0057 => self.mem.registers.read_halfword(addr & 0xFF),
             0x0500_0000..=0x05FF_FFFF => self.mem.palette.read_halfword(addr & 0x3FF),
-            0x0600_0000..=0x06FF_FFFF => self.mem.vram.read_halfword(addr & 0x1_FFFF),
+            0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(addr & 0x1_FFFF),
             0x0700_0000..=0x07FF_FFFF => self.mem.oam.read_halfword(addr & 0x3FF),
             _ => panic!("reading invalid video address {:X}", addr)
         }
@@ -89,12 +98,33 @@ impl<R: Renderer> MemInterface16 for GBAVideo<R> {
 
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
-            0x00..=0x57 => self.mem.registers.write_halfword(addr, data),
+            0x0400_0004 => self.set_lcd_status(data),
+            0x0400_0006 => {},
+            0x0400_0000..=0x0400_0057 => self.mem.registers.write_halfword(addr & 0xFF, data),
             0x0500_0000..=0x05FF_FFFF => self.mem.palette.write_halfword(addr & 0x3FF, data),
-            0x0600_0000..=0x06FF_FFFF => self.mem.vram.write_halfword(addr & 0x1_FFFF, data),
+            0x0600_0000..=0x06FF_FFFF => self.vram.write_halfword(addr & 0x1_FFFF, data),
             0x0700_0000..=0x07FF_FFFF => self.mem.oam.write_halfword(addr & 0x3FF, data),
             _ => panic!("writing invalid video address {:X}", addr)
         }
+    }
+}
+
+bitflags! {
+    #[derive(Default)]
+    struct LCDStatus: u16 {
+        const VCOUNT        = u16::bits(8, 15);
+        const VCOUNT_IRQ    = u16::bit(5);
+        const HBLANK_IRQ    = u16::bit(4);
+        const VBLANK_IRQ    = u16::bit(3);
+        const VCOUNT_FLAG   = u16::bit(2);
+        const HBLANK_FLAG   = u16::bit(1);
+        const VBLANK_FLAG   = u16::bit(0);
+    }
+}
+
+impl LCDStatus {
+    fn get_flags(self) -> LCDStatus {
+        self & (LCDStatus::VBLANK_FLAG | LCDStatus::HBLANK_FLAG | LCDStatus::VCOUNT_FLAG)
     }
 }
 
@@ -109,47 +139,79 @@ impl<R: Renderer> GBAVideo<R> {
             StartFrame => {
                 self.state = Drawing;
                 self.v_count = 0;
-                self.mem.registers.set_h_blank(false);
-                self.mem.registers.set_v_blank(false);
-                self.mem.registers.reset_v_count();
-                self.renderer.start_frame();
+                self.lcd_status.remove(LCDStatus::VBLANK_FLAG | LCDStatus::HBLANK_FLAG);
+                self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == bytes::u16::hi(self.lcd_status.bits()));
+                self.renderer.start_frame(&mut self.mem);
                 self.renderer.render_line(&mut self.mem, 0);
-                (Signal::None, self.mem.registers.v_count_irq())
+                (Signal::None, self.v_count_irq())
             },
             BeginDrawing => {
                 self.state = Drawing;
                 self.v_count += 1;
-                self.mem.registers.set_h_blank(false);
-                self.mem.registers.inc_v_count();
+                self.lcd_status.remove(LCDStatus::HBLANK_FLAG);
+                self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == bytes::u16::hi(self.lcd_status.bits()));
                 self.renderer.render_line(&mut self.mem, self.v_count);
-                (Signal::None, self.mem.registers.v_count_irq())
+                (Signal::None, self.v_count_irq())
             },
             EnterHBlank => {
                 self.state = HBlank;
-                self.mem.registers.set_h_blank(true);
-                (Signal::HBlank, self.mem.registers.h_blank_irq())
+                self.lcd_status.insert(LCDStatus::HBLANK_FLAG);
+                (Signal::HBlank, self.h_blank_irq())
             },
             EnterVBlank => {
                 self.state = VBlank;
                 self.v_count += 1;
-                self.mem.registers.set_v_blank(true);
-                self.mem.registers.inc_v_count();
+                self.lcd_status.insert(LCDStatus::VBLANK_FLAG);
+                self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == bytes::u16::hi(self.lcd_status.bits()));
                 self.renderer.finish_frame();
-                (Signal::VBlank, self.mem.registers.v_blank_irq())
+                (Signal::VBlank, self.v_blank_irq())
             }
             EnterVHBlank => {
                 self.state = VHBlank;
-                self.mem.registers.set_h_blank(true);
+                self.lcd_status.insert(LCDStatus::HBLANK_FLAG);
                 (Signal::None, Interrupts::default())
             },
             ExitVHBlank => {
                 self.state = VBlank;
                 self.v_count += 1;
-                self.mem.registers.set_h_blank(false);
-                self.mem.registers.inc_v_count();
-                (Signal::None, self.mem.registers.v_count_irq())
+                self.lcd_status.remove(LCDStatus::HBLANK_FLAG);
+                self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == bytes::u16::hi(self.lcd_status.bits()));
+                (Signal::None, self.v_count_irq())
             },
         }
+    }
+
+    #[inline]
+    fn v_count_irq(&self) -> Interrupts {
+        if self.lcd_status.contains(LCDStatus::VCOUNT_IRQ | LCDStatus::VCOUNT_FLAG) {
+            Interrupts::V_COUNTER
+        } else {
+            Interrupts::empty()
+        }
+    }
+
+    #[inline]
+    fn h_blank_irq(&self) -> Interrupts {
+        if self.lcd_status.contains(LCDStatus::HBLANK_IRQ | LCDStatus::HBLANK_FLAG) {
+            Interrupts::H_BLANK
+        } else {
+            Interrupts::empty()
+        }
+    }
+
+    #[inline]
+    fn v_blank_irq(&self) -> Interrupts {
+        if self.lcd_status.contains(LCDStatus::VBLANK_IRQ | LCDStatus::VBLANK_FLAG) {
+            Interrupts::V_BLANK
+        } else {
+            Interrupts::empty()
+        }
+    }
+
+    fn set_lcd_status(&mut self, data: u16) {
+        let old_flags = self.lcd_status.get_flags();
+        let lcd_status = LCDStatus::from_bits_truncate(data & 0xFFF8);
+        self.lcd_status = lcd_status | old_flags;
     }
 }
 

@@ -1,62 +1,49 @@
 mod memory;
-mod joypad;
-mod timers;
 mod interrupt;
-mod constants;
 mod video;
 mod audio;
+mod input;
 
 use arm::{
-    ARM7TDMI, ARMCore
+    ARM7TDMI, ARMDriver, ARMCore
 };
 use crossbeam_channel::{Receiver, unbounded};
-use memory::{
+
+use crate::common::{
     framecomms::{new_frame_comms, FrameRequester},
+    joypad::Buttons
+};
+#[cfg(feature = "debug")]
+use crate::common::debug::DebugInterface;
+use memory::{
     MemoryBus,
     emulated_swi
 };
+pub use memory::MemoryConfig;
 use audio::{Resampler, SamplePacket};
 use video::Renderer;
-use joypad::Buttons;
-
-#[cfg(feature = "debug")]
-mod debug;
-#[cfg(feature = "debug")]
-pub use debug::DebugInterface;
-
-pub enum Button {
-    A,
-    B,
-    Start,
-    Select,
-    Left,
-    Right,
-    Up,
-    Down,
-    L,
-    R
-}
+pub use input::Button;
 
 type RendererType = video::ProceduralRenderer;
 
 pub struct GBA {
-    frame_receiver: FrameRequester,
+    frame_receiver: FrameRequester<Buttons>,
     audio_channels: Option<(Receiver<SamplePacket>, Receiver<f64>)>,
 
     buttons_pressed: Buttons,
 }
 
 impl GBA {
-    pub fn new(rom_path: String, save_path: Option<String>, bios_path: Option<String>) -> Self {
+    pub fn new(config: MemoryConfig) -> Self {
         let (render_width, render_height) = RendererType::render_size();
-        let (frame_sender, frame_receiver) = new_frame_comms(render_width * render_height * 4);
+        let (frame_sender, frame_receiver) = new_frame_comms(render_width * render_height * 4, 1);
         // The below is a bit dumb but it avoids sending the CPU (which introduces a ton of problems).
         // We have to extract the audio receivers from the CPU and get them in the main thread to use
         //   for the audio handler.
         let (channel_sender, channel_receiver) = unbounded();
         std::thread::Builder::new().name("CPU".to_string()).spawn(move || {
-            let no_bios = bios_path.is_none();
-            let bus = MemoryBus::<RendererType>::new(rom_path, save_path, bios_path, frame_sender).unwrap();
+            let no_bios = config.bios_path.is_none();
+            let bus = MemoryBus::<RendererType>::new(&config, frame_sender).unwrap();
             let mut cpu = new_cpu(bus, no_bios, false);
             let audio_channels = cpu.mut_mem().enable_audio();
             channel_sender.send(audio_channels).unwrap();
@@ -78,7 +65,7 @@ impl GBA {
     /// This should be called at 60fps.
     /// The frame is in the format R8G8B8A8.
     pub fn frame(&mut self, frame: &mut [u8]) {
-        self.frame_receiver.get_frame(frame, self.buttons_pressed);
+        self.frame_receiver.get_frame(&mut [frame], self.buttons_pressed);
     }
 
     pub fn render_size(&mut self) -> (usize, usize) {
@@ -123,16 +110,16 @@ impl GBAAudioHandler {
 #[cfg(feature = "debug")]
 impl GBA {
     /// Make a new debuggable GBA.
-    pub fn new_debug(rom_path: String, save_path: Option<String>, bios_path: Option<String>) -> DebugInterface {
-        use memory::framecomms::debug::new_debug_frame_comms;
+    pub fn new_debug(config: MemoryConfig) -> DebugInterface<Buttons> {
+        use crate::common::framecomms::debug::new_debug_frame_comms;
 
         let (render_width, render_height) = RendererType::render_size();
-        let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4);
-        let (debug_interface, debug_wrapper) = debug::DebugInterface::new(frame_receiver);
+        let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4, 1);
+        let (debug_interface, debug_wrapper) = DebugInterface::new(frame_receiver, Buttons::from_bits_truncate(0xFFFF));
 
         std::thread::Builder::new().name("CPU".to_string()).spawn(move || {
-            let no_bios = bios_path.is_none();
-            let bus = MemoryBus::<RendererType>::new(rom_path, save_path, bios_path, frame_sender).unwrap();
+            let no_bios = config.bios_path.is_none();
+            let bus = MemoryBus::<RendererType>::new(&config, frame_sender).unwrap();
             let cpu = new_cpu(bus, no_bios, false);
             debug_wrapper.run_debug(cpu);
         }).unwrap();

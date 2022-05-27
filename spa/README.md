@@ -1,8 +1,20 @@
 # SPA core
 The core of the emulator.
 
+GBA:
+- Runs generally pretty well.
+- Save games supported.
+- Link cable _NOT_ supported.
+- Experimental JIT support.
+- Experimental no-BIOS support.
+
+DS:
+- Very much in development...
+- Fast boot (skips over BIOS boot procedure).
+
 ## Test list
-Status of selected games:
+
+### GBA Status of selected games:
 - Metroid Fusion: Looks good. Some popping in audio.
 - Metroid Zero Mission: Looks good.
 - Crash Bandicoot XS: Looks good.
@@ -13,7 +25,7 @@ Status of selected games:
     - FFI: Setup is OK, intro seems OK. The overworld looks strange. Everything else seems ok
 - Final Fantasy IV: Looks good.
 - Final Fantasy V: Looks good.
-- Final Fantasy VI: Looks good, title screen palette is wrong.
+- Final Fantasy VI: Looks good.
 - Final Fantasy Tactics Advance: Looks good.
 - Four Swords: Looks OK.
 - Golden Sun: Looks mostly OK.
@@ -42,11 +54,49 @@ Status of selected games:
 - Mario and Luigi Superstar Saga: Mostly OK, GB sounds sometimes don't stop when they should.
 - Scooby Doo: Black screen.
 
-## Known Bugs
+#### Known Bugs
 - GB audio freq clock is incorrect.
 
-## Odd things
+#### Odd things
 - DMA seems to use unaligned addresses in both metroids. It also seems to be very much intentional
     - What is the expected behaviour here?
     - Looks like accesses should just be force-aligned to word or halfword addresses.
 - Loads of unaligned memory accesses.
+
+### DS Status of selected games:
+- Animal Crossing Wild World: (FLASH): Loads up titles, locks up
+- Chrono Trigger: Sets up save RAM, then shows intro video. Game loads up and runs ok!
+- Dragon Quest IX: Shows intro cards and video. Magenta screen when game begins.
+- Dragon Quest IV: Black screen
+- Dragon Quest V: Black screen
+- Dragon Quest VI: Black screen
+- Final Fantasy Tactics A2: Shows a static screen after loading for a bit.
+- Final Fantasy III: Sets up save ram, shows titles, plays intro video, main menu, then black screen when game begins.
+- Final Fantasy IV: Sets up save ram, shows titles, plays intro video, main menu, then black screen when game begins.
+- Hotel Dusk: Room 215: Blank screen.
+- Kirby Super Star: Initialises save data, then shows some screens with incorrect colour. Is it trying to blend stuff here?
+- Mario Kart DS: (FLASH) Loads up menus, works ok, freezes upon 3D appearing
+- Mario and Luigi: Bowser's Inside Story: Blank screen (firmware/save issues)
+- Mario and Luigi: Partners in Time: Loads up mostly ok with some glitches, menu title is glitched (3D), intro has serious graphical issues
+- Mario Party DS: Loads up and shows menus OK, shows intro video OK.
+- Metroid Prime Hunters: Initial titles are broken. Shows intro video. Menu looks corrupted.
+- New Super Mario Bros: Shows titles, looks generally ok, freezes if you leave it too long and when gameplay begins (waiting for 3d?)
+- Phantom Hourglass: Shows titles then freezes.
+- Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. After intro, in gameplay, it seems to freeze.
+- Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
+- Pokemon Diamond: (FLASH) shows initial titles then freezes
+- Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.
+- Super Mario 64 DS: Shows an initial nintendo logo, takes a long time to load before showing pre-menu screen, then freezes.
+- The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)
+- Yoshi's Island DS: Shows titles, intro, menu, pre-gameplay video, and gameplay correctly!
+
+#### NDS TODO
+- Audio
+- 3D Video
+- 2D main RAM video mode
+- Engine A video capture & blending fixes
+- Touchscreen precision
+- Microphone
+- Save RAM
+- Booting via BIOS
+- Performance

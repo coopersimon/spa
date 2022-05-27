@@ -4,7 +4,7 @@ pub mod square2;
 pub mod wave;
 pub mod noise;
 
-use crate::common::{
+use crate::utils::{
     bits::u8,
     bytes::u16
 };
