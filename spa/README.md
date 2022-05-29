@@ -67,7 +67,7 @@ DS:
 - Animal Crossing Wild World: (FLASH): Loads up titles, locks up
 - Chrono Trigger: Sets up save RAM, then shows intro video. Game loads up and runs ok!
 - Dragon Quest IX: Shows intro cards and video. Magenta screen when game begins.
-- Dragon Quest IV: Black screen
+- Dragon Quest IV: Black screen - getting stuck in halt loop
 - Dragon Quest V: Black screen
 - Dragon Quest VI: Black screen
 - Final Fantasy Tactics A2: Shows a static screen after loading for a bit.
@@ -82,7 +82,7 @@ DS:
 - Metroid Prime Hunters: Initial titles are broken. Shows intro video. Menu looks corrupted.
 - New Super Mario Bros: Shows titles, looks generally ok, freezes if you leave it too long and when gameplay begins (waiting for 3d?)
 - Phantom Hourglass: Shows titles then freezes.
-- Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. After intro, in gameplay, it seems to freeze.
+- Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. Gameplay starts up ok, with some graphical glitches on lower screen.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
 - Pokemon Diamond: (FLASH) shows initial titles then freezes
 - Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.

@@ -1,9 +1,12 @@
 /// Real time clock
 
 use bitflags::bitflags;
+use chrono::{
+    Datelike, Timelike, Local
+};
 use crate::utils::{
     meminterface::MemInterface8,
-    bits::u8,
+    bits::u8, bcd::Bcd8,
 };
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -48,27 +51,28 @@ bitflags! {
 pub struct RealTimeClock {
     state:      RTCState,
     transfer:   u8, /// How many bits have been transferred in the current state?
+    write_buf:  u8,
     command:    u8,
 
     status_1:   u8,
     status_2:   u8,
 
-    year:       u8,
-    month:      u8,
-    day:        u8,
-    weekday:    u8,
+    year:       Bcd8,
+    month:      Bcd8,
+    day:        Bcd8,
+    weekday:    Bcd8,
 
-    hour:       u8,
-    minute:     u8,
-    second:     u8,
+    hour:       Bcd8,
+    minute:     Bcd8,
+    second:     Bcd8,
 
-    alarm1_weekday: u8,
-    alarm1_hour:    u8,
-    alarm1_minute:  u8,
+    alarm1_weekday: Bcd8,
+    alarm1_hour:    Bcd8,
+    alarm1_minute:  Bcd8,
 
-    alarm2_weekday: u8,
-    alarm2_hour:    u8,
-    alarm2_minute:  u8,
+    alarm2_weekday: Bcd8,
+    alarm2_hour:    Bcd8,
+    alarm2_minute:  Bcd8,
 
     clock:      u8,
     free:       u8,
@@ -76,30 +80,33 @@ pub struct RealTimeClock {
 
 impl RealTimeClock {
     pub fn new() -> Self {
+        let now = Local::now();
+        let year = now.year() % 100;
         Self {
             state:      RTCState::Idle,
             transfer:   0,
+            write_buf:  0,
             command:    0,
 
             status_1:   0,
             status_2:   0,
 
-            year:       0,
-            month:      0,
-            day:        0,
-            weekday:    0,
+            year:       (year as u8).try_into().unwrap(),
+            month:      (now.month() as u8).try_into().unwrap(),
+            day:        (now.day() as u8).try_into().unwrap(),
+            weekday:    (now.weekday().num_days_from_monday() as u8).try_into().unwrap(),
 
-            hour:       0,
-            minute:     0,
-            second:     0,
+            hour:       (now.hour() as u8).try_into().unwrap(),
+            minute:     (now.minute() as u8).try_into().unwrap(),
+            second:     (now.second() as u8).try_into().unwrap(),
 
-            alarm1_weekday: 0,
-            alarm1_hour:    0,
-            alarm1_minute:  0,
+            alarm1_weekday: Bcd8::default(),
+            alarm1_hour:    Bcd8::default(),
+            alarm1_minute:  Bcd8::default(),
 
-            alarm2_weekday: 0,
-            alarm2_hour:    0,
-            alarm2_minute:  0,
+            alarm2_weekday: Bcd8::default(),
+            alarm2_hour:    Bcd8::default(),
+            alarm2_minute:  Bcd8::default(),
 
             clock:      0,
             free:       0,
@@ -135,19 +142,19 @@ impl RealTimeClock {
         match self.state {
             StatusReg1 => self.status_1,
             StatusReg2 => self.status_2,
-            DateTime(7) => self.year,
-            DateTime(6) => self.month,
-            DateTime(5) => self.day,
-            DateTime(4) => self.weekday,
-            DateTime(3) => self.hour,
-            DateTime(2) => self.minute,
-            DateTime(1) => self.second,
-            Int1(3) => self.alarm1_weekday,
-            Int1(2) => self.alarm1_hour,
-            Int1(1) => self.alarm1_minute,
-            Int2(3) => self.alarm2_weekday,
-            Int2(2) => self.alarm2_hour,
-            Int2(1) => self.alarm2_minute,
+            DateTime(7) => self.year.into(),
+            DateTime(6) => self.month.into(),
+            DateTime(5) => self.day.into(),
+            DateTime(4) => self.weekday.into(),
+            DateTime(3) => self.hour.into(),
+            DateTime(2) => self.minute.into(),
+            DateTime(1) => self.second.into(),
+            Int1(3) => self.alarm1_weekday.into(),
+            Int1(2) => self.alarm1_hour.into(),
+            Int1(1) => self.alarm1_minute.into(),
+            Int2(3) => self.alarm2_weekday.into(),
+            Int2(2) => self.alarm2_hour.into(),
+            Int2(1) => self.alarm2_minute.into(),
             ClockAdjust => self.clock,
             Free => self.free,
             _ => panic!("reading bit from RTC in unsupported state {:?}", self.state),
@@ -156,29 +163,38 @@ impl RealTimeClock {
 
     /// Write a bit to the register specified by state.
     /// Data is written LSB first.
-    fn write_bit(&mut self, state: RTCState, data: u8) {
+    /// 
+    /// Data is writted into a buffer and needs to be
+    /// written back on completion.
+    fn write_bit(&mut self, data: u8) {
         let bit = (data & 1) << 7;
+        self.write_buf = (self.write_buf >> 1) | bit;
+    }
+
+    /// Write back
+    fn writeback_buffer(&mut self, state: RTCState) {
         use RTCState::*;
         match state {
-            StatusReg1 => self.status_1 = (self.status_1 >> 1) | bit,
-            StatusReg2 => self.status_2 = (self.status_2 >> 1) | bit,
-            DateTime(7) => self.year = (self.year >> 1) | bit,
-            DateTime(6) => self.month = (self.month >> 1) | bit,
-            DateTime(5) => self.day = (self.day >> 1) | bit,
-            DateTime(4) => self.weekday = (self.weekday >> 1) | bit,
-            DateTime(3) => self.hour = (self.hour >> 1) | bit,
-            DateTime(2) => self.minute = (self.minute >> 1) | bit,
-            DateTime(1) => self.second = (self.second >> 1) | bit,
-            Int1(3) => self.alarm1_weekday = (self.alarm1_weekday >> 1) | bit,
-            Int1(2) => self.alarm1_hour = (self.alarm1_hour >> 1) | bit,
-            Int1(1) => self.alarm1_minute = (self.alarm1_minute >> 1) | bit,
-            Int2(3) => self.alarm2_weekday = (self.alarm2_weekday >> 1) | bit,
-            Int2(2) => self.alarm2_hour = (self.alarm2_hour >> 1) | bit,
-            Int2(1) => self.alarm2_minute = (self.alarm2_minute >> 1) | bit,
-            ClockAdjust => self.clock = (self.clock >> 1) | bit,
-            Free => self.free = (self.free >> 1) | bit,
+            StatusReg1 => self.status_1 = self.write_buf,
+            StatusReg2 => self.status_2 = self.write_buf,
+            DateTime(7) => self.year = self.write_buf.try_into().unwrap(),
+            DateTime(6) => self.month = self.write_buf.try_into().unwrap(),
+            DateTime(5) => self.day = self.write_buf.try_into().unwrap(),
+            DateTime(4) => self.weekday = self.write_buf.try_into().unwrap(),
+            DateTime(3) => self.hour = self.write_buf.try_into().unwrap(),
+            DateTime(2) => self.minute = self.write_buf.try_into().unwrap(),
+            DateTime(1) => self.second = self.write_buf.try_into().unwrap(),
+            Int1(3) => self.alarm1_weekday = self.write_buf.try_into().unwrap(),
+            Int1(2) => self.alarm1_hour = self.write_buf.try_into().unwrap(),
+            Int1(1) => self.alarm1_minute = self.write_buf.try_into().unwrap(),
+            Int2(3) => self.alarm2_weekday = self.write_buf.try_into().unwrap(),
+            Int2(2) => self.alarm2_hour = self.write_buf.try_into().unwrap(),
+            Int2(1) => self.alarm2_minute = self.write_buf.try_into().unwrap(),
+            ClockAdjust => self.clock = self.write_buf,
+            Free => self.free = self.write_buf,
             _ => panic!("writing bit to RTC in unsupported state"),
         }
+        self.write_buf = 0;
     }
 
     /// Call when finished reading or writing a parameter byte.
@@ -239,9 +255,10 @@ impl MemInterface8 for RealTimeClock {
                 }
             },
             state => if !u8::test_bit(data, 1) && u8::test_bit(data, 4) { // SCK=Low, WRITE
-                self.write_bit(state, data);
+                self.write_bit(data);
                 self.transfer -= 1;
                 if self.transfer == 0 {
+                    self.writeback_buffer(state);
                     self.finish_param();
                 }
             },
