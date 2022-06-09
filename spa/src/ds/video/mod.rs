@@ -5,9 +5,11 @@ mod render;
 mod memory;
 
 use bitflags::bitflags;
+use parking_lot::Mutex;
 use std::sync::{
     Arc, atomic::{AtomicU16, Ordering}
 };
+use crate::FrameBuffer;
 use crate::utils::{
     meminterface::MemInterface16,
     bits::u16,
@@ -48,8 +50,9 @@ pub struct DSVideo<R: Renderer> {
 }
 
 impl<R: Renderer> DSVideo<R> {
-    pub fn new(renderer: R) -> (Self, ARM7Video, ARM7VRAM) {
-        let (arm9_mem, arm7_vram) = DSVideoMemory::new();
+    pub fn new(upper: Arc<Mutex<FrameBuffer>>, lower: Arc<Mutex<FrameBuffer>>) -> (Self, ARM7Video, ARM7VRAM) {
+        let (arm9_mem, arm7_vram, renderer_vram) = DSVideoMemory::new();
+        let renderer = R::new(upper, lower, renderer_vram);
         let v_count = Arc::new(AtomicU16::new(0));
         (Self {
             state:          VideoState::Init,
@@ -99,7 +102,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
             0x0400_0004 => self.lcd_status.bits(),
             0x0400_0006 => self.v_count as u16,
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.read_halfword(addr & 0xFF),
-            0x0400_0304 => self.mem.power_cnt.bits(),
+            0x0400_0304 => self.mem.power_cnt.load(Ordering::Acquire),
             _ => panic!("reading invalid video address {:X}", addr)
         }
     }
@@ -109,7 +112,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
             0x0400_0004 => self.set_lcd_status(data),
             0x0400_0006 => self.v_count = data,
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.write_halfword(addr & 0xFF, data),
-            0x0400_0304 => self.mem.power_cnt = GraphicsPowerControl::from_bits_truncate(data),
+            0x0400_0304 => self.mem.power_cnt.store(data, Ordering::Release),
             _ => panic!("writing invalid video address {:X}", addr)
         }
     }
@@ -118,7 +121,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
         match addr {
             0x0400_0004 => bytes::u32::make(self.v_count, self.lcd_status.bits()),
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.read_word(addr & 0xFF),
-            0x0400_0304 => bytes::u32::make(0, self.mem.power_cnt.bits()),
+            0x0400_0304 => bytes::u32::make(0, self.mem.power_cnt.load(Ordering::Acquire)),
             _ => panic!("reading invalid video address {:X}", addr)
         }
     }
@@ -130,7 +133,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
                 self.v_count = bytes::u32::hi(data);
             },
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.write_word(addr & 0xFF, data),
-            0x0400_0304 => self.mem.power_cnt = GraphicsPowerControl::from_bits_truncate(bytes::u32::lo(data)),
+            0x0400_0304 => self.mem.power_cnt.store(bytes::u32::lo(data), Ordering::Release),
             _ => panic!("writing invalid video address {:X}", addr)
         }
     }
@@ -174,8 +177,8 @@ impl<R: Renderer> DSVideo<R> {
                 self.v_count_out.store(0, Ordering::Release);
                 self.lcd_status.remove(LCDStatus::VBLANK_FLAG | LCDStatus::HBLANK_FLAG);
                 self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == self.lcd_status.v_count());
-                self.renderer.start_frame(&mut self.mem);
-                self.renderer.render_line(&mut self.mem, 0);
+                self.renderer.start_frame();
+                self.renderer.render_line(0);
                 (Signal::None, self.v_count_irq())
             },
             BeginDrawing => {
@@ -184,7 +187,7 @@ impl<R: Renderer> DSVideo<R> {
                 self.v_count_out.fetch_add(1, Ordering::AcqRel);
                 self.lcd_status.remove(LCDStatus::HBLANK_FLAG);
                 self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == self.lcd_status.v_count());
-                self.renderer.render_line(&mut self.mem, self.v_count);
+                self.renderer.render_line(self.v_count);
                 (Signal::None, self.v_count_irq())
             },
             EnterHBlank => {

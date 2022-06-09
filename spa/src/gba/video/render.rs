@@ -4,7 +4,9 @@ use parking_lot::Mutex;
 use std::sync::Arc;
 use super::memory::VRAMRenderRef;
 use super::constants::*;
-use crate::common::drawing::{SoftwareRenderer, RendererMode};
+use crate::common::drawing::{
+    SoftwareRenderer, RendererMode, colour::Colour
+};
 use crate::common::videomem::VideoMemory;
 
 pub type RenderTarget = Arc<Mutex<Box<[u8]>>>;
@@ -42,7 +44,23 @@ impl Renderer for ProceduralRenderer {
         let start_offset = (line as usize) * (H_RES * 4);
         let end_offset = start_offset + (H_RES * 4);
         let mut target = self.target.lock();
-        self.renderer.draw_line_gba(mem, &mut target[start_offset..end_offset], line);
+
+        {
+            let target = &mut target[start_offset..end_offset];
+            if mem.registers.in_fblank() {
+                self.renderer.draw_blank_line(target);
+            } else {
+                // TODO: don't re-alloc every time
+                let mut line_cache = vec![Colour::black(); 240];
+                self.renderer.draw(mem, &mut line_cache, line);
+                for (colour, out) in line_cache.iter().zip(target.chunks_exact_mut(4)) {
+                    out[0] = colour.r;
+                    out[1] = colour.g;
+                    out[2] = colour.b;
+                }
+            }
+        }
+
         mem.registers.inc_v_count();
     }
 

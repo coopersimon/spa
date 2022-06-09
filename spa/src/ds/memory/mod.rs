@@ -97,7 +97,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
         let (ds9_ipc, ds7_ipc) = IPC::new();
         let main_ram = MainRAM::new();
 
-        let (arm9_video, arm7_video, arm7_vram) = DSVideo::new(R::new(frame_sender.get_frame_buffer(0), frame_sender.get_frame_buffer(1)));
+        let (arm9_video, arm7_video, arm7_vram) = DSVideo::new(frame_sender.get_frame_buffer(0), frame_sender.get_frame_buffer(1));
 
         let arm9_bios = BIOS::new_from_file(config.ds9_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
         let arm7_bios = BIOS::new_from_file(config.ds7_bios_path.as_ref().map(|p| p.as_path()).unwrap()).unwrap();
@@ -200,12 +200,12 @@ impl<R: Renderer> DS9MemoryBus<R> {
         // Language:
         self.main_ram.write_halfword(0x3F_FCE4, 0xEE_41);
         // Touchscreen calibration:
-        self.main_ram.write_halfword(0x3F_FCD8, 0x100);   // ADC.X1
-        self.main_ram.write_halfword(0x3F_FCDA, 0x0B0);   // ADC.Y1
-        self.main_ram.write_halfword(0x3F_FCDE, 0xED0);   // ADC.X2
-        self.main_ram.write_halfword(0x3F_FCE0, 0xF20);   // ADC.Y2
-        self.main_ram.write_byte(0x3F_FCDC, 1);   // SCR.X1
-        self.main_ram.write_byte(0x3F_FCDD, 1);   // SCR.Y1
+        self.main_ram.write_halfword(0x3F_FCD8, 0);   // ADC.X1
+        self.main_ram.write_halfword(0x3F_FCDA, 0);   // ADC.Y1
+        self.main_ram.write_halfword(0x3F_FCDE, 0xFF0);   // ADC.X2
+        self.main_ram.write_halfword(0x3F_FCE0, 0xBF0);   // ADC.Y2
+        self.main_ram.write_byte(0x3F_FCDC, 0);   // SCR.X1
+        self.main_ram.write_byte(0x3F_FCDD, 0);   // SCR.Y1
         self.main_ram.write_byte(0x3F_FCE2, 255);   // SCR.X2
         self.main_ram.write_byte(0x3F_FCE3, 191);   // SCR.Y2
     }

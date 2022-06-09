@@ -3,15 +3,18 @@ mod control;
 
 use bitflags::bitflags;
 use parking_lot::{Mutex, MutexGuard};
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicU16, Ordering},
+    Arc
+};
 use crate::utils::{
     meminterface::MemInterface16,
     bits::{u8, u16}
 };
 use crate::common::wram::WRAM;
 use crate::common::videomem::VideoMemory;
-use vram::{ARM7VRAMSlots, EngineAVRAM, EngineBVRAM, VRAMSlot};
-pub use vram::{ARM9VRAM, ARM7VRAM};
+use vram::{ARM7VRAMSlots, VRAMSlot};
+pub use vram::{ARM9VRAM, ARM7VRAM, EngineAVRAM, EngineBVRAM};
 use control::*;
 
 bitflags! {
@@ -79,10 +82,10 @@ impl VRAMControlModule {
 /// 
 /// Acts as the interface between ARM9 and PPU/GPU.
 pub struct DSVideoMemory {
-    pub vram:      ARM9VRAM,
+    pub lcdc_vram:  Arc<Mutex<ARM9VRAM>>,
 
-    mem_control:   [VRAMControlModule; 9],
-    pub power_cnt: GraphicsPowerControl,
+    mem_control:    [VRAMControlModule; 9],
+    pub power_cnt:  Arc<AtomicU16>, // GraphicsPowerControl
 
     arm7_mem:           Arc<Mutex<ARM7VRAMSlots>>,
     pub engine_a_mem:   Arc<Mutex<VideoMemory<EngineAVRAM>>>,
@@ -102,11 +105,17 @@ pub struct DSVideoMemory {
 }
 
 impl DSVideoMemory {
-    pub fn new() -> (Self, ARM7VRAM) {
+    pub fn new() -> (Self, ARM7VRAM, RendererVRAM) {
         let (arm9_vram, arm7_vram, eng_a_vram, eng_b_vram) = ARM9VRAM::new();
 
+        let lcdc_vram = Arc::new(Mutex::new(arm9_vram));
+        let engine_a_mem = Arc::new(Mutex::new(VideoMemory::new(eng_a_vram)));
+        let engine_b_mem = Arc::new(Mutex::new(VideoMemory::new(eng_b_vram)));
+
+        let power_cnt = Arc::new(AtomicU16::new(0));
+
         (Self {
-            vram:           arm9_vram,
+            lcdc_vram: lcdc_vram.clone(),
 
             mem_control:    [
                 VRAMControlModule::new(Slot::LCDC(VRAMRegion::A)),
@@ -119,11 +128,11 @@ impl DSVideoMemory {
                 VRAMControlModule::new(Slot::LCDC(VRAMRegion::H)),
                 VRAMControlModule::new(Slot::LCDC(VRAMRegion::I)),
             ],
-            power_cnt:  GraphicsPowerControl::default(),
+            power_cnt:  power_cnt.clone(),
 
-            arm7_mem:       arm7_vram.mem.clone(),
-            engine_a_mem:   Arc::new(Mutex::new(VideoMemory::new(eng_a_vram))),
-            engine_b_mem:   Arc::new(Mutex::new(VideoMemory::new(eng_b_vram))),
+            arm7_mem:     arm7_vram.mem.clone(),
+            engine_a_mem: engine_a_mem.clone(),
+            engine_b_mem: engine_b_mem.clone(),
 
             tex_0:  None,
             tex_1:  None,
@@ -134,7 +143,9 @@ impl DSVideoMemory {
             tex_palette_1:  None,
             tex_palette_4:  None,
             tex_palette_5:  None,
-        }, arm7_vram)
+        }, arm7_vram, RendererVRAM {
+            lcdc_vram, power_cnt, engine_a_mem, engine_b_mem
+        })
     }
 }
 
@@ -160,7 +171,7 @@ impl DSVideoMemory {
         if prev_mem.is_some() {
             // There was already something in the slot.
             let old = self.lookup_at_slot(to_slot).unwrap();
-            self.vram.lcdc[old] = prev_mem;
+            self.lcdc_vram.lock().lcdc[old] = prev_mem;
             self.mem_control[old].slot = Slot::LCDC(old.try_into().unwrap());
             //println!("writeback {:?} | => {:?}", old, self.mem_control[old].slot);
         }
@@ -202,7 +213,8 @@ impl DSVideoMemory {
                 engine_b.vram.obj_slot.as_mut().map(|v| v.read_halfword(addr & v.mask()))
             },
             _ => {
-                let (vram, offset) = self.ref_lcdc_vram(addr);
+                let mut lcdc = self.lcdc_vram.lock();
+                let (vram, offset) = lcdc.mut_lcdc(addr);
                 vram.map(|v| v.read_halfword(addr - offset))
             }
         }).unwrap_or(0)
@@ -233,7 +245,8 @@ impl DSVideoMemory {
                 engine_b.vram.obj_slot.as_mut().map(|v| v.write_halfword(addr & v.mask(), data));
             },
             _ => {
-                let (vram, offset) = self.ref_lcdc_vram(addr);
+                let mut lcdc = self.lcdc_vram.lock();
+                let (vram, offset) = lcdc.mut_lcdc(addr);
                 vram.map(|v| v.write_halfword(addr - offset, data));
             }
         }
@@ -265,7 +278,8 @@ impl DSVideoMemory {
                 engine_b.vram.obj_slot.as_mut().map(|v| v.read_word(addr & v.mask()))
             },
             _ => {
-                let (vram, offset) = self.ref_lcdc_vram(addr);
+                let mut lcdc = self.lcdc_vram.lock();
+                let (vram, offset) = lcdc.mut_lcdc(addr);
                 vram.map(|v| v.read_word(addr - offset))
             }
         }).unwrap_or(0)
@@ -296,7 +310,8 @@ impl DSVideoMemory {
                 engine_b.vram.obj_slot.as_mut().map(|v| v.write_word(addr & v.mask(), data));
             },
             _ => {
-                let (vram, offset) = self.ref_lcdc_vram(addr);
+                let mut lcdc = self.lcdc_vram.lock();
+                let (vram, offset) = lcdc.mut_lcdc(addr);
                 vram.map(|v| v.write_word(addr - offset, data));
             }
         }
@@ -406,7 +421,10 @@ impl DSVideoMemory {
 impl DSVideoMemory {
     fn swap_mem(&mut self, from_slot: Slot, new: Option<Box<WRAM>>) -> Option<Box<WRAM>> {
         match from_slot {
-            Slot::LCDC(lcdc) => std::mem::replace(&mut self.vram.lcdc[lcdc as usize], new),
+            Slot::LCDC(lcdc) => {
+                let mut vram = self.lcdc_vram.lock();
+                std::mem::replace(&mut vram.lcdc[lcdc as usize], new)
+            },
             Slot::ARM7(arm7) => match arm7 {
                 ARM7::Lo => std::mem::replace(&mut self.arm7_mem.lock().c, new),
                 ARM7::Hi => std::mem::replace(&mut self.arm7_mem.lock().d, new),
@@ -489,20 +507,18 @@ impl DSVideoMemory {
         }
         None
     }
+}
 
-    /// Get a reference to the relevant lcdc memory region.
-    fn ref_lcdc_vram<'a>(&'a mut self, addr: u32) -> (Option<&'a mut Box<WRAM>>, u32) {
-        match addr {
-            0x0680_0000..=0x0681_FFFF => (self.vram.lcdc[VRAMRegion::A as usize].as_mut(), 0x0680_0000),
-            0x0682_0000..=0x0683_FFFF => (self.vram.lcdc[VRAMRegion::B as usize].as_mut(), 0x0682_0000),
-            0x0684_0000..=0x0685_FFFF => (self.vram.lcdc[VRAMRegion::C as usize].as_mut(), 0x0684_0000),
-            0x0686_0000..=0x0687_FFFF => (self.vram.lcdc[VRAMRegion::D as usize].as_mut(), 0x0686_0000),
-            0x0688_0000..=0x0688_FFFF => (self.vram.lcdc[VRAMRegion::E as usize].as_mut(), 0x0688_0000),
-            0x0689_0000..=0x0689_3FFF => (self.vram.lcdc[VRAMRegion::F as usize].as_mut(), 0x0689_0000),
-            0x0689_4000..=0x0689_7FFF => (self.vram.lcdc[VRAMRegion::G as usize].as_mut(), 0x0689_4000),
-            0x0689_8000..=0x0689_FFFF => (self.vram.lcdc[VRAMRegion::H as usize].as_mut(), 0x0689_8000),
-            0x068A_0000..=0x068A_3FFF => (self.vram.lcdc[VRAMRegion::I as usize].as_mut(), 0x068A_0000),
-            _ => panic!("accessing LCDC image"),
-        }
+/// Renderer-side access to VRAM.
+pub struct RendererVRAM {
+    pub lcdc_vram:      Arc<Mutex<ARM9VRAM>>,
+    pub power_cnt:      Arc<AtomicU16>, // GraphicsPowerControl
+    pub engine_a_mem:   Arc<Mutex<VideoMemory<EngineAVRAM>>>,
+    pub engine_b_mem:   Arc<Mutex<VideoMemory<EngineBVRAM>>>,
+}
+
+impl RendererVRAM {
+    pub fn read_power_cnt(&self) -> GraphicsPowerControl {
+        GraphicsPowerControl::from_bits_truncate(self.power_cnt.load(Ordering::Acquire))
     }
 }

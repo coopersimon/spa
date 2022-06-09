@@ -1,6 +1,5 @@
 
 use bitflags::bitflags;
-use crate::common::wram::WRAM;
 use crate::utils::bits::{u8, u16};
 
 bitflags! {
@@ -119,15 +118,4 @@ pub trait VRAM2D {
         let x_offset = x as u32;
         self.get_obj_byte(addr + y_offset + x_offset)
     }
-}
-
-/// VRAM for display and capture.
-pub trait LCDCMem {
-    /// Immutably reference a region of VRAM mapped to LCDC.
-    /// Supports A-D.
-    fn ref_region<'a>(&'a self, region: u16) -> Option<&'a Box<WRAM>>;
-
-    /// Immutably reference a region of VRAM mapped to LCDC.
-    /// Supports A-D.
-    fn mut_region<'a>(&'a mut self, region: u16) -> Option<&'a mut Box<WRAM>>;
 }

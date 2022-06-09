@@ -7,9 +7,10 @@ use crate::utils::{
     bits::u8
 };
 use crate::common::{
-    videomem::{VRAM2D, LCDCMem},
+    videomem::VRAM2D,
     wram::WRAM
 };
+use super::VRAMRegion;
 
 bitflags!{
     #[derive(Default)]
@@ -58,14 +59,32 @@ impl ARM9VRAM {
             engine_b_vram
         )
     }
-}
 
-impl LCDCMem for ARM9VRAM {
-    fn ref_region<'a>(&'a self, region: u16) -> Option<&'a Box<WRAM>> {
+    /// Get a mutable reference to the relevant lcdc memory region.
+    pub fn mut_lcdc<'a>(&'a mut self, addr: u32) -> (Option<&'a mut Box<WRAM>>, u32) {
+        match addr {
+            0x0680_0000..=0x0681_FFFF => (self.lcdc[VRAMRegion::A as usize].as_mut(), 0x0680_0000),
+            0x0682_0000..=0x0683_FFFF => (self.lcdc[VRAMRegion::B as usize].as_mut(), 0x0682_0000),
+            0x0684_0000..=0x0685_FFFF => (self.lcdc[VRAMRegion::C as usize].as_mut(), 0x0684_0000),
+            0x0686_0000..=0x0687_FFFF => (self.lcdc[VRAMRegion::D as usize].as_mut(), 0x0686_0000),
+            0x0688_0000..=0x0688_FFFF => (self.lcdc[VRAMRegion::E as usize].as_mut(), 0x0688_0000),
+            0x0689_0000..=0x0689_3FFF => (self.lcdc[VRAMRegion::F as usize].as_mut(), 0x0689_0000),
+            0x0689_4000..=0x0689_7FFF => (self.lcdc[VRAMRegion::G as usize].as_mut(), 0x0689_4000),
+            0x0689_8000..=0x0689_FFFF => (self.lcdc[VRAMRegion::H as usize].as_mut(), 0x0689_8000),
+            0x068A_0000..=0x068A_3FFF => (self.lcdc[VRAMRegion::I as usize].as_mut(), 0x068A_0000),
+            _ => panic!("accessing LCDC image"),
+        }
+    }
+
+    /// Immutably reference a region of VRAM mapped to LCDC.
+    /// Supports A-D.
+    pub fn ref_region<'a>(&'a self, region: u16) -> Option<&'a Box<WRAM>> {
         self.lcdc[region as usize].as_ref()
     }
 
-    fn mut_region<'a>(&'a mut self, region: u16) -> Option<&'a mut Box<WRAM>> {
+    /// Immutably reference a region of VRAM mapped to LCDC.
+    /// Supports A-D.
+    pub fn mut_region<'a>(&'a mut self, region: u16) -> Option<&'a mut Box<WRAM>> {
         self.lcdc[region as usize].as_mut()
     }
 }

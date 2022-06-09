@@ -8,7 +8,7 @@ mod dispcap;
 pub use oam::OAM;
 pub use palette::PaletteRAM;
 pub use registers::*;
-pub use vram::{VRAM2D, LCDCMem};
+pub use vram::VRAM2D;
 pub use dispcap::{DispCapMode, DispCapSourceA, DispCapSourceB};
 
 pub struct VideoMemory<V: VRAM2D> {
