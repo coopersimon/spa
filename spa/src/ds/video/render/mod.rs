@@ -1,4 +1,5 @@
 
+use crossbeam_channel::{bounded, Sender, Receiver};
 use parking_lot::Mutex;
 use std::sync::Arc;
 use crate::common::drawing::{
@@ -28,6 +29,11 @@ pub trait Renderer {
 }
 
 pub struct ProceduralRenderer {
+    command_tx: Sender<u16>,
+    reply_rx: Receiver<()>
+}
+
+pub struct ProceduralRendererThread {
     engine_a:   SoftwareRenderer,
     engine_b:   SoftwareRenderer,
 
@@ -39,12 +45,55 @@ pub struct ProceduralRenderer {
 
 impl Renderer for ProceduralRenderer {
     fn new(upper: RenderTarget, lower: RenderTarget, vram: RendererVRAM) -> Self {
-        Self {
-            engine_a:   SoftwareRenderer::new(RendererMode::NDSA),
-            engine_b:   SoftwareRenderer::new(RendererMode::NDSB),
 
-            upper, lower, vram
-        }
+        let (command_tx, command_rx) = bounded(1);
+        let (reply_tx, reply_rx) = bounded(1);
+        std::thread::spawn(move || {
+
+            let mut data = ProceduralRendererThread {
+                engine_a:   SoftwareRenderer::new(RendererMode::NDSA),
+                engine_b:   SoftwareRenderer::new(RendererMode::NDSB),
+
+                upper, lower, vram
+            };
+
+            reply_tx.send(()).unwrap();
+
+            while let Ok(line) = command_rx.recv() {
+                if line == 0 {
+                    data.start_frame();
+                }
+                data.render_line(line);
+                reply_tx.send(()).unwrap();
+            }
+        });
+
+        Self { command_tx, reply_rx }
+    }
+
+    fn render_line(&mut self, line: u16) {
+        self.reply_rx.recv().unwrap();
+        self.command_tx.send(line).unwrap();
+    }
+
+    fn start_frame(&mut self) {
+        //println!("Start frame");
+    }
+
+    fn finish_frame(&mut self) {
+        //println!("Finish frame");
+    }
+
+    fn render_size() -> (usize, usize) {
+        (H_RES, V_RES)
+    }
+}
+
+impl ProceduralRendererThread {
+
+    fn start_frame(&mut self) {
+        self.vram.engine_a_mem.lock().registers.reset_v_count();
+        self.vram.engine_b_mem.lock().registers.reset_v_count();
     }
 
     fn render_line(&mut self, line: u16) {
@@ -78,23 +127,6 @@ impl Renderer for ProceduralRenderer {
             self.engine_b_line(&mut engine_b_mem, &mut target[start_offset..end_offset], line as u8);
         }
     }
-
-    fn start_frame(&mut self) {
-        self.vram.engine_a_mem.lock().registers.reset_v_count();
-        self.vram.engine_b_mem.lock().registers.reset_v_count();
-        //println!("Start frame");
-    }
-
-    fn finish_frame(&mut self) {
-        //println!("Finish frame");
-    }
-
-    fn render_size() -> (usize, usize) {
-        (H_RES, V_RES)
-    }
-}
-
-impl ProceduralRenderer {
 
     /// Draw a full line for NDS A engine. Also applies master brightness
     /// 
