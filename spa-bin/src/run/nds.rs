@@ -15,7 +15,7 @@ use winit::{
 //use cpal::traits::StreamTrait;
 use super::Vertex;
 
-pub fn run_nds(config: ds::MemoryConfig, mute: bool) {
+pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
 
     let mut nds = ds::NDS::new(config);
     let render_size = nds.render_size();
@@ -278,9 +278,8 @@ pub fn run_nds(config: ds::MemoryConfig, mute: bool) {
                     ::std::process::exit(0);
                 },
                 WindowEvent::CursorMoved {
-                    device_id: _,
                     position: PhysicalPosition {x, y},
-                    modifiers: _
+                    ..
                 } => {
                     let y = y / (window.inner_size().height as f64);
                     if y >= 0.5 {
@@ -292,10 +291,9 @@ pub fn run_nds(config: ds::MemoryConfig, mute: bool) {
                     }
                 },
                 WindowEvent::MouseInput {
-                    device_id: _,
                     state,
                     button: MouseButton::Left,
-                    modifiers: _
+                    ..
                 } => {
                     match state {
                         ElementState::Pressed => nds.touchscreen_pressed(coords),
