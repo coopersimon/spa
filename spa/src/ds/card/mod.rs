@@ -295,7 +295,7 @@ impl MemInterface16 for DSCard {
             },
             0x0400_01B8 => {
                 self.seed_0[4] = data & 0x7F;
-                println!("Seed0: {:?}", self.seed_0);
+                log::debug!("Seed0: {:?}", self.seed_0);
             },
             0x0400_01B4..=0x0400_01B7 => {
                 let idx = addr - 0x0400_01B4;
@@ -303,7 +303,7 @@ impl MemInterface16 for DSCard {
             },
             0x0400_01BA => {
                 self.seed_1[4] = data & 0x7F;
-                println!("Seed1: {:?}", self.seed_1);
+                log::debug!("Seed1: {:?}", self.seed_1);
             },
 
             0x0410_0010 => {},   // Data in
@@ -349,7 +349,7 @@ impl MemInterface16 for DSCard {
             },
             0x0400_01B8 => {
                 self.seed_0[4] = bytes::u16::lo(data) & 0x7F;
-                println!("Seed0: {:?}", self.seed_0);
+                log::debug!("Seed0: {:?}", self.seed_0);
             },
             0x0400_01B4 => {
                 self.seed_1[0] = bytes::u16::lo(data);
@@ -361,7 +361,7 @@ impl MemInterface16 for DSCard {
             },
             0x0400_01BA => {
                 self.seed_1[4] = bytes::u16::lo(data) & 0x7F;
-                println!("Seed1: {:?}", self.seed_1);
+                log::debug!("Seed1: {:?}", self.seed_1);
             },
 
             0x0410_0010 => {},   // Data in
@@ -448,13 +448,13 @@ impl DSCard {
             Key1 => self.key1_command(),
             Key2 => self.key2_command(),
         };
-        //println!("do command {:?} | block size: {:X}", self.data_state, self.transfer_count);
+        //log::debug!("do command {:?} | block size: {:X}", self.data_state, self.transfer_count);
     }
 
     fn apply_key2_seeds(&mut self) {
         self.key2_0 = u64::from_le_bytes(self.seed_0).reverse_bits() >> 25;
         self.key2_1 = u64::from_le_bytes(self.seed_1).reverse_bits() >> 25;
-        println!("KEY2: {:X} | {:X}", self.key2_0, self.key2_1);
+        log::debug!("KEY2: {:X} | {:X}", self.key2_0, self.key2_1);
         //self.trigger_interrupt();
     }
 
@@ -482,7 +482,7 @@ impl DSCard {
     fn key1_command(&mut self) -> DSCardDataState {
         use DSCardDataState::*;
         let command = dscrypto::key1::decrypt(u64::from_le_bytes(self.command), &self.key1);
-        println!("got command {:X} => {:X}", u64::from_le_bytes(self.command), command);
+        log::debug!("got command {:X} => {:X}", u64::from_le_bytes(self.command), command);
         self.key2_dummy_count = 0x910;
         match command >> 60 {
             0x4 => {

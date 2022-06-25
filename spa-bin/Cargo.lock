@@ -1918,6 +1918,7 @@ dependencies = [
  "dasp",
  "dscrypto",
  "fixed",
+ "log",
  "parking_lot 0.12.0",
  "regex",
 ]

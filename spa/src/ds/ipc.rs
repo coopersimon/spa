@@ -150,7 +150,7 @@ impl IPC {
             self.ipc_fifo_control.remove(IPCFifoControl::ERROR);
         }
         if control_data.contains(IPCFifoControl::SEND_FIFO_FLUSH) {
-            // TODO: clear
+            log::warn!("FLUSH {}", self.name);
         }
         self.ipc_fifo_control = (control_data & IPCFifoControl::WRITE_BITS) | (self.ipc_fifo_control & IPCFifoControl::ERROR);
     }
@@ -163,12 +163,12 @@ impl IPC {
                 err => panic!("{:?}", err),
             }
         }
-        //println!("READ {:X} from fifo (from {})", self.last_word, self.name);
+        log::debug!("READ {:X} from fifo (from {})", self.last_word, self.name);
         self.last_word
     }
 
     fn fifo_write(&mut self, data: u32) {
-        //println!("WRITE {:X} to fifo (from {})", data, self.name);
+        log::debug!("WRITE {:X} to fifo (from {})", data, self.name);
         if self.ipc_fifo_control.contains(IPCFifoControl::ENABLE_FIFO) {
             match self.send.try_send(data) {
                 Ok(()) => {},

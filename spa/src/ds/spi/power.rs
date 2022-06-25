@@ -77,7 +77,7 @@ impl PowerManager {
                 };
                 self.can_read = false;
             },
-            State::Read(n) => {
+            State::Read(_n) => {
                 self.can_read = true;
             },
             State::Write(n) => match n {

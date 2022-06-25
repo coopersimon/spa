@@ -17,7 +17,7 @@ use crate::utils::{
 };
 use crate::ds::interrupt::Interrupts;
 pub use render::*;
-use memory::{DSVideoMemory, GraphicsPowerControl};
+use memory::DSVideoMemory;
 pub use memory::{ARM7VRAM, VRAMRegion};
 
 use constants::*;

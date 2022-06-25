@@ -13,6 +13,7 @@ regex = "1"
 crossbeam-channel = "0.5"
 parking_lot = "0.12"
 chrono = "0.4"
+log = "0.4"
 
 [dependencies.dasp]
 version = "0.11"

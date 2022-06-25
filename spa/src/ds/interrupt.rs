@@ -79,7 +79,7 @@ impl MemInterface32 for InterruptControl {
             0x0400_0208 => self.interrupt_master = u32::test_bit(data, 0),
             0x0400_020C => {},
             0x0400_0210 => {
-                //println!("{} enable: {:X}", self.name, data);
+                log::debug!("{} irq enable: {:X}", self.name, data);
                 self.interrupt_enable = Interrupts::from_bits_truncate(data)
             },
             0x0400_0214 => self.interrupt_req.remove(Interrupts::from_bits_truncate(data)),
