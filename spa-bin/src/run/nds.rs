@@ -188,9 +188,41 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
         //multiview: None
     });
 
+    // IMGUI
+    // TODO: debug only?
+    let mut imgui = imgui::Context::create();
+    let mut platform = imgui_winit_support::WinitPlatform::init(&mut imgui);
+    platform.attach_window(
+        imgui.io_mut(),
+        &window,
+        imgui_winit_support::HiDpiMode::Default
+    );
+    //imgui.set_ini_filename(None);
+
+    // TODO: HI_DPI
+    let font_size = 13.0 * 2.0;
+    imgui.io_mut().font_global_scale = (1.0 / 2.0) as f32;
+
+    imgui.fonts().add_font(&[imgui::FontSource::DefaultFontData {
+        config: Some(imgui::FontConfig{
+            oversample_h: 1,
+            pixel_snap_h: true,
+            size_pixels: font_size,
+            .. Default::default()
+        })
+    }]);
+
+    let renderer_config = imgui_wgpu::RendererConfig {
+        texture_format: surface_config.format,
+        .. Default::default()
+    };
+    let mut renderer = imgui_wgpu::Renderer::new(&mut imgui, &device, &queue, renderer_config);
+
     let mut last_frame_time = chrono::Utc::now();
     let nanos = 1_000_000_000 / 60;
     let frame_time = chrono::Duration::nanoseconds(nanos);
+    let mut frames = vec![0.0; 120];
+    let mut frame_idx = 0;
 
     // AUDIO
     //let audio_stream = make_audio_stream(&mut gba);
@@ -201,6 +233,7 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
     let screen_tex_size = render_size.0 * render_size.1 * 4;
     let mut upper_buffer = vec![0_u8; screen_tex_size];
     let mut lower_buffer = vec![0_u8; screen_tex_size];
+    let mut screen_buffer = Vec::new();
 
     let mut coords = None;
     
@@ -213,23 +246,35 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
                 if since_last < frame_time {
                     return;
                 }
-                //println!("Frame time: {}", since_last);
+                frames[frame_idx] = since_last.num_nanoseconds().unwrap() as f64;
+                frame_idx = (frame_idx + 1) % 120;
+                let avg_time = frames.iter().fold(0.0, |acc, n| acc + n) / (frames.len() as f64);
                 last_frame_time = now;
 
                 nds.frame(&mut upper_buffer, &mut lower_buffer);
                 
-                let mut data = Vec::new();
-                data.extend_from_slice(&upper_buffer);
-                data.extend_from_slice(&lower_buffer);
-                let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                screen_buffer.clear();
+                screen_buffer.extend_from_slice(&upper_buffer);
+                screen_buffer.extend_from_slice(&lower_buffer);
+                queue.write_texture(
+                    texture.as_image_copy(),
+                    &screen_buffer, 
+                    wgpu::ImageDataLayout {
+                        offset: 0,
+                        bytes_per_row: std::num::NonZeroU32::new(4 * texture_extent.width),
+                        rows_per_image: None,
+                    },
+                    texture_extent
+                );
+
+                let frame = surface.get_current_texture().expect("Timeout when acquiring next swapchain tex.");
+                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {label: None});
+
+                /*let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: None,
                     contents: &data,
                     usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::MAP_WRITE
                 });
-
-                let frame = surface.get_current_texture().expect("Timeout when acquiring next swapchain tex.");//swapchain.get_next_texture().expect("Timeout when acquiring next swapchain tex.");
-                let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {label: None});
-
                 encoder.copy_buffer_to_texture(
                     wgpu::ImageCopyBuffer {
                         layout: wgpu::ImageDataLayout {
@@ -246,7 +291,21 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
                         origin: wgpu::Origin3d::ZERO,
                     },
                     texture_extent
-                );
+                );*/
+
+                platform.prepare_frame(imgui.io_mut(), &window)
+                    .expect("Failed to prepare frame");
+                let ui = imgui.frame();
+
+                {
+                    let _window = imgui::Window::new("Debug")
+                        .size([100.0, 100.0], imgui::Condition::FirstUseEver)
+                        .build(&ui, || {
+                            ui.text(format!("FPS: {:.1}", 1_000_000_000.0 / avg_time));
+                        });
+                }
+
+                platform.prepare_render(&ui, &window);
 
                 {
                     let view = frame.texture.create_view(&Default::default());
@@ -266,6 +325,9 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
                     rpass.set_bind_group(0, &bind_group, &[]);
                     rpass.set_vertex_buffer(0, vertex_buf.slice(..));
                     rpass.draw(0..4, 0..1);
+
+                    renderer.render(ui.render(), &queue, &device, &mut rpass)
+                        .expect("Cannot render debug UI");
                 }
 
                 queue.submit([encoder.finish()]);
