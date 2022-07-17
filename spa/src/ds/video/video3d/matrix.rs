@@ -2,6 +2,38 @@ use fixed::types::I20F12;
 
 pub type N = I20F12;
 
+#[derive(Clone)]
+pub struct Vector<const S: usize> {
+    pub elements: [N; S]
+}
+
+impl<const S: usize> Default for Vector<S> {
+    fn default() -> Self {
+        Self { elements: [N::ZERO; S] }
+    }
+}
+
+impl<const S: usize> Vector<S> {
+    pub fn new(from_elements: [N; S]) -> Self {
+        Self {
+            elements: from_elements
+        }
+    }
+
+    pub fn add(&self, other: &Self) -> Self {
+        let mut out = Self::default();
+        for (sum, out) in self.elements.iter().zip(&other.elements).map(|(a, b)| a + b).zip(&mut out.elements) {
+            *out = sum;
+        }
+        out
+    }
+
+    pub fn dot_product(&self, other: &Self) -> N {
+        self.elements.iter().zip(&other.elements).fold(N::ZERO, |acc, (a, b)| acc + (a * b))
+        //self.elements[0] * other.elements[0] + self.elements[1] * other.elements[1] + self.elements[2] * other.elements[2]
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Matrix {
     pub elements: [N; 16]
@@ -198,39 +230,6 @@ impl Matrix {
         self.elements[11] *= other[2];
     }
 
-    /*pub fn from_3x3(elements: &[N]) -> Self {
-        Self {
-            elements: [
-                elements[0], elements[1], elements[2], N::ZERO,
-                elements[3], elements[4], elements[5], N::ZERO,
-                elements[6], elements[7], elements[8], N::ZERO,
-                N::ZERO, N::ZERO, N::ZERO, N::ONE
-            ]
-        }
-    }
-    
-    pub fn translation(elements: &[N]) -> Self {
-        Self {
-            elements: [
-                N::ONE, N::ZERO, N::ZERO, N::ZERO,
-                N::ZERO, N::ONE, N::ZERO, N::ZERO,
-                N::ZERO, N::ZERO, N::ONE, N::ZERO,
-                elements[0], elements[1], elements[2], N::ONE,
-            ]
-        }
-    }
-    
-    pub fn scale(elements: &[N]) -> Self {
-        Self {
-            elements: [
-                elements[0], N::ZERO, N::ZERO, N::ZERO,
-                N::ZERO, elements[1], N::ZERO, N::ZERO,
-                N::ZERO, N::ZERO, elements[2], N::ZERO,
-                N::ZERO, N::ZERO, N::ZERO, N::ONE
-            ]
-        }
-    }*/
-
     pub fn mul(&self, other: &Self) -> Self {
         Self {
             elements: [
@@ -255,5 +254,29 @@ impl Matrix {
                 self.elements[12] * other.elements[3] + self.elements[13] * other.elements[7] + self.elements[14] * other.elements[11] + self.elements[15] * other.elements[15],
             ]
         }
+    }
+
+    /// Multiply a 3-dimensional vector by the matrix.
+    /// 
+    /// Used for normal & lighting calculations.
+    pub fn mul_vector_3(&self, vector: &Vector<3>) -> Vector<3> {
+        Vector::new([
+            vector.elements[0] * self.elements[0] + vector.elements[1] * self.elements[1] + vector.elements[2] * self.elements[2],
+            vector.elements[0] * self.elements[4] + vector.elements[1] * self.elements[5] + vector.elements[2] * self.elements[6],
+            vector.elements[0] * self.elements[8] + vector.elements[1] * self.elements[9] + vector.elements[2] * self.elements[10],
+        ])
+    }
+    
+    /// Multiply a 4-dimensional vector by the matrix.
+    /// 
+    /// Used for vertex calculations.
+    pub fn mul_vector_4(&self, vector: &Vector<4>) -> Vector<4> {
+        // TODO: input could implicitly use W=1?
+        Vector::new([
+            vector.elements[0] * self.elements[0] + vector.elements[1] * self.elements[1] + vector.elements[2] * self.elements[2] + vector.elements[3] * self.elements[3],
+            vector.elements[0] * self.elements[4] + vector.elements[1] * self.elements[5] + vector.elements[2] * self.elements[6] + vector.elements[3] * self.elements[7],
+            vector.elements[0] * self.elements[8] + vector.elements[1] * self.elements[9] + vector.elements[2] * self.elements[10] + vector.elements[3] * self.elements[11],
+            vector.elements[0] * self.elements[12] + vector.elements[1] * self.elements[13] + vector.elements[2] * self.elements[14] + vector.elements[3] * self.elements[15],
+        ])
     }
 }

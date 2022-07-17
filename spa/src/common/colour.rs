@@ -48,4 +48,32 @@ impl Colour {
         let b = (self.b >> 3) as u16;
         r | (g << 5) | (b << 10)
     }
+
+    pub fn add(&mut self, other: &Self) {
+        self.r = self.r.saturating_add(other.r);
+        self.g = self.g.saturating_add(other.g);
+        self.b = self.b.saturating_add(other.b);
+    }
+
+    pub fn mul(&self, other: &Self) -> Self {
+        let r = (self.r as u16) * (other.r as u16);
+        let g = (self.g as u16) * (other.g as u16);
+        let b = (self.b as u16) * (other.b as u16);
+        Self {
+            r: (r >> 8) as u8,
+            g: (g >> 8) as u8,
+            b: (b >> 8) as u8,
+        }
+    }
+
+    pub fn weight(&self, weight: u8) -> Self {
+        let r = (self.r as u16) * (weight as u16);
+        let g = (self.g as u16) * (weight as u16);
+        let b = (self.b as u16) * (weight as u16);
+        Self {
+            r: (r >> 8) as u8,
+            g: (g >> 8) as u8,
+            b: (b >> 8) as u8,
+        }
+    }
 }
