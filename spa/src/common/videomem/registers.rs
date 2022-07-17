@@ -9,7 +9,10 @@ use crate::utils::{
     bytes,
     meminterface::MemInterface16
 };
-use crate::common::drawing::background::*;
+use crate::common::{
+    colour::Colour,
+    drawing::background::*
+};
 use super::dispcap::*;
 
 bitflags! {
@@ -972,7 +975,7 @@ impl VideoRegisters {
 
     // DS Brightness
     // TODO: move this?
-    pub fn apply_brightness(&self, input: crate::common::drawing::colour::Colour) -> crate::common::drawing::colour::Colour {
+    pub fn apply_brightness(&self, input: Colour) -> Colour {
         match (self.master_bright & MasterBrightness::MODE).bits() >> 14 {
             0b00 => input,
             0b01 => {
@@ -980,7 +983,7 @@ impl VideoRegisters {
                 let r_diff = ((0xFF - (input.r as u32)) * factor) / 16;
                 let g_diff = ((0xFF - (input.g as u32)) * factor) / 16;
                 let b_diff = ((0xFF - (input.b as u32)) * factor) / 16;
-                crate::common::drawing::colour::Colour {
+                Colour {
                     r: input.r.saturating_add(r_diff as u8),
                     g: input.g.saturating_add(g_diff as u8),
                     b: input.b.saturating_add(b_diff as u8),
@@ -991,7 +994,7 @@ impl VideoRegisters {
                 let r_diff = ((input.r as u32) * factor) / 16;
                 let g_diff = ((input.g as u32) * factor) / 16;
                 let b_diff = ((input.b as u32) * factor) / 16;
-                crate::common::drawing::colour::Colour {
+                Colour {
                     r: input.r.saturating_sub(r_diff as u8),
                     g: input.g.saturating_sub(g_diff as u8),
                     b: input.b.saturating_sub(b_diff as u8),
