@@ -3,6 +3,7 @@
 mod constants;
 mod render;
 mod memory;
+mod video3d;
 
 use bitflags::bitflags;
 use parking_lot::Mutex;
