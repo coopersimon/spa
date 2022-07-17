@@ -3,6 +3,7 @@ mod matrix;
 use matrix::*;
 
 use bitflags::bitflags;
+use fixed::types::I4F12;
 use crate::{
     utils::{
         meminterface::MemInterface32,
@@ -32,11 +33,23 @@ bitflags! {
     }
 }
 
+struct Polygon {
+
+}
+
+struct Vertex {
+    
+}
+
 pub struct GeometryEngine {
     input_buffer:   Vec<N>,
     matrices:       Box<MatrixUnit>,
+
     lighting:       Box<LightingUnit>,
+
     polygon_attrs:  PolygonAttrs,
+    current_vertex: [I4F12; 3],
+    current_hi:     bool,
 }
 
 impl GeometryEngine {
@@ -45,7 +58,9 @@ impl GeometryEngine {
             input_buffer:   Vec::new(),
             matrices:       Box::new(MatrixUnit::new()),
             lighting:       Box::new(LightingUnit::new()),
-            polygon_attrs:  PolygonAttrs::default()
+            polygon_attrs:  PolygonAttrs::default(),
+            current_vertex: [I4F12::ZERO; 3],
+            current_hi:     false,
         }
     }
 }
@@ -75,8 +90,18 @@ impl MemInterface32 for GeometryEngine {
 
             0x0400_0480 => self.set_vertex_colour(data),
             0x0400_0484 => self.set_normal(data),
+            0x0400_0488 => {},  // SET TEX coords
+
+            0x0400_048C => self.set_vertex_coords_16(data),
+            0x0400_0490 => self.set_vertex_coords_10(data),
+            0x0400_0494 => self.set_vertex_coords_xy(data),
+            0x0400_0498 => self.set_vertex_coords_xz(data),
+            0x0400_049C => self.set_vertex_coords_yz(data),
+            0x0400_04A0 => self.diff_vertex_coords(data),
 
             0x0400_04A4 => self.set_polygon_attrs(data),
+            0x0400_04A8 => {},  // SET TEX params
+            0x0400_04AC => {},  // Set tex palette
 
             0x0400_04C0 => self.lighting.set_dif_amb_colour(data),
             0x0400_04C4 => self.lighting.set_spe_emi_colour(data),
@@ -84,8 +109,13 @@ impl MemInterface32 for GeometryEngine {
             0x0400_04CC => self.lighting.set_light_colour(data),
             0x0400_04D0 => self.lighting.set_specular_table(data),
 
+            0x0400_0500 => {},  // BEGIN
+            0x0400_0504 => {},  // END
+
             0x0400_0540 => {},  // TODO: swap buffers
             0x0400_0580 => {},  // TODO: viewport
+
+            // TODO: tests
             _ => panic!("writing invalid gpu address {:X}", addr)
         }
     }
@@ -185,9 +215,118 @@ impl GeometryEngine {
         self.lighting.set_normal(normal);
     }
 
+    // TODO: tex
+
+    /// Set vertex coordinates. Uses 2 parameter words. I4F12 format.
+    /// 
+    /// First param: X in lower half, Y in upper half.
+    /// 
+    /// Second param: Z in lower half.
+    fn set_vertex_coords_16(&mut self, data: u32) {
+        if self.current_hi {
+            self.current_vertex[2] = I4F12::from_bits(bytes::u32::lo(data) as i16);
+            self.current_hi = false;
+            self.process_vertex();
+        } else {
+            self.current_vertex[0] = I4F12::from_bits(bytes::u32::lo(data) as i16);
+            self.current_vertex[1] = I4F12::from_bits(bytes::u32::hi(data) as i16);
+            self.current_hi = true;
+        }
+    }
+    
+    /// Set vertex coordinates. I4F6 format.
+    /// 
+    /// Param: X, Y, Z, each 10 bits.
+    fn set_vertex_coords_10(&mut self, data: u32) {
+        let x = (data & 0x3FF) << 6;
+        let y = ((data >> 10) & 0x3FF) << 6;
+        let z = ((data >> 20) & 0x3FF) << 6;
+        self.current_vertex[0] = I4F12::from_bits(x as i16);
+        self.current_vertex[1] = I4F12::from_bits(y as i16);
+        self.current_vertex[2] = I4F12::from_bits(z as i16);
+        self.process_vertex();
+    }
+    
+    /// Set vertex coordinates X and Y. I4F12 format. Keep old Z.
+    /// 
+    /// Param: X in lower half, Y in upper half.
+    fn set_vertex_coords_xy(&mut self, data: u32) {
+        self.current_vertex[0] = I4F12::from_bits(bytes::u32::lo(data) as i16);
+        self.current_vertex[1] = I4F12::from_bits(bytes::u32::hi(data) as i16);
+        self.process_vertex();
+    }
+    
+    /// Set vertex coordinates X and Z. I4F12 format. Keep old Y.
+    /// 
+    /// Param: X in lower half, Z in upper half.
+    fn set_vertex_coords_xz(&mut self, data: u32) {
+        self.current_vertex[0] = I4F12::from_bits(bytes::u32::lo(data) as i16);
+        self.current_vertex[2] = I4F12::from_bits(bytes::u32::hi(data) as i16);
+        self.process_vertex();
+    }
+    
+    /// Set vertex coordinates Y and Z. I4F12 format. Keep old X.
+    /// 
+    /// Param: Y in lower half, Z in upper half.
+    fn set_vertex_coords_yz(&mut self, data: u32) {
+        self.current_vertex[1] = I4F12::from_bits(bytes::u32::lo(data) as i16);
+        self.current_vertex[2] = I4F12::from_bits(bytes::u32::hi(data) as i16);
+        self.process_vertex();
+    }
+    
+    /// Set vertex coordinates as a diff of current. I1F9 format.
+    /// 
+    /// Param: X, Y, Z, each 10 bits.
+    fn diff_vertex_coords(&mut self, data: u32) {
+        let x_diff = (data & 0x3FF) << 3;
+        let y_diff = ((data >> 10) & 0x3FF) << 3;
+        let z_diff = ((data >> 20) & 0x3FF) << 3;
+        self.current_vertex[0] += I4F12::from_bits(x_diff as i16);
+        self.current_vertex[1] += I4F12::from_bits(y_diff as i16);
+        self.current_vertex[2] += I4F12::from_bits(z_diff as i16);
+        self.process_vertex();
+    }
+
     fn set_polygon_attrs(&mut self, data: u32) {
         self.polygon_attrs = PolygonAttrs::from_bits_truncate(data);
         self.lighting.set_enabled(self.polygon_attrs);
+    }
+}
+
+impl GeometryEngine {
+    fn process_vertex(&mut self) {
+        let vertex = Vector::new([
+            self.current_vertex[0].into(),
+            self.current_vertex[1].into(),
+            self.current_vertex[2].into(),
+            N::ONE
+        ]);
+
+        // Transform the vertex.
+        // Result is a I12F12.
+        let transformed_vertex = self.matrices.current_clip.mul_vector_4(&vertex);
+        // TODO: mask?
+        let w = transformed_vertex.elements[3];
+        let w2 = w * 2;
+        let x = transformed_vertex.elements[0] + w / w2;
+        let y = transformed_vertex.elements[1] + w / w2;
+        let depth = if true {   // TODO: z-buffer
+            let z = transformed_vertex.elements[2] + w / w2;
+            z.to_bits()
+        } else {
+            w.to_bits()
+        };
+        // Order: 6 bytes?
+        // Polygon out: 4 byte flags + 4 byte tex info + 2 byte tex palette + 2 bytes ??
+        // Vertex index: 8/12 bytes: 4 bytes per vertex?
+
+        // Vertex data:
+        // colour: 2 bytes
+        // tex coords: 4 bytes (2 per coord)
+        // screen coords: 3 bytes (1.5 per coord)
+        // depth: 3 bytes
+
+        // TODO: check 1-dot display
     }
 }
 
@@ -200,13 +339,18 @@ const TEX_MODE: u32     = 0b11;
 #[derive(Default)]
 struct MatrixUnit {
     mode:   u32,
+
     current_projection: Matrix,
     projection_stack:   Matrix,
+
+    current_clip:       Matrix,
+
     current_position:   Matrix,
     current_direction:  Matrix,
     position_stack:     [Matrix; 31],
     direction_stack:    [Matrix; 31],
     pos_dir_pointer:    usize,
+
     current_texture:    Matrix,
 }
 
@@ -234,11 +378,15 @@ impl MatrixUnit {
     
     fn pop_matrix(&mut self, pops: u32) {
         match self.mode {
-            PROJ_MODE => self.current_projection = self.projection_stack.clone(),
+            PROJ_MODE => {
+                self.current_projection = self.projection_stack.clone();
+                self.current_clip = self.current_position.mul(&self.current_projection);
+            }
             POS_MODE | POS_DIR_MODE => {
-                self.pos_dir_pointer - (pops as usize);
+                self.pos_dir_pointer -= pops as usize;
                 self.current_position = self.position_stack[self.pos_dir_pointer].clone();
                 self.current_direction = self.direction_stack[self.pos_dir_pointer].clone();
+                self.current_clip = self.current_position.mul(&self.current_projection);
             },
             TEX_MODE => panic!("cannot pop texture matrix"),   // TODO: probably shouldn't panic
             _ => unreachable!()
@@ -259,10 +407,14 @@ impl MatrixUnit {
     
     fn restore_matrix(&mut self, pos: u32) {
         match self.mode {
-            PROJ_MODE => self.current_projection = self.projection_stack.clone(),
+            PROJ_MODE => {
+                self.current_projection = self.projection_stack.clone();
+                self.current_clip = self.current_position.mul(&self.current_projection);
+            },
             POS_MODE | POS_DIR_MODE => {
                 self.current_position = self.position_stack[pos as usize].clone();
                 self.current_direction = self.direction_stack[pos as usize].clone();
+                self.current_clip = self.current_position.mul(&self.current_projection);
             },
             TEX_MODE => panic!("cannot restore texture matrix"),   // TODO: probably shouldn't panic
             _ => unreachable!()
@@ -271,11 +423,15 @@ impl MatrixUnit {
 
     fn set_current_matrix(&mut self, value: &Matrix) {
         match self.mode {
-            PROJ_MODE => self.current_projection = value.clone(),
+            PROJ_MODE => {
+                self.current_projection = value.clone();
+                self.current_clip = self.current_position.mul(&self.current_projection);
+            },
             POS_MODE => self.current_position = value.clone(),
             POS_DIR_MODE => {
                 self.current_position = value.clone();
                 self.current_direction = value.clone();
+                self.current_clip = self.current_position.mul(&self.current_projection);
             },
             TEX_MODE => self.current_texture = value.clone(),
             _ => unreachable!()
@@ -284,11 +440,15 @@ impl MatrixUnit {
 
     fn mul_4x4(&mut self, value: &[N]) {
         match self.mode {
-            PROJ_MODE => self.current_projection.mul_4x4(value),
+            PROJ_MODE => {
+                self.current_projection.mul_4x4(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
+            },
             POS_MODE => self.current_position.mul_4x4(value),
             POS_DIR_MODE => {
                 self.current_position.mul_4x4(value);
                 self.current_direction.mul_4x4(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
             },
             TEX_MODE => self.current_texture.mul_4x4(value),
             _ => unreachable!()
@@ -297,11 +457,15 @@ impl MatrixUnit {
     
     fn mul_4x3(&mut self, value: &[N]) {
         match self.mode {
-            PROJ_MODE => self.current_projection.mul_4x3(value),
+            PROJ_MODE => {
+                self.current_projection.mul_4x3(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
+            },
             POS_MODE => self.current_position.mul_4x3(value),
             POS_DIR_MODE => {
                 self.current_position.mul_4x3(value);
                 self.current_direction.mul_4x3(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
             },
             TEX_MODE => self.current_texture.mul_4x3(value),
             _ => unreachable!()
@@ -310,11 +474,15 @@ impl MatrixUnit {
 
     fn mul_3x3(&mut self, value: &[N]) {
         match self.mode {
-            PROJ_MODE => self.current_projection.mul_3x3(value),
+            PROJ_MODE => {
+                self.current_projection.mul_3x3(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
+            },
             POS_MODE => self.current_position.mul_3x3(value),
             POS_DIR_MODE => {
                 self.current_position.mul_3x3(value);
                 self.current_direction.mul_3x3(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
             },
             TEX_MODE => self.current_texture.mul_3x3(value),
             _ => unreachable!()
@@ -323,8 +491,14 @@ impl MatrixUnit {
 
     fn mul_scale(&mut self, value: &[N]) {
         match self.mode {
-            PROJ_MODE => self.current_projection.mul_scale(value),
-            POS_MODE | POS_DIR_MODE => self.current_position.mul_scale(value),
+            PROJ_MODE => {
+                self.current_projection.mul_scale(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
+            }
+            POS_MODE | POS_DIR_MODE => {
+                self.current_position.mul_scale(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
+            },
             TEX_MODE => self.current_texture.mul_scale(value),
             _ => unreachable!()
         }
@@ -332,11 +506,15 @@ impl MatrixUnit {
 
     fn mul_trans(&mut self, value: &[N]) {
         match self.mode {
-            PROJ_MODE => self.current_projection.mul_trans(value),
+            PROJ_MODE => {
+                self.current_projection.mul_trans(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
+            },
             POS_MODE => self.current_position.mul_trans(value),
             POS_DIR_MODE => {
                 self.current_position.mul_trans(value);
                 self.current_direction.mul_trans(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
             },
             TEX_MODE => self.current_texture.mul_trans(value),
             _ => unreachable!()
@@ -412,10 +590,12 @@ impl LightingUnit {
 
     fn set_light_direction(&mut self, light: usize, direction: Vector<3>) {
         self.lights[light].direction = direction.clone();
+        // Find normalised half-vector between light dir and line-of-sight (-Z)
+        // Then negate it for specular calculations.
         self.lights[light].half_angle = Vector::new([
             -direction.elements[0] >> 1,
             -direction.elements[1] >> 1,
-            -(direction.elements[2] - N::ONE) >> 1
+            (N::ONE - direction.elements[2]) >> 1
         ]);
     }
 
