@@ -13,6 +13,7 @@ pub mod joypad;
 pub mod framecomms;
 pub mod videomem;
 pub mod drawing;
+pub mod colour;
 
 #[cfg(feature = "debug")]
 pub mod debug;

@@ -4,8 +4,9 @@ use parking_lot::Mutex;
 use std::sync::Arc;
 use super::memory::VRAMRenderRef;
 use super::constants::*;
+use crate::common::colour::Colour;
 use crate::common::drawing::{
-    SoftwareRenderer, RendererMode, colour::Colour
+    SoftwareRenderer, RendererMode
 };
 use crate::common::videomem::VideoMemory;
 

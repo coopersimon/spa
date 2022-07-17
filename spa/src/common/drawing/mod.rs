@@ -1,14 +1,15 @@
 /// Software rendering.
 
-pub mod colour;
+pub mod palette;
 pub mod background;
 
 use fixed::types::I24F8;
 use crate::utils::bits::u16;
+use crate::common::colour::Colour;
 use crate::common::videomem::{
     VideoMemory, VideoRegisters, VRAM2D
 };
-use colour::*;
+use palette::*;
 use background::*;
 
 const TILE_SIZE: u32 = 8;

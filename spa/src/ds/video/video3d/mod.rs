@@ -3,23 +3,29 @@ mod matrix;
 use matrix::*;
 
 use bitflags::bitflags;
-use crate::utils::{
-    meminterface::MemInterface32,
-    bits::u32
+use crate::{
+    utils::{
+        meminterface::MemInterface32,
+        bits::u32,
+        bytes
+    },
+    common::colour::Colour
 };
 
 
 
 pub struct GeometryEngine {
     input_buffer: Vec<N>,
-    matrices:   MatrixStack,
+    matrices:   Box<MatrixUnit>,
+    lighting:   Box<LightingUnit>
 }
 
 impl GeometryEngine {
     pub fn new() -> Self {
         Self {
             input_buffer:   Vec::new(),
-            matrices:       MatrixStack::new()
+            matrices:       Box::new(MatrixUnit::new()),
+            lighting:       Box::new(LightingUnit::new())
         }
     }
 }
@@ -46,6 +52,15 @@ impl MemInterface32 for GeometryEngine {
             0x0400_0468 => self.mul_3x3(data),
             0x0400_046C => self.mul_scale(data),
             0x0400_0470 => self.mul_trans(data),
+
+            0x0400_04C0 => self.lighting.set_dif_amb_colour(data),
+            0x0400_04C4 => self.lighting.set_spe_emi_colour(data),
+            0x0400_04C8 => self.lighting.set_light_direction(data),
+            0x0400_04CC => self.lighting.set_light_colour(data),
+            0x0400_04D0 => self.lighting.set_specular_table(data),
+
+            0x0400_0540 => {},  // TODO: swap buffers
+            0x0400_0580 => {},  // TODO: viewport
             _ => panic!("writing invalid gpu address {:X}", addr)
         }
     }
@@ -121,7 +136,7 @@ const POS_DIR_MODE: u32 = 0b10;
 const TEX_MODE: u32     = 0b11;
 
 #[derive(Default)]
-struct MatrixStack {
+struct MatrixUnit {
     mode:   u32,
     current_projection: Matrix,
     projection_stack:   Matrix,
@@ -133,7 +148,7 @@ struct MatrixStack {
     current_texture:    Matrix,
 }
 
-impl MatrixStack {
+impl MatrixUnit {
     fn new() -> Self {
         Self::default()
     }
@@ -264,5 +279,65 @@ impl MatrixStack {
             TEX_MODE => self.current_texture.mul_trans(value),
             _ => unreachable!()
         }
+    }
+}
+
+#[derive(Default)]
+struct Light {
+    x: u16,
+    y: u16,
+    z: u16,
+    // TODO: Colour param?
+    colour: Colour
+}
+
+#[derive(Default)]
+struct LightingUnit {
+    lights:             [Light; 4],
+
+    diffuse_colour:     Colour,
+    ambient_colour:     Colour,
+    specular_colour:    Colour,
+    emission_colour:    Colour,
+
+    specular_table:     Vec<u8>,
+    specular_index:     usize
+}
+
+impl LightingUnit {
+    fn new() -> Self {
+        Self {
+            specular_table: vec![0; 128],
+            ..Default::default()
+        }
+    }
+
+    fn set_light_direction(&mut self, data: u32) {
+        let light = (data >> 30) as usize;
+        self.lights[light].x = (data & 0x3FF) as u16;
+        self.lights[light].y = ((data >> 10) & 0x3FF) as u16;
+        self.lights[light].z = ((data >> 20) & 0x3FF) as u16;
+    }
+
+    fn set_light_colour(&mut self, data: u32) {
+        let light = (data >> 30) as usize;
+        self.lights[light].colour = Colour::from_555(bytes::u32::lo(data));
+    }
+
+    fn set_dif_amb_colour(&mut self, data: u32) {
+        self.diffuse_colour = Colour::from_555(bytes::u32::lo(data));
+        self.ambient_colour = Colour::from_555(bytes::u32::hi(data));
+    }
+    
+    fn set_spe_emi_colour(&mut self, data: u32) {
+        self.specular_colour = Colour::from_555(bytes::u32::lo(data));
+        self.emission_colour = Colour::from_555(bytes::u32::hi(data));
+    }
+
+    fn set_specular_table(&mut self, data: u32) {
+        for (table, input) in self.specular_table.iter_mut().skip(self.specular_index).zip(&data.to_le_bytes()) {
+            *table = *input;
+        }
+        self.specular_index = (self.specular_index + 4) % 128;
     }
 }

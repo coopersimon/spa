@@ -2,8 +2,9 @@
 use crossbeam_channel::{bounded, Sender, Receiver};
 use parking_lot::Mutex;
 use std::sync::Arc;
+use crate::common::colour::Colour;
 use crate::common::drawing::{
-    SoftwareRenderer, RendererMode, colour::Colour
+    SoftwareRenderer, RendererMode
 };
 use crate::common::videomem::{DispCapSourceB, DispCapMode, DispCapSourceA, VideoRegisters, VideoMemory};
 use super::memory::ARM9VRAM;
