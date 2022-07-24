@@ -1,4 +1,7 @@
-
+use std::{
+    collections::BTreeSet,
+    cmp::Ordering
+};
 use bitflags::bitflags;
 use crate::{
     utils::bits::u32,
@@ -32,6 +35,16 @@ bitflags! {
     }
 }
 
+impl PolygonAttrs {
+    pub fn alpha(self) -> u8 {
+        ((self & PolygonAttrs::ALPHA).bits() >> 16) as u8
+    }
+    
+    pub fn id(self) -> u8 {
+        ((self & PolygonAttrs::POLYGON_ID).bits() >> 24) as u8
+    }
+}
+
 bitflags! {
     #[derive(Default)]
     pub struct TextureAttrs: u32 {
@@ -48,9 +61,37 @@ bitflags! {
     }
 }
 
-// TODO
+#[derive(Eq)]
 pub struct PolygonOrder {
+    pub y_max:    u8, // In screen space (0: top, 191: bottom)
+    pub y_min:    u8, // In screen space (0: top, 191: bottom)
+    pub polygon_index:  usize,
+}
 
+impl PartialEq for PolygonOrder {
+    fn eq(&self, other: &Self) -> bool {
+        self.y_max == other.y_max &&
+        self.y_min == other.y_min &&
+        self.polygon_index == other.polygon_index
+    }
+}
+
+impl PartialOrd for PolygonOrder {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PolygonOrder {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.y_max.cmp(&other.y_max) {
+            Equal => match self.y_min.cmp(&other.y_min) {
+                Equal => self.polygon_index.cmp(&other.polygon_index),
+                o => o
+            },
+            o => o
+        }
+    }
 }
 
 /// A polygon. 12 + 8/12 bytes.
@@ -78,8 +119,8 @@ pub struct Polygon {
 /// - Texture coords
 #[derive(Default, Clone)]
 pub struct Vertex {
-    pub screen_x:   u16,
-    pub screen_y:   u16,
+    pub screen_x:   u8,
+    pub screen_y:   u8,
     pub depth:      u32,
     pub colour:     Colour,
     pub tex_s:      u16,
@@ -90,19 +131,26 @@ pub struct Vertex {
 /// 
 /// Contains polygon order, polygon metadata, and vertex data.
 pub struct PolygonRAM {
-    pub order:      Vec<PolygonOrder>,
-    pub polygons:   Vec<Polygon>,
-    pub vertices:   Vec<Vertex>
+    pub opaque_polygons:    BTreeSet<PolygonOrder>,
+    pub trans_polygons:     BTreeSet<PolygonOrder>,
+    pub polygons:           Vec<Polygon>,
+    pub vertices:           Vec<Vertex>
 }
 
 impl PolygonRAM {
     pub fn new() -> Self {
-        Self { order: Vec::new(), polygons: Vec::new(), vertices: Vec::new() }
+        Self {
+            opaque_polygons: BTreeSet::new(),
+            trans_polygons: BTreeSet::new(),
+            polygons: Vec::new(),
+            vertices: Vec::new()
+        }
     }
 
     /// Clear the polygon and vertex RAM for the next geometry engine write cycle.
     pub fn clear(&mut self) {
-        self.order.clear();
+        self.opaque_polygons.clear();
+        self.trans_polygons.clear();
         self.polygons.clear();
         self.vertices.clear();
     }
@@ -117,7 +165,20 @@ impl PolygonRAM {
     }
 
     /// Insert a polygon.
-    pub fn insert_polygon(&mut self, polygon: Polygon) {
+    pub fn insert_polygon(&mut self, polygon: Polygon, y_max: u8, y_min: u8) {
+        let alpha = polygon.attrs.alpha();
+        let polygon_index = self.polygons.len();
+
+        let polygon_order = PolygonOrder {
+            y_max, y_min, polygon_index
+        };
+        
         self.polygons.push(polygon);
+
+        if alpha == 31 || alpha == 0 {
+            self.opaque_polygons.insert(polygon_order);
+        } else {
+            self.trans_polygons.insert(polygon_order);
+        }
     }
 }

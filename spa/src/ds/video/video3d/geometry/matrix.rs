@@ -53,7 +53,7 @@ impl MatrixUnit {
                 self.current_clip = self.current_position.mul(&self.current_projection);
             }
             POS_MODE | POS_DIR_MODE => {
-                self.pos_dir_pointer -= pops as usize;
+                self.pos_dir_pointer -= pops as usize;  // TODO: signed
                 self.current_position = self.position_stack[self.pos_dir_pointer].clone();
                 self.current_direction = self.direction_stack[self.pos_dir_pointer].clone();
                 self.current_clip = self.current_position.mul(&self.current_projection);
