@@ -1,3 +1,6 @@
+// This file contains the Rendering Engine struct.
+// It doesn't contain the actual logic for rendering 3D - see drawing.rs for that.
+
 use crate::common::colour::Colour;
 use crate::utils::{
     bytes, bits
@@ -7,30 +10,34 @@ use super::types::*;
 pub struct RenderingEngine {
     pub polygon_ram:    Box<PolygonRAM>,
 
-    clear_colour:   Colour,
-    clear_alpha:    u8,
-    clear_poly_id:  u8,
-    clear_depth:    u32,
+    pub control:        Display3DControl,
 
-    clear_image_x:  u8,
-    clear_image_y:  u8,
+    pub clear_colour:   Colour,
+    pub clear_alpha:    u8,
+    pub clear_poly_id:  u8,
+    pub clear_depth:    u32,
 
-    alpha_test:     u8,
+    pub clear_image_x:  u8,
+    pub clear_image_y:  u8,
+
+    pub alpha_test:     u8,
     
-    fog_enabled:    bool,
-    fog_colour:     Colour,
-    fog_alpha:      u8,
-    fog_offset:     u32,
-    fog_table:      Vec<u8>,
+    pub fog_enabled:    bool,
+    pub fog_colour:     Colour,
+    pub fog_alpha:      u8,
+    pub fog_offset:     u32,
+    pub fog_table:      Vec<u8>,
 
-    toon_table:     Vec<Colour>,
-    edge_colour:    Vec<Colour>
+    pub toon_table:     Vec<Colour>,
+    pub edge_colour:    Vec<Colour>
 }
 
 impl RenderingEngine {
     pub fn new() -> Self {
         Self {
             polygon_ram:    Box::new(PolygonRAM::new()),
+
+            control:        Display3DControl::default(),
             
             clear_colour:   Colour::default(),
             clear_alpha:    0,
@@ -51,6 +58,10 @@ impl RenderingEngine {
             toon_table:     vec![Colour::default(); 32],
             edge_colour:    vec![Colour::default(); 8]
         }
+    }
+
+    pub fn write_control(&mut self, data: u32) {
+        self.control = Display3DControl::from_bits_truncate(data);
     }
 }
 
@@ -106,33 +117,5 @@ impl RenderingEngine {
         for (byte, table_val) in bytes.iter().zip(self.fog_table.iter_mut().skip(index * 4).take(4)) {
             *table_val = *byte;
         }
-    }
-}
-
-// Drawing
-// TODO: separate data from impl?
-impl RenderingEngine {
-    pub fn draw_line(&mut self, line: u8) {
-        // Clear stencil, depth, colour, attr buffers
-
-        // Draw opaque polygons (sorted)
-        for p in self.polygon_ram.opaque_polygons.iter()
-            .skip_while(|el| el.y_max < line || el.y_min > line)
-            .take_while(|el| el.y_max >= line && el.y_min <= line) {
-            let polygon = &self.polygon_ram.polygons[p.polygon_index];
-            // TODO: from x_min to x_max
-            for x in 0..=255_u8 {
-                // Check if inside
-                // Interpolate depth, test depth
-                // Stencil ??
-                // Find fragment colour, tex colour, blend
-                // Alpha blend with buffer colour
-            }
-        }
-
-        // Edge marking in buffer
-        // Fog in buffer
-
-        // Anti-aliasing (after 2d-blend?)
     }
 }

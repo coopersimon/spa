@@ -8,6 +8,25 @@ use crate::{
     common::colour::Colour
 };
 
+bitflags! {
+    #[derive(Default)]
+    pub struct Display3DControl: u32 {
+        const CLEAR_IMAGE       = u32::bit(14);
+        const LIST_RAM_OVERFLOW = u32::bit(13);
+        const LINE_UNDERFLOW    = u32::bit(12);
+        const FOG_SHIFT         = u32::bits(8, 11);
+        const FOG_ENABLE        = u32::bit(7);
+        const FOG_MODE          = u32::bit(6);
+        const EDGE_MARKING      = u32::bit(5);
+        const ANTI_ALIAS        = u32::bit(4);
+        const BLENDING_ENABLE   = u32::bit(3);
+        const ALPHA_TEST_ENABLE = u32::bit(2);
+        const HIGHLIGHT_SHADING = u32::bit(1);
+        const TEX_MAP_ENABLE    = u32::bit(0);
+    }
+}
+
+
 pub enum PrimitiveType {
     Triangle,
     TriangleStrip,

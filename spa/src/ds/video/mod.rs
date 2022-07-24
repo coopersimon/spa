@@ -12,7 +12,7 @@ use std::sync::{
 };
 use crate::FrameBuffer;
 use crate::utils::{
-    meminterface::MemInterface16,
+    meminterface::{MemInterface16, MemInterface32},
     bits::u16,
     bytes
 };
@@ -22,6 +22,8 @@ use memory::DSVideoMemory;
 pub use memory::{ARM7VRAM, VRAMRegion};
 
 use constants::*;
+
+use self::video3d::Video3D;
 
 /// Signal from the video unit.
 pub enum Signal {
@@ -47,12 +49,15 @@ pub struct DSVideo<R: Renderer> {
 
     pub mem:        DSVideoMemory,
 
+    video_3d:       Video3D,
+
     renderer:       R,
 }
 
 impl<R: Renderer> DSVideo<R> {
     pub fn new(upper: Arc<Mutex<FrameBuffer>>, lower: Arc<Mutex<FrameBuffer>>) -> (Self, ARM7Video, ARM7VRAM) {
-        let (arm9_mem, arm7_vram, renderer_vram) = DSVideoMemory::new();
+        let video_3d = Video3D::new();
+        let (arm9_mem, arm7_vram, renderer_vram) = DSVideoMemory::new(video_3d.rendering_engine.clone());
         let renderer = R::new(upper, lower, renderer_vram);
         let v_count = Arc::new(AtomicU16::new(0));
         (Self {
@@ -65,6 +70,8 @@ impl<R: Renderer> DSVideo<R> {
 
             mem:            arm9_mem,
 
+            video_3d:       video_3d,
+
             renderer:       renderer,
         }, ARM7Video {
             v_count:    v_count,
@@ -76,6 +83,8 @@ impl<R: Renderer> DSVideo<R> {
         use VideoState::*;
         use Transition::*;
         self.cycle_count += cycles;
+
+        self.video_3d.clock(cycles);    // TODO: command buffer interrupt
 
         match self.state {
             Init                                                => self.transition_state(StartFrame, 0),
@@ -96,7 +105,7 @@ impl<R: Renderer> DSVideo<R> {
     }
 }
 
-// Interface refers to engine A registers + LCD status
+// Interface refers to engine A registers + LCD status + 3D regs
 impl<R: Renderer> MemInterface16 for DSVideo<R> {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
@@ -104,6 +113,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
             0x0400_0006 => self.v_count as u16,
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.read_halfword(addr & 0xFF),
             0x0400_0304 => self.mem.power_cnt.load(Ordering::Acquire),
+            0x0400_0320..=0x0400_06FF => self.video_3d.read_halfword(addr),
             _ => panic!("reading invalid video address {:X}", addr)
         }
     }
@@ -114,6 +124,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
             0x0400_0006 => self.v_count = data,
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.write_halfword(addr & 0xFF, data),
             0x0400_0304 => self.mem.power_cnt.store(data, Ordering::Release),
+            0x0400_0320..=0x0400_06FF => self.video_3d.write_halfword(addr, data),
             _ => panic!("writing invalid video address {:X}", addr)
         }
     }
@@ -123,6 +134,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
             0x0400_0004 => bytes::u32::make(self.v_count, self.lcd_status.bits()),
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.read_word(addr & 0xFF),
             0x0400_0304 => bytes::u32::make(0, self.mem.power_cnt.load(Ordering::Acquire)),
+            0x0400_0320..=0x0400_06FF => self.video_3d.read_word(addr),
             _ => panic!("reading invalid video address {:X}", addr)
         }
     }
@@ -135,6 +147,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
             },
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.write_word(addr & 0xFF, data),
             0x0400_0304 => self.mem.power_cnt.store(bytes::u32::lo(data), Ordering::Release),
+            0x0400_0320..=0x0400_06FF => self.video_3d.write_word(addr, data),
             _ => panic!("writing invalid video address {:X}", addr)
         }
     }

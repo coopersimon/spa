@@ -682,7 +682,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
         (0x0400_0208, 0x0400_0217, interrupt_control),
         (0x0400_0280, 0x0400_02BF, accelerators),
         (0x0400_0300, 0x0400_0303, power_control),
-        (0x0400_0304, 0x0400_0307, video),
+        (0x0400_0304, 0x0400_06FF, video),
         (0x0410_0000, 0x0410_0003, ipc),
         (0x0410_0010, 0x0410_0013, card)
     }
