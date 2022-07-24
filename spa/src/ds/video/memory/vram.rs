@@ -30,14 +30,11 @@ pub struct ARM9VRAM {
     pub lcdc:   [VRAMSlot; 9]
 }
 
-pub type VRAMSlot = Option<Box<WRAM>>; // TODO: does this need to be boxed even?
+type VRAMSlot = Option<Box<WRAM>>; // TODO: does this need to be boxed even?
 
 impl ARM9VRAM {
-    pub fn new() -> (Self, ARM7VRAM, EngineAVRAM, EngineBVRAM) {
-        let arm7_vram = ARM7VRAM::default();
-        let engine_a_vram = EngineAVRAM::default();
-        let engine_b_vram = EngineBVRAM::default();
-        let arm9_vram = Self {
+    pub fn new() -> Self {
+        Self {
             lcdc: [
                 Some(Box::new(WRAM::new(128 * 1024))),
                 Some(Box::new(WRAM::new(128 * 1024))),
@@ -51,13 +48,7 @@ impl ARM9VRAM {
             ]
 
             //arm7_status:    Arc::new(AtomicU8::new(VRAMStatus::default().bits()))
-        };
-        (
-            arm9_vram,
-            arm7_vram,
-            engine_a_vram,
-            engine_b_vram
-        )
+        }
     }
 
     /// Get a mutable reference to the relevant lcdc memory region.
@@ -171,7 +162,7 @@ pub struct EngineAVRAM {
 impl EngineAVRAM {
     /// Get the VRAM slot for the BG addr provided.
     /// 
-    /// Returns a mask.
+    /// Returns the ram and a mask to use for the address.
     pub fn lookup_bg<'a>(&'a self, addr: u32) -> Option<(u32, &'a Box<WRAM>)> {
         match addr {
             0x4000..=0x7FFF => match self.bg_slot_01.as_ref() {
@@ -196,7 +187,7 @@ impl EngineAVRAM {
 
     /// Get the VRAM slot for the BG addr provided.
     /// 
-    /// Returns the offset (TODO: return mask?)
+    /// Returns the ram and a mask to use for the address.
     pub fn lookup_bg_mut<'a>(&'a mut self, addr: u32) -> Option<(u32, &'a mut Box<WRAM>)> {
         match addr {
             0x4000..=0x7FFF if self.bg_slot_01.is_some() => self.bg_slot_01.as_mut().map(|vram| (0x3FFF, vram)),
@@ -212,7 +203,7 @@ impl EngineAVRAM {
 
     /// Get the VRAM slot for the OBJ addr provided.
     /// 
-    /// Returns the offset (TODO: return mask?)
+    /// Returns the ram and a mask to use for the address.
     pub fn lookup_obj<'a>(&'a self, addr: u32) -> Option<(u32, &'a Box<WRAM>)> {
         match addr {
             0x4000..=0x7FFF => match self.obj_slot_01.as_ref() {
@@ -235,7 +226,7 @@ impl EngineAVRAM {
 
     /// Get the VRAM slot for the OBJ addr provided.
     /// 
-    /// Returns the offset (TODO: return mask?)
+    /// Returns the ram and a mask to use for the address.
     pub fn lookup_obj_mut<'a>(&'a mut self, addr: u32) -> Option<(u32, &'a mut Box<WRAM>)> {
         match addr {
             0x4000..=0x7FFF if self.obj_slot_01.is_some() => self.obj_slot_01.as_mut().map(|vram| (0x3FFF, vram)),
@@ -335,7 +326,7 @@ pub struct EngineBVRAM {
 impl EngineBVRAM {
     /// Get the VRAM slot for the BG addr provided.
     /// 
-    /// Returns the offset (TODO: return mask?)
+    /// Returns the ram and a mask to use for the address.
     pub fn lookup_bg<'a>(&'a self, addr: u32) -> Option<(u32, &'a Box<WRAM>)> {
         match addr {
             0x8000..=0xBFFF => match self.bg_slot_01.as_ref() {
@@ -349,7 +340,7 @@ impl EngineBVRAM {
 
     /// Get the VRAM slot for the BG addr provided.
     /// 
-    /// Returns the offset (TODO: return mask?)
+    /// Returns the ram and a mask to use for the address.
     pub fn lookup_bg_mut<'a>(&'a mut self, addr: u32) -> Option<(u32, &'a mut Box<WRAM>)> {
         match addr {
             0x8000..=0xBFFF if self.bg_slot_01.is_some() => self.bg_slot_01.as_mut().map(|vram| (0x3FFF, vram)),
@@ -409,3 +400,51 @@ impl VRAM2D for EngineBVRAM {
         }
     }
 }
+
+
+#[derive(Default)]
+pub struct Engine3DVRAM {
+    pub tex_0:  VRAMSlot,
+    pub tex_1:  VRAMSlot,
+    /// This slot is used for clear images (+alpha).
+    pub tex_2:  VRAMSlot,
+    /// This slot is used for clear depth (+fog).
+    pub tex_3:  VRAMSlot,
+
+    pub tex_palette_0:  VRAMSlot,
+    pub tex_palette_1:  VRAMSlot,
+    pub tex_palette_4:  VRAMSlot,
+    pub tex_palette_5:  VRAMSlot,
+}
+
+impl Engine3DVRAM {
+    /// Get the VRAM slot for the texture addr provided.
+    /// 
+    /// Returns the ram and a mask to use for the address.
+    pub fn lookup_tex<'a>(&'a self, addr: u32) -> Option<(u32, &'a Box<WRAM>)> {
+        match addr {
+            0x0_0000..=0x1_FFFF => self.tex_0.as_ref().map(|vram| (0x1_FFFF, vram)),
+            0x2_0000..=0x3_FFFF => self.tex_1.as_ref().map(|vram| (0x1_FFFF, vram)),
+            0x4_0000..=0x5_FFFF => self.tex_2.as_ref().map(|vram| (0x1_FFFF, vram)),
+            0x6_0000..=0x7_FFFF => self.tex_3.as_ref().map(|vram| (0x1_FFFF, vram)),
+            _ => None
+        }
+    }
+
+    /// Get the VRAM slot for the palette addr provided.
+    /// 
+    /// Returns the ram and a mask to use for the address.
+    pub fn lookup_tex_palette<'a>(&'a self, addr: u32) -> Option<(u32, &'a Box<WRAM>)> {
+        match addr {
+            0x0_4000..=0x0_7FFF => match self.tex_palette_1.as_ref() {
+                None => self.tex_palette_0.as_ref().map(|vram| (vram.mask(), vram)),    // TODO: what if a 16kB VRAM block is mapped to 0, and nothing to 1?
+                Some(vram) => Some((0x3FFF, vram))
+            },
+            0x1_0000..=0x1_3FFF => self.tex_palette_4.as_ref().map(|vram| (0x3FFF, vram)),
+            0x1_4000..=0x1_7FFF => self.tex_palette_5.as_ref().map(|vram| (0x3FFF, vram)),
+            0x0_0000..=0x0_FFFF => self.tex_palette_0.as_ref().map(|vram| (vram.mask(), vram)),
+            _ => None
+        }
+    }
+}
+

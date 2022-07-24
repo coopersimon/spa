@@ -1,18 +1,19 @@
 /// Circular buffer that can hold a fixed size of items.
 /// 
 /// It can then be iterated over.
-
-pub struct CircularBuffer<T> {
+pub struct CircularBuffer<T: Default> {
     size:   usize,
     start:  usize,
+    end:    usize,
     data:   Vec<T>
 }
 
-impl<T> CircularBuffer<T> {
+impl<T: Default> CircularBuffer<T> {
     pub fn new() -> Self {
         Self {
             size:   0,
             start:  0,
+            end:    1,
             data:   Vec::new()
         }
     }
@@ -21,34 +22,36 @@ impl<T> CircularBuffer<T> {
     pub fn resize(&mut self, size: usize) {
         self.size = size;
         self.start = 0;
-        self.data.clear();
-    } 
+        self.end = 1;
+        if size > self.data.len() {
+            self.data.resize_with(size, Default::default)
+        }
+    }
 
     /// Push a value onto the end of the buffer.
     /// 
     /// If the buffer is full, it replaces the value at the start.
     pub fn push(&mut self, value: T) {
-        if self.len() >= self.size {
-            self.data[self.start] = value;
-            self.start += 1;
-        } else {
-            self.data.push(value);
+        self.data[self.end] = value;
+        self.end = (self.end + 1) % (self.size + 1);
+        if self.end == self.start {
+            self.start = (self.start + 1) % self.size;
         }
     }
 
     /// Get the length of data inside the buffer.
     pub fn len(&self) -> usize {
-        self.data.len()
+        (self.size + self.end - self.start) % (self.size + 1)
     }
 
     /// Test if the buffer is full.
     pub fn is_full(&self) -> bool {
-        self.data.len() == self.size
+        self.len() == self.size
     }
 
     /// Get the value at the end of the buffer.
     pub fn end<'a>(&'a self) -> &'a T {
-        let index = self.start - 1 % self.data.len();
+        let index = (self.end - 1) % self.size;
         &self.data[index]
     }
 
@@ -61,12 +64,12 @@ impl<T> CircularBuffer<T> {
     }
 }
 
-pub struct CircularBufferIterator<'a, T> {
+pub struct CircularBufferIterator<'a, T: Default> {
     index:              usize,
     circular_buffer:    &'a CircularBuffer<T>
 }
 
-impl<'a, T> Iterator for CircularBufferIterator<'a, T> {
+impl<'a, T: Default> Iterator for CircularBufferIterator<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -77,7 +80,7 @@ impl<'a, T> Iterator for CircularBufferIterator<'a, T> {
     }
 }
 
-impl<'a, T> ExactSizeIterator for CircularBufferIterator<'a, T> {
+impl<'a, T: Default> ExactSizeIterator for CircularBufferIterator<'a, T> {
     fn len(&self) -> usize {
         self.circular_buffer.start + self.circular_buffer.len() - self.index
     }

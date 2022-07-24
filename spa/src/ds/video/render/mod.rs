@@ -10,6 +10,7 @@ use crate::common::videomem::{DispCapSourceB, DispCapMode, DispCapSourceA, Video
 use super::memory::ARM9VRAM;
 use super::{
     memory::{RendererVRAM, EngineAVRAM, EngineBVRAM, GraphicsPowerControl},
+    video3d::Software3DRenderer,
     constants::*
 };
 
@@ -37,9 +38,11 @@ pub struct ProceduralRenderer {
 pub struct ProceduralRendererThread {
     engine_a:   SoftwareRenderer,
     engine_b:   SoftwareRenderer,
+    engine_3d:  Software3DRenderer,
 
-    upper: RenderTarget,
-    lower: RenderTarget,
+    upper:      RenderTarget,
+    lower:      RenderTarget,
+    line_3d:    Vec<Colour>,
 
     vram:   RendererVRAM
 }
@@ -54,6 +57,9 @@ impl Renderer for ProceduralRenderer {
             let mut data = ProceduralRendererThread {
                 engine_a:   SoftwareRenderer::new(RendererMode::NDSA),
                 engine_b:   SoftwareRenderer::new(RendererMode::NDSB),
+                engine_3d:  Software3DRenderer::new(),
+
+                line_3d:    vec![Colour::default(); 256],
 
                 upper, lower, vram
             };
@@ -102,6 +108,13 @@ impl ProceduralRendererThread {
         let end_offset = start_offset + (H_RES * 4);
         let power_cnt = self.vram.read_power_cnt();
 
+        if power_cnt.contains(GraphicsPowerControl::RENDER_3D) {
+            let engine_3d_vram = self.vram.engine_3d_vram.lock();
+            let render_engine = self.vram.render_engine.lock();
+
+            self.engine_3d.draw(&render_engine, &engine_3d_vram, &mut self.line_3d, line as u8);
+        }
+
         if power_cnt.contains(GraphicsPowerControl::ENABLE_A) {
             let mut target = if power_cnt.contains(GraphicsPowerControl::DISPLAY_SWAP) {
                 self.upper.lock()
@@ -132,8 +145,6 @@ impl ProceduralRendererThread {
     /// Draw a full line for NDS A engine. Also applies master brightness
     /// 
     /// Also is responsible for video capture output.
-    /// 
-    /// TODO: 3D
     fn engine_a_line(&self, engine_a_mem: &mut VideoMemory<EngineAVRAM>, target: &mut [u8], line: u8) {
         
         let mut drawn = false;

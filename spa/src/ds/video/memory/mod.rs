@@ -13,8 +13,9 @@ use crate::utils::{
 };
 use crate::common::wram::WRAM;
 use crate::common::videomem::VideoMemory;
-use vram::{ARM7VRAMSlots, VRAMSlot};
-pub use vram::{ARM9VRAM, ARM7VRAM, EngineAVRAM, EngineBVRAM};
+use crate::ds::video::video3d::RenderingEngine;
+use vram::ARM7VRAMSlots;
+pub use vram::{ARM9VRAM, ARM7VRAM, EngineAVRAM, EngineBVRAM, Engine3DVRAM};
 use control::*;
 
 bitflags! {
@@ -90,27 +91,16 @@ pub struct DSVideoMemory {
     arm7_mem:           Arc<Mutex<ARM7VRAMSlots>>,
     pub engine_a_mem:   Arc<Mutex<VideoMemory<EngineAVRAM>>>,
     pub engine_b_mem:   Arc<Mutex<VideoMemory<EngineBVRAM>>>,
-
-    // TODO: other + 3D
-    // temp:
-    tex_0:  VRAMSlot,
-    tex_1:  VRAMSlot,
-    tex_2:  VRAMSlot,
-    tex_3:  VRAMSlot,
-
-    tex_palette_0:  VRAMSlot,
-    tex_palette_1:  VRAMSlot,
-    tex_palette_4:  VRAMSlot,
-    tex_palette_5:  VRAMSlot,
+    engine_3d_mem:      Arc<Mutex<Engine3DVRAM>>,
 }
 
 impl DSVideoMemory {
-    pub fn new() -> (Self, ARM7VRAM, RendererVRAM) {
-        let (arm9_vram, arm7_vram, eng_a_vram, eng_b_vram) = ARM9VRAM::new();
-
-        let lcdc_vram = Arc::new(Mutex::new(arm9_vram));
-        let engine_a_mem = Arc::new(Mutex::new(VideoMemory::new(eng_a_vram)));
-        let engine_b_mem = Arc::new(Mutex::new(VideoMemory::new(eng_b_vram)));
+    pub fn new(render_engine: Arc<Mutex<RenderingEngine>>) -> (Self, ARM7VRAM, RendererVRAM) {
+        let lcdc_vram = Arc::new(Mutex::new(ARM9VRAM::new()));
+        let arm7_vram = ARM7VRAM::default();
+        let engine_a_mem = Arc::new(Mutex::new(VideoMemory::new(EngineAVRAM::default())));
+        let engine_b_mem = Arc::new(Mutex::new(VideoMemory::new(EngineBVRAM::default())));
+        let engine_3d_vram = Arc::new(Mutex::new(Engine3DVRAM::default()));
 
         let power_cnt = Arc::new(AtomicU16::new(0));
 
@@ -130,21 +120,12 @@ impl DSVideoMemory {
             ],
             power_cnt:  power_cnt.clone(),
 
-            arm7_mem:     arm7_vram.mem.clone(),
-            engine_a_mem: engine_a_mem.clone(),
-            engine_b_mem: engine_b_mem.clone(),
-
-            tex_0:  None,
-            tex_1:  None,
-            tex_2:  None,
-            tex_3:  None,
-
-            tex_palette_0:  None,
-            tex_palette_1:  None,
-            tex_palette_4:  None,
-            tex_palette_5:  None,
+            arm7_mem:       arm7_vram.mem.clone(),
+            engine_a_mem:   engine_a_mem.clone(),
+            engine_b_mem:   engine_b_mem.clone(),
+            engine_3d_mem:  engine_3d_vram.clone()
         }, arm7_vram, RendererVRAM {
-            lcdc_vram, power_cnt, engine_a_mem, engine_b_mem
+            lcdc_vram, power_cnt, engine_a_mem, engine_b_mem, engine_3d_vram, render_engine
         })
     }
 }
@@ -483,16 +464,17 @@ impl DSVideoMemory {
             },
             Slot::Texture(slot) => {
                 use Texture::*;
+                let mut engine_3d = self.engine_3d_mem.lock();
                 match slot {
-                    Tex0 => std::mem::replace(&mut self.tex_0, new),
-                    Tex1 => std::mem::replace(&mut self.tex_1, new),
-                    Tex2 => std::mem::replace(&mut self.tex_2, new),
-                    Tex3 => std::mem::replace(&mut self.tex_3, new),
+                    Tex0 => std::mem::replace(&mut engine_3d.tex_0, new),
+                    Tex1 => std::mem::replace(&mut engine_3d.tex_1, new),
+                    Tex2 => std::mem::replace(&mut engine_3d.tex_2, new),
+                    Tex3 => std::mem::replace(&mut engine_3d.tex_3, new),
                 
-                    Palette0 => std::mem::replace(&mut self.tex_palette_0, new),
-                    Palette1 => std::mem::replace(&mut self.tex_palette_1, new),
-                    Palette4 => std::mem::replace(&mut self.tex_palette_4, new),
-                    Palette5 => std::mem::replace(&mut self.tex_palette_5, new),
+                    Palette0 => std::mem::replace(&mut engine_3d.tex_palette_0, new),
+                    Palette1 => std::mem::replace(&mut engine_3d.tex_palette_1, new),
+                    Palette4 => std::mem::replace(&mut engine_3d.tex_palette_4, new),
+                    Palette5 => std::mem::replace(&mut engine_3d.tex_palette_5, new),
                 }
             }
         }
@@ -515,6 +497,8 @@ pub struct RendererVRAM {
     pub power_cnt:      Arc<AtomicU16>, // GraphicsPowerControl
     pub engine_a_mem:   Arc<Mutex<VideoMemory<EngineAVRAM>>>,
     pub engine_b_mem:   Arc<Mutex<VideoMemory<EngineBVRAM>>>,
+    pub engine_3d_vram: Arc<Mutex<Engine3DVRAM>>,
+    pub render_engine:  Arc<Mutex<RenderingEngine>>
 }
 
 impl RendererVRAM {
