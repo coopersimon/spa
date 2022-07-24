@@ -32,7 +32,17 @@ enum Primitive {
 }
 
 pub struct GeometryEngine {
-    polygon_ram:    Box<PolygonRAM>,
+    pub polygon_ram:    Box<PolygonRAM>,
+
+    viewport_x:     u8,
+    viewport_y:     u8,
+    viewport_width: u8,
+    viewport_height:u8,
+
+    /// Use W or Z value for depth-buffering.
+    w_buffer:       bool,
+    /// Manually sort translucent polygons.
+    manual_sort:    bool,
 
     /// Matrix input buffer
     input_buffer:   Vec<N>,
@@ -62,6 +72,14 @@ impl GeometryEngine {
         Self {
             polygon_ram:    Box::new(PolygonRAM::new()),
 
+            viewport_x:         0,
+            viewport_y:         0,
+            viewport_width:     0,
+            viewport_height:    0,
+            
+            w_buffer:       false,
+            manual_sort:    false,
+
             input_buffer:   Vec::new(),
             matrices:       Box::new(MatrixUnit::new()),
             lighting:       Box::new(LightingUnit::new()),
@@ -80,6 +98,21 @@ impl GeometryEngine {
 
 // GPU commands
 impl GeometryEngine {
+    pub fn set_viewport(&mut self, data: u32) {
+        let bytes = u32::to_le_bytes(data);
+        self.viewport_x = bytes[0];
+        self.viewport_y = bytes[1];
+        self.viewport_width = bytes[2] - self.viewport_x;
+        self.viewport_height = bytes[3] - self.viewport_y;
+    }
+
+    /// Set values for next frame.
+    /// Actual swapping of polygon/vertex buffers happens outside.
+    pub fn swap_buffers(&mut self, data: u32) {
+        self.w_buffer = u32::test_bit(data, 0);
+        self.manual_sort = u32::test_bit(data, 1);
+    }
+
     pub fn set_identity_matrix(&mut self) {
         self.matrices.set_current_matrix(&Matrix::identity());
     }
@@ -297,20 +330,31 @@ impl GeometryEngine {
         // TODO: mask?
         let w = transformed_vertex.elements[3];
         let w2 = w * 2;
-        let x = transformed_vertex.elements[0] + w / w2;
-        let y = transformed_vertex.elements[1] + w / w2;
-        let depth = if true {   // TODO: z-buffer
-            let z = transformed_vertex.elements[2] + w / w2;
-            z.to_bits()
-        } else {
+        let x = (transformed_vertex.elements[0]) + w / w2;
+        let y = (transformed_vertex.elements[1]) + w / w2;
+        let depth = if self.w_buffer {
             w.to_bits()
+        } else {
+            let z = (transformed_vertex.elements[2]) + w / w2;
+            z.to_bits()
         } as u32;
 
-        // TODO: test clipping?
+        if x >= N::ONE || x < N::ZERO {
+            // TODO: CLIP X
+            println!("clip x");
+        }
+        if y >= N::ONE || y < N::ZERO {
+            // TODO: CLIP Y
+            println!("clip y");
+        }
+
+        // TODO: not sure about these calcs.
+        let viewport_x = self.viewport_x + (x * N::from_num(self.viewport_width)).to_num::<u8>();
+        let viewport_y = self.viewport_y + (y * N::from_num(self.viewport_height)).to_num::<u8>();
 
         self.staged_polygon.push(Vertex {
-            screen_x: x.to_num(),
-            screen_y: y.to_num(),
+            screen_x: viewport_x,
+            screen_y: viewport_y,
             depth: depth,
             colour: self.lighting.get_vertex_colour(),
             tex_s: 0,   // TODO
@@ -339,6 +383,8 @@ impl GeometryEngine {
         // TODO: check 1-dot display
         // For each vertex test if x&y are within 1 dot.
 
+        // TODO: back/front face culling
+
         true
     }
 
@@ -354,27 +400,35 @@ impl GeometryEngine {
         
         match self.primitive.expect("trying to output vertex without calling begin") {
             Primitive::Triangle => {
+                let mut y_max = 0;
+                let mut y_min = 191;
                 for vertex in self.staged_polygon.iter() {
+                    y_max = std::cmp::max(y_max, vertex.screen_y);
+                    y_min = std::cmp::min(y_min, vertex.screen_y);
                     let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
                     // TODO: only first
                     polygon.vertex_index = v_idx;
                 }
-                self.polygon_ram.insert_polygon(polygon);
+                self.polygon_ram.insert_polygon(polygon, y_max, y_min);
                 self.staged_polygon.resize(3);
             },
             Primitive::TriangleStripFirst => {
+                let mut y_max = 0;
+                let mut y_min = 191;
                 for vertex in self.staged_polygon.iter() {
+                    y_max = std::cmp::max(y_max, vertex.screen_y);
+                    y_min = std::cmp::min(y_min, vertex.screen_y);
                     let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
                     // TODO: only first
                     polygon.vertex_index = v_idx;
                 }
-                self.polygon_ram.insert_polygon(polygon);
+                self.polygon_ram.insert_polygon(polygon, y_max, y_min);
                 self.primitive = Some(Primitive::TriangleStripReady);
             },
             Primitive::TriangleStripReady => {
                 let v_idx = self.polygon_ram.insert_vertex(self.staged_polygon.end().clone());
                 polygon.vertex_index = v_idx - 2;
-                self.polygon_ram.insert_polygon(polygon);
+                self.polygon_ram.insert_polygon(polygon, 0, 0);
             },
             Primitive::Quad => {
                 polygon.use_quads = true;
@@ -383,7 +437,7 @@ impl GeometryEngine {
                     // TODO: only first
                     polygon.vertex_index = v_idx;
                 }
-                self.polygon_ram.insert_polygon(polygon);
+                self.polygon_ram.insert_polygon(polygon, 0, 0);
                 self.staged_polygon.resize(4);
             },
             Primitive::QuadStripFirst => {
@@ -393,7 +447,7 @@ impl GeometryEngine {
                     // TODO: only first
                     polygon.vertex_index = v_idx;
                 }
-                self.polygon_ram.insert_polygon(polygon);
+                self.polygon_ram.insert_polygon(polygon, 0, 0);
                 self.primitive = Some(Primitive::QuadStripBuffer);
             },
             Primitive::QuadStripBuffer => panic!("trying to emit a quad strip polygon when not ready"),
@@ -404,7 +458,7 @@ impl GeometryEngine {
                     // TODO: only first
                     polygon.vertex_index = v_idx - 2;
                 }
-                self.polygon_ram.insert_polygon(polygon);
+                self.polygon_ram.insert_polygon(polygon, 0, 0);
                 self.primitive = Some(Primitive::QuadStripBuffer);
             }
         }

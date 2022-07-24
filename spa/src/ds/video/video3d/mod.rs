@@ -1,5 +1,6 @@
 mod types;
 mod geometry;
+mod render;
 
 use crate::{
     utils::{
@@ -9,15 +10,18 @@ use crate::{
 };
 
 use geometry::GeometryEngine;
+use render::RenderingEngine;
 
 pub struct Video3D {
     geometry_engine:    GeometryEngine,
+    rendering_engine:   RenderingEngine
 }
 
 impl Video3D {
     pub fn new() -> Self {
         Self {
             geometry_engine:    GeometryEngine::new(),
+            rendering_engine:   RenderingEngine::new()
         }
     }
 }
@@ -31,6 +35,17 @@ impl MemInterface32 for Video3D {
 
     fn write_word(&mut self, addr: u32, data: u32) {
         match addr {
+            0x0400_0060 => {},  // Control
+
+            0x0400_0330..=0x0400_033F => self.rendering_engine.set_edge_colour(((addr & 0xF) / 2) as usize, data),
+            0x0400_0340 => self.rendering_engine.set_alpha_test(data),
+            0x0400_0350 => self.rendering_engine.set_clear_colour_attr(data),
+            0x0400_0354 => self.rendering_engine.set_clear_depth_image(data),
+            0x0400_0358 => self.rendering_engine.set_fog_colour(data),
+            0x0400_035C => self.rendering_engine.set_fog_offset(data),
+            0x0400_0360..=0x0400_037F => self.rendering_engine.set_fog_table(((addr & 0x1F) / 4) as usize, data),
+            0x0400_0380..=0x0400_03BF => self.rendering_engine.set_toon_table(((addr & 0x3F) / 2) as usize, data),
+
             0x0400_0400..=0x0400_043F => {},    // Command buffer
 
             0x0400_0440 => self.geometry_engine.matrices.set_matrix_mode(data),
@@ -68,14 +83,25 @@ impl MemInterface32 for Video3D {
             0x0400_04CC => self.geometry_engine.lighting.set_light_colour(data),
             0x0400_04D0 => self.geometry_engine.lighting.set_specular_table(data),
 
-            0x0400_0500 => {},  // BEGIN
-            0x0400_0504 => {},  // END
+            0x0400_0500 => self.geometry_engine.begin_vertex_list(data),
+            0x0400_0504 => self.geometry_engine.end_vertex_list(),
 
-            0x0400_0540 => {},  // TODO: swap buffers
-            0x0400_0580 => {},  // TODO: viewport
+            0x0400_0540 => self.swap_buffers(data),
+            0x0400_0580 => self.geometry_engine.set_viewport(data),
+
+            0x0400_0600 => {},  // TODO: status
+            0x0400_0610 => {},  // TODO: 1-dot depth
 
             // TODO: tests
             _ => panic!("writing invalid gpu address {:X}", addr)
         }
+    }
+}
+
+impl Video3D {
+    fn swap_buffers(&mut self, data: u32) {
+        std::mem::swap(&mut self.geometry_engine.polygon_ram, &mut self.rendering_engine.polygon_ram);
+        self.geometry_engine.polygon_ram.clear();
+        self.geometry_engine.swap_buffers(data);
     }
 }
