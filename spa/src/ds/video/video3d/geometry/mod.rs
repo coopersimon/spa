@@ -6,7 +6,7 @@ use math::*;
 use matrix::*;
 use lighting::*;
 
-use fixed::types::I4F12;
+use fixed::{types::{I4F12, I12F4, I23F9}, traits::ToFixed};
 use crate::{
     utils::{
         bits::u32,
@@ -333,11 +333,11 @@ impl GeometryEngine {
         let x = (transformed_vertex.elements[0]) + w / w2;
         let y = (transformed_vertex.elements[1]) + w / w2;
         let depth = if self.w_buffer {
-            w.to_bits()
+            w.to_fixed::<I23F9>()
         } else {
             let z = (transformed_vertex.elements[2]) + w / w2;
-            z.to_bits()
-        } as u32;
+            z.to_fixed::<I23F9>()
+        };
 
         if x >= N::ONE || x < N::ZERO {
             // TODO: CLIP X
@@ -349,12 +349,11 @@ impl GeometryEngine {
         }
 
         // TODO: not sure about these calcs.
-        let viewport_x = self.viewport_x + (x * N::from_num(self.viewport_width)).to_num::<u8>();
-        let viewport_y = self.viewport_y + (y * N::from_num(self.viewport_height)).to_num::<u8>();
+        let viewport_x = I12F4::from_num(self.viewport_x) + (x * N::from_num(self.viewport_width)).to_fixed::<I12F4>();
+        let viewport_y = I12F4::from_num(self.viewport_y) + (y * N::from_num(self.viewport_height)).to_fixed::<I12F4>();
 
         self.staged_polygon.push(Vertex {
-            screen_x: viewport_x,
-            screen_y: viewport_y,
+            screen_p: Coords{x: viewport_x, y: viewport_y},
             depth: depth,
             colour: self.lighting.get_vertex_colour(),
             tex_s: 0,   // TODO
@@ -394,71 +393,88 @@ impl GeometryEngine {
             attrs:      self.polygon_attrs,
             tex:        self.texture_attrs,
             palette:    self.tex_palette,
-            use_quads:  false,
-            vertex_index:   0,
+            x_max:      I12F4::ZERO,
+            x_min:      I12F4::MAX,
+            vertex_indices: Vec::new(),
         };
         
         match self.primitive.expect("trying to output vertex without calling begin") {
             Primitive::Triangle => {
-                let mut y_max = 0;
-                let mut y_min = 191;
+                let mut y_max = I12F4::ZERO;
+                let mut y_min = I12F4::MAX;
                 for vertex in self.staged_polygon.iter() {
-                    y_max = std::cmp::max(y_max, vertex.screen_y);
-                    y_min = std::cmp::min(y_min, vertex.screen_y);
+                    y_max = std::cmp::max(y_max, vertex.screen_p.y);
+                    y_min = std::cmp::min(y_min, vertex.screen_p.y);
+                    polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
+                    polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
                     let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
-                    // TODO: only first
-                    polygon.vertex_index = v_idx;
+                    polygon.vertex_indices.push(v_idx);
                 }
                 self.polygon_ram.insert_polygon(polygon, y_max, y_min);
                 self.staged_polygon.resize(3);
             },
             Primitive::TriangleStripFirst => {
-                let mut y_max = 0;
-                let mut y_min = 191;
+                let mut y_max = I12F4::ZERO;
+                let mut y_min = I12F4::MAX;
                 for vertex in self.staged_polygon.iter() {
-                    y_max = std::cmp::max(y_max, vertex.screen_y);
-                    y_min = std::cmp::min(y_min, vertex.screen_y);
+                    y_max = std::cmp::max(y_max, vertex.screen_p.y);
+                    y_min = std::cmp::min(y_min, vertex.screen_p.y);
+                    polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
+                    polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
                     let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
-                    // TODO: only first
-                    polygon.vertex_index = v_idx;
+                    polygon.vertex_indices.push(v_idx);
                 }
                 self.polygon_ram.insert_polygon(polygon, y_max, y_min);
                 self.primitive = Some(Primitive::TriangleStripReady);
             },
-            Primitive::TriangleStripReady => {
+            Primitive::TriangleStripReady => {  // TODO
                 let v_idx = self.polygon_ram.insert_vertex(self.staged_polygon.end().clone());
-                polygon.vertex_index = v_idx - 2;
-                self.polygon_ram.insert_polygon(polygon, 0, 0);
+                polygon.vertex_indices.push(v_idx);
+                self.polygon_ram.insert_polygon(polygon, I12F4::ZERO, I12F4::ZERO);
+                // TODO: insert previous indices.
             },
             Primitive::Quad => {
-                polygon.use_quads = true;
+                let mut y_max = I12F4::ZERO;
+                let mut y_min = I12F4::MAX;
                 for vertex in self.staged_polygon.iter() {
+                    y_max = std::cmp::max(y_max, vertex.screen_p.y);
+                    y_min = std::cmp::min(y_min, vertex.screen_p.y);
+                    polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
+                    polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
                     let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
-                    // TODO: only first
-                    polygon.vertex_index = v_idx;
+                    polygon.vertex_indices.push(v_idx);
                 }
-                self.polygon_ram.insert_polygon(polygon, 0, 0);
+                self.polygon_ram.insert_polygon(polygon, y_max, y_min);
                 self.staged_polygon.resize(4);
             },
             Primitive::QuadStripFirst => {
-                polygon.use_quads = true;
+                let mut y_max = I12F4::ZERO;
+                let mut y_min = I12F4::MAX;
                 for vertex in self.staged_polygon.iter() {
+                    y_max = std::cmp::max(y_max, vertex.screen_p.y);
+                    y_min = std::cmp::min(y_min, vertex.screen_p.y);
+                    polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
+                    polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
                     let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
-                    // TODO: only first
-                    polygon.vertex_index = v_idx;
+                    polygon.vertex_indices.push(v_idx);
                 }
-                self.polygon_ram.insert_polygon(polygon, 0, 0);
+                self.polygon_ram.insert_polygon(polygon, y_max, y_min);
                 self.primitive = Some(Primitive::QuadStripBuffer);
             },
             Primitive::QuadStripBuffer => panic!("trying to emit a quad strip polygon when not ready"),
             Primitive::QuadStripReady => {
-                polygon.use_quads = true;
-                for vertex in self.staged_polygon.iter().skip(2) {
+                let mut y_max = I12F4::ZERO;
+                let mut y_min = I12F4::MAX;
+                for vertex in self.staged_polygon.iter() {
+                    y_max = std::cmp::max(y_max, vertex.screen_p.y);
+                    y_min = std::cmp::min(y_min, vertex.screen_p.y);
+                    polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
+                    polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
                     let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
-                    // TODO: only first
-                    polygon.vertex_index = v_idx - 2;
+                    polygon.vertex_indices.push(v_idx);
+                    // TODO: insert previous indices.
                 }
-                self.polygon_ram.insert_polygon(polygon, 0, 0);
+                self.polygon_ram.insert_polygon(polygon, y_max, y_min);
                 self.primitive = Some(Primitive::QuadStripBuffer);
             }
         }

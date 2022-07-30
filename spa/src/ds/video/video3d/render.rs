@@ -1,6 +1,7 @@
 // This file contains the Rendering Engine struct.
 // It doesn't contain the actual logic for rendering 3D - see drawing.rs for that.
 
+use fixed::types::I23F9;
 use crate::common::colour::Colour;
 use crate::utils::{
     bytes, bits
@@ -15,7 +16,7 @@ pub struct RenderingEngine {
     pub clear_colour:   Colour,
     pub clear_alpha:    u8,
     pub clear_poly_id:  u8,
-    pub clear_depth:    u32,
+    pub clear_depth:    I23F9,
 
     pub clear_image_x:  u8,
     pub clear_image_y:  u8,
@@ -42,7 +43,7 @@ impl RenderingEngine {
             clear_colour:   Colour::default(),
             clear_alpha:    0,
             clear_poly_id:  0,
-            clear_depth:    0,
+            clear_depth:    I23F9::ZERO,
 
             clear_image_x:  0,
             clear_image_y:  0,
@@ -76,13 +77,13 @@ impl RenderingEngine {
 
     /// Set clear depth value, and image offset.
     pub fn set_clear_depth_image(&mut self, data: u32) {
-        let depth = data & 0x7FFF;
+        let depth = (data & 0x7FFF) as i32;
         let depth_low = if depth == 0x7FFF {
             0x1FF
         } else {
             0
         };
-        self.clear_depth = (depth << 9) | depth_low;
+        self.clear_depth = I23F9::from_bits((depth << 9) | depth_low);
 
         let clear_image_coords = bytes::u32::hi(data);
         self.clear_image_x = bytes::u16::lo(clear_image_coords);
