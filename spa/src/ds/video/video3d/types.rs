@@ -3,6 +3,7 @@ use std::{
     cmp::Ordering
 };
 use bitflags::bitflags;
+use fixed::types::{I12F4, I23F9};
 use crate::{
     utils::bits::u32,
     common::colour::Colour
@@ -25,8 +26,6 @@ bitflags! {
         const TEX_MAP_ENABLE    = u32::bit(0);
     }
 }
-
-
 pub enum PrimitiveType {
     Triangle,
     TriangleStrip,
@@ -62,6 +61,10 @@ impl PolygonAttrs {
     pub fn id(self) -> u8 {
         ((self & PolygonAttrs::POLYGON_ID).bits() >> 24) as u8
     }
+    
+    pub fn mode(self) -> u8 {
+        ((self & PolygonAttrs::POLYGON_MODE).bits() >> 4) as u8
+    }
 }
 
 bitflags! {
@@ -82,8 +85,8 @@ bitflags! {
 
 #[derive(Eq)]
 pub struct PolygonOrder {
-    pub y_max:    u8, // In screen space (0: top, 191: bottom)
-    pub y_min:    u8, // In screen space (0: top, 191: bottom)
+    pub y_max:    I12F4, // In screen space (0: top, 191: bottom)
+    pub y_min:    I12F4, // In screen space (0: top, 191: bottom)
     pub polygon_index:  usize,
 }
 
@@ -104,8 +107,8 @@ impl PartialOrd for PolygonOrder {
 impl Ord for PolygonOrder {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.y_max.cmp(&other.y_max) {
-            Equal => match self.y_min.cmp(&other.y_min) {
-                Equal => self.polygon_index.cmp(&other.polygon_index),
+            Ordering::Equal => match self.y_min.cmp(&other.y_min) {
+                Ordering::Equal => self.polygon_index.cmp(&other.polygon_index),
                 o => o
             },
             o => o
@@ -125,8 +128,16 @@ pub struct Polygon {
     pub attrs:          PolygonAttrs,
     pub tex:            TextureAttrs,
     pub palette:        u16,
-    pub use_quads:      bool,
-    pub vertex_index:   usize,
+    pub x_max:          I12F4,
+    pub x_min:          I12F4,
+    pub vertex_indices: Vec<usize>
+}
+
+/// Coordinates for a point in screen-space.
+#[derive(Default, Clone, Copy)]
+pub struct Coords {
+    pub x: I12F4,
+    pub y: I12F4
 }
 
 /// A single vertex. 12 bytes.
@@ -138,9 +149,8 @@ pub struct Polygon {
 /// - Texture coords
 #[derive(Default, Clone)]
 pub struct Vertex {
-    pub screen_x:   u8,
-    pub screen_y:   u8,
-    pub depth:      u32,
+    pub screen_p:   Coords,
+    pub depth:      I23F9,
     pub colour:     Colour,
     pub tex_s:      u16,
     pub tex_t:      u16
@@ -184,7 +194,7 @@ impl PolygonRAM {
     }
 
     /// Insert a polygon.
-    pub fn insert_polygon(&mut self, polygon: Polygon, y_max: u8, y_min: u8) {
+    pub fn insert_polygon(&mut self, polygon: Polygon, y_max: I12F4, y_min: I12F4) {
         let alpha = polygon.attrs.alpha();
         let polygon_index = self.polygons.len();
 
