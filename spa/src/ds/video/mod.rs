@@ -79,14 +79,20 @@ impl<R: Renderer> DSVideo<R> {
         }, arm7_vram)
     }
 
-    pub fn clock(&mut self, cycles: usize) -> (Signal, Interrupts) {
+    /// Clock the video state machine.
+    /// 
+    /// This returns a signal indicating if any blanking state has been entered,
+    /// interrupts that have triggered,
+    /// and a boolean indicating whether the geometry FIFO is under half-full
+    /// (and DMA should trigger accordingly).
+    pub fn clock(&mut self, cycles: usize) -> (Signal, Interrupts, bool) {
         use VideoState::*;
         use Transition::*;
         self.cycle_count += cycles;
 
-        self.video_3d.clock(cycles);    // TODO: command buffer interrupt
+        let (irq_3d, geom_fifo_dma) = self.video_3d.clock(cycles);
 
-        match self.state {
+        let (signal, irq) = match self.state {
             Init                                                => self.transition_state(StartFrame, 0),
             Drawing if self.cycle_count >= H_CYCLES             => self.transition_state(EnterHBlank, H_CYCLES),
             HBlank if self.cycle_count >= H_BLANK_CYCLES => if self.v_count < V_MAX {
@@ -101,7 +107,9 @@ impl<R: Renderer> DSVideo<R> {
             },
             VBlank if self.cycle_count >= H_CYCLES              => self.transition_state(EnterVHBlank, H_CYCLES),
             _                                                   => (Signal::None, Interrupts::default()),
-        }
+        };
+
+        (signal, irq | irq_3d, geom_fifo_dma)
     }
 }
 
@@ -111,6 +119,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
         match addr {
             0x0400_0004 => self.lcd_status.bits(),
             0x0400_0006 => self.v_count as u16,
+            0x0400_0060 => self.video_3d.read_halfword(addr),
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.read_halfword(addr & 0xFF),
             0x0400_0304 => self.mem.power_cnt.load(Ordering::Acquire),
             0x0400_0320..=0x0400_06FF => self.video_3d.read_halfword(addr),
@@ -122,6 +131,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
         match addr {
             0x0400_0004 => self.set_lcd_status(data),
             0x0400_0006 => self.v_count = data,
+            0x0400_0060 => self.video_3d.write_halfword(addr, data),
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.write_halfword(addr & 0xFF, data),
             0x0400_0304 => self.mem.power_cnt.store(data, Ordering::Release),
             0x0400_0320..=0x0400_06FF => self.video_3d.write_halfword(addr, data),
@@ -132,6 +142,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
     fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
             0x0400_0004 => bytes::u32::make(self.v_count, self.lcd_status.bits()),
+            0x0400_0060 => self.video_3d.read_word(addr),
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.read_word(addr & 0xFF),
             0x0400_0304 => bytes::u32::make(0, self.mem.power_cnt.load(Ordering::Acquire)),
             0x0400_0320..=0x0400_06FF => self.video_3d.read_word(addr),
@@ -145,6 +156,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
                 self.set_lcd_status(bytes::u32::lo(data));
                 self.v_count = bytes::u32::hi(data);
             },
+            0x0400_0060 => self.video_3d.write_word(addr, data),
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.write_word(addr & 0xFF, data),
             0x0400_0304 => self.mem.power_cnt.store(bytes::u32::lo(data), Ordering::Release),
             0x0400_0320..=0x0400_06FF => self.video_3d.write_word(addr, data),
@@ -216,6 +228,7 @@ impl<R: Renderer> DSVideo<R> {
                 self.lcd_status.insert(LCDStatus::VBLANK_FLAG);
                 self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == self.lcd_status.v_count());
                 self.renderer.finish_frame();
+                self.video_3d.on_vblank();
                 (Signal::VBlank, self.v_blank_irq())
             }
             EnterVHBlank => {

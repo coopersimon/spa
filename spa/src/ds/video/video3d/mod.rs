@@ -61,17 +61,24 @@ impl Video3D {
         }
     }
 
-    pub fn clock(&mut self, cycles: usize) -> Interrupts {
-        self.cycle_count += cycles as isize;
-        while self.cycle_count > 0 {
-            self.cycle_count -= self.process_command();
+    pub fn clock(&mut self, cycles: usize) -> (Interrupts, bool) {
+        while self.cycle_count >= 0 {
+            if let Some(cycles_used) = self.process_command() {
+                self.cycle_count -= cycles_used;
+            } else {
+                break;
+            }
+        }
+        if self.cycle_count < 0 {   // TODO: always add when writing to command buffer (?)
+            self.cycle_count += cycles as isize;
         }
 
-        if self.geom_command_fifo.interrupt() {
+        let irq = if self.geom_command_fifo.interrupt() {
             Interrupts::GEOM_FIFO
         } else {
             Interrupts::empty()
-        }
+        };
+        (irq, self.geom_command_fifo.under_half_full())
     }
 
     pub fn on_vblank(&mut self) {
@@ -88,6 +95,10 @@ impl MemInterface32 for Video3D {
             0x0400_0060 => self.rendering_engine.lock().control.bits(),
 
             0x0400_0320 => 46,   // TODO: Rendered line count
+
+            0x0400_0340 => 0,
+            0x0400_0354 => 0,
+            0x0400_035C => 0,
 
             0x0400_0600 => self.get_geom_engine_status().bits(),
             0x0400_0604 => 0,   // POLY+VTX COUNT
@@ -106,14 +117,14 @@ impl MemInterface32 for Video3D {
         match addr {
             0x0400_0060 => self.rendering_engine.lock().write_control(data),
 
-            0x0400_0330..=0x0400_033F => self.rendering_engine.lock().set_edge_colour(((addr & 0xF) / 2) as usize, data),
+            0x0400_0330..=0x0400_033F => self.rendering_engine.lock().set_edge_colour(((addr & 0xF) / 4) as usize, data),
             0x0400_0340 => self.rendering_engine.lock().set_alpha_test(data),
             0x0400_0350 => self.rendering_engine.lock().set_clear_colour_attr(data),
             0x0400_0354 => self.rendering_engine.lock().set_clear_depth_image(data),
             0x0400_0358 => self.rendering_engine.lock().set_fog_colour(data),
             0x0400_035C => self.rendering_engine.lock().set_fog_offset(data),
             0x0400_0360..=0x0400_037F => self.rendering_engine.lock().set_fog_table(((addr & 0x1F) / 4) as usize, data),
-            0x0400_0380..=0x0400_03BF => self.rendering_engine.lock().set_toon_table(((addr & 0x3F) / 2) as usize, data),
+            0x0400_0380..=0x0400_03BF => self.rendering_engine.lock().set_toon_table(((addr & 0x3F) / 4) as usize, data),
 
             0x0400_0400..=0x0400_043F => self.geom_command_fifo.push_command_buffer(data),              // Command buffer
 
@@ -183,74 +194,76 @@ impl Video3D {
     }
 
     /// Do a single command, returning the number of cycles used in the process.
-    fn process_command(&mut self) -> isize {
+    fn process_command(&mut self) -> Option<isize> {
         if self.current_commands == 0 {
             if let Some(commands) = self.geom_command_fifo.pop() {
                 self.current_commands = commands;
             } else {
                 // No commands queued.
-                return 0;
+                return None;
             }
         }
 
         let command = (self.current_commands & 0xFF) as u8;
-        self.current_commands >>= 8;
 
-        match command {
-            0x00 => 0,  // NOP
+        let cycles = match command {
+            0x00 => Some(0),  // NOP
 
-            0x10 => {
-                self.geometry_engine.matrices.set_matrix_mode(self.geom_command_fifo.pop().unwrap());
-                1
-            },
-            0x11 => self.geometry_engine.matrices.push_matrix(),
-            0x12 => self.geometry_engine.matrices.pop_matrix(self.geom_command_fifo.pop().unwrap()),
-            0x13 => self.geometry_engine.matrices.store_matrix(self.geom_command_fifo.pop().unwrap()),
-            0x14 => self.geometry_engine.matrices.restore_matrix(self.geom_command_fifo.pop().unwrap()),
+            0x10 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.matrices.set_matrix_mode(d)),
+            0x11 => Some(self.geometry_engine.matrices.push_matrix()),
+            0x12 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.matrices.pop_matrix(d)),
+            0x13 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.matrices.store_matrix(d)),
+            0x14 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.matrices.restore_matrix(d)),
             // TODO: make these a bit nicer...
-            0x15 => self.geometry_engine.matrices.set_identity(),
-            0x16 => self.geometry_engine.matrices.set_4x4(&self.geom_command_fifo.pop_n(16).map(|n| N::from_bits(n as i32)).collect::<Vec<_>>()),
-            0x17 => self.geometry_engine.matrices.set_4x3(&self.geom_command_fifo.pop_n(12).map(|n| N::from_bits(n as i32)).collect::<Vec<_>>()),
-            0x18 => self.geometry_engine.matrices.mul_4x4(&self.geom_command_fifo.pop_n(16).map(|n| N::from_bits(n as i32)).collect::<Vec<_>>()),
-            0x19 => self.geometry_engine.matrices.mul_4x3(&self.geom_command_fifo.pop_n(12).map(|n| N::from_bits(n as i32)).collect::<Vec<_>>()),
-            0x1A => self.geometry_engine.matrices.mul_3x3(&self.geom_command_fifo.pop_n(9).map(|n| N::from_bits(n as i32)).collect::<Vec<_>>()),
-            0x1B => self.geometry_engine.matrices.mul_scale(&self.geom_command_fifo.pop_n(3).map(|n| N::from_bits(n as i32)).collect::<Vec<_>>()),
-            0x1C => self.geometry_engine.matrices.mul_trans(&self.geom_command_fifo.pop_n(3).map(|n| N::from_bits(n as i32)).collect::<Vec<_>>()),
+            0x15 => Some(self.geometry_engine.matrices.set_identity()),
+            0x16 => self.geom_command_fifo.pop_n(16).map(|d| self.geometry_engine.matrices.set_4x4(&d.map(|n| N::from_bits(n as i32)).collect::<Vec<_>>())),
+            0x17 => self.geom_command_fifo.pop_n(12).map(|d| self.geometry_engine.matrices.set_4x3(&d.map(|n| N::from_bits(n as i32)).collect::<Vec<_>>())),
+            0x18 => self.geom_command_fifo.pop_n(16).map(|d| self.geometry_engine.matrices.mul_4x4(&d.map(|n| N::from_bits(n as i32)).collect::<Vec<_>>())),
+            0x19 => self.geom_command_fifo.pop_n(12).map(|d| self.geometry_engine.matrices.mul_4x3(&d.map(|n| N::from_bits(n as i32)).collect::<Vec<_>>())),
+            0x1A => self.geom_command_fifo.pop_n(9).map(|d| self.geometry_engine.matrices.mul_3x3(&d.map(|n| N::from_bits(n as i32)).collect::<Vec<_>>())),
+            0x1B => self.geom_command_fifo.pop_n(3).map(|d| self.geometry_engine.matrices.mul_scale(&d.map(|n| N::from_bits(n as i32)).collect::<Vec<_>>())),
+            0x1C => self.geom_command_fifo.pop_n(3).map(|d| self.geometry_engine.matrices.mul_trans(&d.map(|n| N::from_bits(n as i32)).collect::<Vec<_>>())),
 
-            0x20 => self.geometry_engine.set_vertex_colour(self.geom_command_fifo.pop().unwrap()),
-            0x21 => self.geometry_engine.set_normal(self.geom_command_fifo.pop().unwrap()),
-            0x22 => 0,  // TEX COORD
+            0x20 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_vertex_colour(d)),
+            0x21 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_normal(d)),
+            0x22 => Some(0),  // TEX COORD
 
-            0x23 => self.geometry_engine.set_vertex_coords_16(self.geom_command_fifo.pop().unwrap(), self.geom_command_fifo.pop().unwrap()),
-            0x24 => self.geometry_engine.set_vertex_coords_10(self.geom_command_fifo.pop().unwrap()),
-            0x25 => self.geometry_engine.set_vertex_coords_xy(self.geom_command_fifo.pop().unwrap()),
-            0x26 => self.geometry_engine.set_vertex_coords_xz(self.geom_command_fifo.pop().unwrap()),
-            0x27 => self.geometry_engine.set_vertex_coords_yz(self.geom_command_fifo.pop().unwrap()),
-            0x28 => self.geometry_engine.diff_vertex_coords(self.geom_command_fifo.pop().unwrap()),
+            0x23 => self.geom_command_fifo.pop_n(2).map(|mut d| self.geometry_engine.set_vertex_coords_16(d.next().unwrap(), d.next().unwrap())),
+            0x24 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_vertex_coords_10(d)),
+            0x25 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_vertex_coords_xy(d)),
+            0x26 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_vertex_coords_xz(d)),
+            0x27 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_vertex_coords_yz(d)),
+            0x28 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.diff_vertex_coords(d)),
             
-            0x29 => self.geometry_engine.set_polygon_attrs(self.geom_command_fifo.pop().unwrap()),
-            0x2A => 0,  // TEX PARAM
-            0x2B => 0,  // TEX PALETTE BASE
+            0x29 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_polygon_attrs(d)),
+            0x2A => Some(0),  // TEX PARAM
+            0x2B => Some(0),  // TEX PALETTE BASE
 
-            0x30 => self.geometry_engine.set_dif_amb_colour(self.geom_command_fifo.pop().unwrap()),
-            0x31 => self.geometry_engine.set_spe_emi_colour(self.geom_command_fifo.pop().unwrap()),
-            0x32 => self.geometry_engine.set_light_direction(self.geom_command_fifo.pop().unwrap()),
-            0x33 => self.geometry_engine.set_light_colour(self.geom_command_fifo.pop().unwrap()),
-            0x34 => self.geometry_engine.set_specular_table(self.geom_command_fifo.pop_n(32)),
+            0x30 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_dif_amb_colour(d)),
+            0x31 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_spe_emi_colour(d)),
+            0x32 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_light_direction(d)),
+            0x33 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_light_colour(d)),
+            0x34 => self.geom_command_fifo.pop_n(32).map(|d| self.geometry_engine.set_specular_table(d)),
 
-            0x40 => self.geometry_engine.begin_vertex_list(self.geom_command_fifo.pop().unwrap()),
-            0x41 => self.geometry_engine.end_vertex_list(),
+            0x40 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.begin_vertex_list(d)),
+            0x41 => Some(self.geometry_engine.end_vertex_list()),
 
             0x50 => {
                 self.pending_swap = self.geom_command_fifo.pop();
-                0
+                Some(0)
             },
-            0x60 => self.geometry_engine.set_viewport(self.geom_command_fifo.pop().unwrap()),
+            0x60 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_viewport(d)),
 
             // TODO: test
 
-            _ => 0, // Undefined
+            _ => Some(0), // Undefined
+        };
+
+        if cycles.is_some() {
+            self.current_commands >>= 8;
         }
+
+        cycles
     }
 
     fn is_busy(&self) -> bool {
