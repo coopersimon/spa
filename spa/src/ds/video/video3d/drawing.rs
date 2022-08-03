@@ -69,20 +69,18 @@ impl Software3DRenderer {
 
             let image_y = line.wrapping_add(render_engine.clear_image_y);
             let image_y_addr = (image_y as u32) * 256 * 2;
-            let mut clear_attrs = Attributes {
-                opaque_id:  render_engine.clear_poly_id,
-                trans_id:   render_engine.clear_poly_id,
-                alpha:      render_engine.clear_alpha,
-                fog:        render_engine.fog_enabled,
-            };
 
             for x in 0..=255_u8 {
                 let image_x = x.wrapping_add(render_engine.clear_image_x);
                 let addr = image_y_addr + (image_x as u32) * 2;
                 let colour = clear_colour_image.read_halfword(addr);
                 let depth = clear_depth_image.read_halfword(addr);
-                clear_attrs.alpha = if u16::test_bit(colour, 15) {0x1F} else {0};
-                clear_attrs.fog = u16::test_bit(depth, 15);
+                let clear_attrs = Attributes {
+                    opaque_id:  render_engine.clear_poly_id,
+                    trans_id:   render_engine.clear_poly_id,
+                    alpha:      if u16::test_bit(colour, 15) {0x1F} else {0},
+                    fog:        u16::test_bit(depth, 15),
+                };
 
                 self.attr_buffer[x as usize] = clear_attrs;
                 self.depth_buffer[x as usize] = I23F9::from_bits(((depth & 0x7FFF) as i32) << 9);   // TODO: frac part.
@@ -144,7 +142,7 @@ impl Software3DRenderer {
 
                 if self.depth_buffer[x_idx as usize] <= depth { // TODO: remove fractional part?
                     // Point is behind buffer value.
-                    if polygon.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH) && self.depth_buffer[x_idx as usize] < depth {
+                    if !polygon.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH) || self.depth_buffer[x_idx as usize] < depth {
                         continue;
                     }
                 }
@@ -155,11 +153,18 @@ impl Software3DRenderer {
                 self.attr_buffer[x_idx as usize].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
 
                 let frag_colour = interpolate_colour(&interpolation_factors, &vertices.iter().map(|v| v.colour).collect::<Vec<_>>());
-                // TODO: Interpolate tex coords
-                // TODO: Lookup tex colour
-                let tex_colour = Colour::black();
-                // TODO: Lookup tex alpha
-                let tex_alpha = 0x1F_u16;
+                
+                let tex_format = polygon.tex.format();
+                let (tex_colour, tex_alpha) = if tex_format == 0 {
+                    // No texture.
+                    (Colour::black(), 0x1F_u16)
+                } else {
+                    let tex_coords = interpolate_tex_coords(&interpolation_factors, &vertices.iter().map(|v| v.tex_coords).collect::<Vec<_>>());
+                    // TODO: Lookup tex colour + alpha
+                    let tex_colour = Colour::black();
+                    let tex_alpha = 0x1F_u16;
+                    (tex_colour, tex_alpha)
+                };
 
                 // Blend fragment colour.
                 match polygon.attrs.mode() {
@@ -240,5 +245,20 @@ fn interpolate_colour(factors: &[I23F9], colours: &[Colour]) -> Colour {
         r: r.to_num::<u8>(),
         g: g.to_num::<u8>(),
         b: b.to_num::<u8>()
+    }
+}
+
+fn interpolate_tex_coords(factors: &[I23F9], tex_coords: &[Coords]) -> Coords {
+    let x = factors[0] * tex_coords[2].x.to_fixed::<I23F9>()
+        + factors[1] * tex_coords[0].x.to_fixed::<I23F9>()
+        + factors[2] * tex_coords[1].x.to_fixed::<I23F9>();
+    
+    let y = factors[0] * tex_coords[2].y.to_fixed::<I23F9>()
+        + factors[1] * tex_coords[0].y.to_fixed::<I23F9>()
+        + factors[2] * tex_coords[1].y.to_fixed::<I23F9>();
+    
+    Coords {
+        x: x.to_fixed::<I12F4>(),
+        y: y.to_fixed::<I12F4>()
     }
 }
