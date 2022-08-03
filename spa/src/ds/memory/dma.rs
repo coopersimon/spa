@@ -112,6 +112,13 @@ impl DMA {
             *active = *active || chan.should_start_card();
         }
     }
+    
+    /// To be called when geometry command FIFO is under half full.
+    pub fn on_geom_fifo(&mut self) {
+        for (active, chan) in self.active.iter_mut().zip(&self.channels) {
+            *active = *active || chan.should_start_geom_fifo();
+        }
+    }
 }
 
 impl MemInterface32 for DMA {
@@ -269,6 +276,11 @@ impl DMAChannel {
     /// Check to see if dma should start when main mem FIFO requests.
     pub fn should_start_main_mem(&self) -> bool {
         (self.control & Control::SHOULD_START) == Control::START_MAIN_D
+    }
+    
+    /// Check to see if dma should start when geometry FIFO requests.
+    pub fn should_start_geom_fifo(&self) -> bool {
+        (self.control & Control::SHOULD_START) == Control::START_G_FIFO
     }
 
     /// Check to see if dma should start upon card ready.

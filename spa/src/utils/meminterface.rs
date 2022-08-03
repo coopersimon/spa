@@ -43,7 +43,7 @@ pub trait MemInterface16 {
     fn read_byte(&mut self, addr: u32) -> u8 {
         use crate::utils::bytes::u16;
         let data = self.read_halfword(addr & 0xFFFF_FFFE);
-        match addr & 1 {
+        match addr % 2 {
             0 => u16::lo(data),
             1 => u16::hi(data),
             _ => unreachable!()
@@ -53,7 +53,7 @@ pub trait MemInterface16 {
         use crate::utils::bytes::u16;
         let halfword_addr = addr & 0xFFFF_FFFE;
         let halfword_data = self.read_halfword(halfword_addr);
-        match addr & 1 {
+        match addr % 2 {
             0 => self.write_halfword(halfword_addr, u16::set_lo(halfword_data, data)),
             1 => self.write_halfword(halfword_addr, u16::set_hi(halfword_data, data)),
             _ => unreachable!()
@@ -97,7 +97,7 @@ pub trait MemInterface32 {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         use crate::utils::bytes::u32;
         let data = self.read_word(addr & 0xFFFF_FFFC);
-        match addr & 2 {
+        match addr % 4 {
             0 => u32::lo(data),
             2 => u32::hi(data),
             _ => unreachable!()
@@ -105,9 +105,9 @@ pub trait MemInterface32 {
     }
     fn write_halfword(&mut self, addr: u32, data: u16) {
         use crate::utils::bytes::u32;
-        let word_addr = addr & 0xFFFF_FFFE;
+        let word_addr = addr & 0xFFFF_FFFC;
         let word_data = self.read_word(word_addr);
-        match addr & 2 {
+        match addr % 4 {
             0 => self.write_word(word_addr, u32::set_lo(word_data, data)),
             2 => self.write_word(word_addr, u32::set_hi(word_data, data)),
             _ => unreachable!()

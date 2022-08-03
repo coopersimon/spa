@@ -344,7 +344,7 @@ impl <R: Renderer> DS9MemoryBus<R> {
             self.barrier.wait();
         }
 
-        let (video_signal, video_irq) = self.video.clock(cycles);
+        let (video_signal, video_irq, geom_fifo_dma) = self.video.clock(cycles);
         let vblank = match video_signal {
             Signal::VBlank => {
                 self.dma.on_vblank();
@@ -356,6 +356,9 @@ impl <R: Renderer> DS9MemoryBus<R> {
             },
             Signal::None => false,
         };
+        if geom_fifo_dma {
+            self.dma.on_geom_fifo();
+        }
 
         let (timer_irq, _, _) = self.timers.clock(cycles);
         let joypad_irq = if self.joypad.get_interrupt() {

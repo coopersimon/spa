@@ -66,8 +66,9 @@ impl MatrixUnit {
 
 // Commands
 impl MatrixUnit {
-    pub fn set_matrix_mode(&mut self, mode: u32) {
+    pub fn set_matrix_mode(&mut self, mode: u32) -> isize {
         self.mode = mode & 0b11;
+        1
     }
     
     pub fn push_matrix(&mut self) -> isize {
