@@ -83,6 +83,16 @@ bitflags! {
     }
 }
 
+impl TextureAttrs {
+    pub fn addr(self) -> u32 {
+        (self & TextureAttrs::ADDR).bits() as u32
+    }
+    
+    pub fn format(self) -> u8 {
+        ((self & TextureAttrs::FORMAT).bits() >> 26) as u8
+    }
+}
+
 #[derive(Eq)]
 pub struct PolygonOrder {
     pub y_max:    I12F4, // In screen space (0: top, 191: bottom)
@@ -136,8 +146,8 @@ pub struct Polygon {
 /// Coordinates for a point in screen-space.
 #[derive(Default, Clone, Copy)]
 pub struct Coords {
-    pub x: I12F4,
-    pub y: I12F4
+    pub x: I12F4,   // also tex s
+    pub y: I12F4    // also tex t
 }
 
 /// A single vertex. 12 bytes.
@@ -152,8 +162,7 @@ pub struct Vertex {
     pub screen_p:   Coords,
     pub depth:      I23F9,
     pub colour:     Colour,
-    pub tex_s:      u16,
-    pub tex_t:      u16
+    pub tex_coords: Coords,
 }
 
 /// Polygon and vertex RAM for a frame.

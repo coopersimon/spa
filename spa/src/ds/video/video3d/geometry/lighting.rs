@@ -48,7 +48,8 @@ impl LightingUnit {
     }
 
     /// Calculate colour.
-    pub fn set_normal(&mut self, normal: Vector<3>) {
+    pub fn set_normal(&mut self, normal: Vector<3>) -> isize {
+        let mut cycles = 8;
         self.vertex_colour = self.emission_colour;
 
         for light in &self.lights {
@@ -73,7 +74,11 @@ impl LightingUnit {
             self.vertex_colour.add(&diffuse_colour);
             self.vertex_colour.add(&ambient_colour);
             self.vertex_colour.add(&specular_colour);
+
+            cycles += 1;
         }
+        
+        cycles
     }
 
     pub fn set_vertex_colour(&mut self, colour: u32) {

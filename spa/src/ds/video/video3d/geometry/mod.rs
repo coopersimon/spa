@@ -2,11 +2,11 @@ mod math;
 mod matrix;
 mod lighting;
 
-use math::*;
+pub use math::*;
 use matrix::*;
 use lighting::*;
 
-use fixed::{types::{I4F12, I12F4, I23F9}, traits::ToFixed};
+use fixed::{types::{I4F12, I12F4, I23F9, I13F3}, traits::ToFixed};
 use crate::{
     utils::{
         bits::u32,
@@ -43,12 +43,11 @@ pub struct GeometryEngine {
     w_buffer:       bool,
     /// Manually sort translucent polygons.
     manual_sort:    bool,
+    /// Test w against this value for 1-dot polygons.
+    dot_polygon_w:  I13F3,
 
-    /// Matrix input buffer
-    input_buffer:   Vec<N>,
     pub matrices:   Box<MatrixUnit>,
-
-    pub lighting:   Box<LightingUnit>,
+    lighting:       Box<LightingUnit>,
 
     /// Current polygon attributes.
     polygon_attrs:  PolygonAttrs,
@@ -58,8 +57,6 @@ pub struct GeometryEngine {
     tex_palette:    u16,
     /// Currently inputting vertices.
     current_vertex: [I4F12; 3],
-    /// For VTX_16_XYZ: indicates whether high or low input word.
-    current_hi:     bool,
 
     /// Current polygon vertices for outputting to Vertex RAM.
     /// Will only be written if it passes the W-test.
@@ -79,8 +76,8 @@ impl GeometryEngine {
             
             w_buffer:       false,
             manual_sort:    false,
+            dot_polygon_w:  I13F3::from_bits(0x7FFF),
 
-            input_buffer:   Vec::new(),
             matrices:       Box::new(MatrixUnit::new()),
             lighting:       Box::new(LightingUnit::new()),
 
@@ -88,22 +85,27 @@ impl GeometryEngine {
             texture_attrs:  TextureAttrs::default(),
             tex_palette:    0,
             current_vertex: [I4F12::ZERO; 3],
-            current_hi:     false,
 
             staged_polygon:     CircularBuffer::new(),
             primitive:          None,
         }
     }
+
+    pub fn set_dot_polygon_depth(&mut self, data: u32) {
+        let bits = (data & 0x7FFF) as i16;
+        self.dot_polygon_w = I13F3::from_bits(bits);
+    }
 }
 
 // GPU commands
 impl GeometryEngine {
-    pub fn set_viewport(&mut self, data: u32) {
+    pub fn set_viewport(&mut self, data: u32) -> isize {
         let bytes = u32::to_le_bytes(data);
         self.viewport_x = bytes[0];
         self.viewport_y = bytes[1];
         self.viewport_width = bytes[2] - self.viewport_x;
         self.viewport_height = bytes[3] - self.viewport_y;
+        1
     }
 
     /// Set values for next frame.
@@ -113,71 +115,12 @@ impl GeometryEngine {
         self.manual_sort = u32::test_bit(data, 1);
     }
 
-    pub fn set_identity_matrix(&mut self) {
-        self.matrices.set_current_matrix(&Matrix::identity());
-    }
-
-    pub fn set_4x4_matrix(&mut self, data: u32) {
-        self.input_buffer.push(N::from_bits(data as i32));
-        if self.input_buffer.len() == 16 {
-            self.matrices.set_current_matrix(&Matrix::from_4x4(&self.input_buffer));
-            self.input_buffer.clear();
-        }
-    }
-    
-    pub fn set_4x3_matrix(&mut self, data: u32) {
-        self.input_buffer.push(N::from_bits(data as i32));
-        if self.input_buffer.len() == 12 {
-            self.matrices.set_current_matrix(&Matrix::from_4x3(&self.input_buffer));
-            self.input_buffer.clear();
-        }
-    }
-
-    pub fn mul_4x4(&mut self, data: u32) {
-        self.input_buffer.push(N::from_bits(data as i32));
-        if self.input_buffer.len() == 16 {
-            self.matrices.mul_4x4(&self.input_buffer);
-            self.input_buffer.clear();
-        }
-    }
-    
-    pub fn mul_4x3(&mut self, data: u32) {
-        self.input_buffer.push(N::from_bits(data as i32));
-        if self.input_buffer.len() == 12 {
-            self.matrices.mul_4x3(&self.input_buffer);
-            self.input_buffer.clear();
-        }
-    }
-    
-    pub fn mul_3x3(&mut self, data: u32) {
-        self.input_buffer.push(N::from_bits(data as i32));
-        if self.input_buffer.len() == 9 {
-            self.matrices.mul_3x3(&self.input_buffer);
-            self.input_buffer.clear();
-        }
-    }
-    
-    pub fn mul_scale(&mut self, data: u32) {
-        self.input_buffer.push(N::from_bits(data as i32));
-        if self.input_buffer.len() == 3 {
-            self.matrices.mul_scale(&self.input_buffer);
-            self.input_buffer.clear();
-        }
-    }
-    
-    pub fn mul_trans(&mut self, data: u32) {
-        self.input_buffer.push(N::from_bits(data as i32));
-        if self.input_buffer.len() == 3 {
-            self.matrices.mul_trans(&self.input_buffer);
-            self.input_buffer.clear();
-        }
-    }
-
-    pub fn set_vertex_colour(&mut self, data: u32) {
+    pub fn set_vertex_colour(&mut self, data: u32) -> isize {
         self.lighting.set_vertex_colour(data);
+        1
     }
 
-    pub fn set_light_direction(&mut self, data: u32) {
+    pub fn set_normal(&mut self, data: u32) -> isize {
         let x_bits = (data & 0x3FF) as i32;
         let y_bits = ((data >> 10) & 0x3FF) as i32;
         let z_bits = ((data >> 20) & 0x3FF) as i32;
@@ -186,23 +129,46 @@ impl GeometryEngine {
             N::from_bits(y_bits << 3),
             N::from_bits(z_bits << 3),
         ]);
-        let direction = self.matrices.current_direction.mul_vector_3(&v);
+        let normal = self.matrices.dir_matrix().mul_vector_3(&v);
+        // Calculate colour.
+        self.lighting.set_normal(normal)
+    }
+
+    pub fn set_dif_amb_colour(&mut self, data: u32) -> isize {
+        self.lighting.set_dif_amb_colour(data);
+        4
+    }
+    
+    pub fn set_spe_emi_colour(&mut self, data: u32) -> isize {
+        self.lighting.set_spe_emi_colour(data);
+        4
+    }
+    
+    pub fn set_specular_table(&mut self, data: impl Iterator<Item = u32>) -> isize {
+        for d in data {
+            self.lighting.set_specular_table(d);
+        }
+        32
+    }
+    
+    pub fn set_light_direction(&mut self, data: u32) -> isize {
+        let x_bits = (data & 0x3FF) as i32;
+        let y_bits = ((data >> 10) & 0x3FF) as i32;
+        let z_bits = ((data >> 20) & 0x3FF) as i32;
+        let v = Vector::new([
+            N::from_bits(x_bits << 3),
+            N::from_bits(y_bits << 3),
+            N::from_bits(z_bits << 3),
+        ]);
+        let direction = self.matrices.dir_matrix().mul_vector_3(&v);
         let light = (data >> 30) as usize;
         self.lighting.set_light_direction(light, direction);
+        6
     }
 
-    pub fn set_normal(&mut self, data: u32) {
-        let x_bits = (data & 0x3FF) as i32;
-        let y_bits = ((data >> 10) & 0x3FF) as i32;
-        let z_bits = ((data >> 20) & 0x3FF) as i32;
-        let v = Vector::new([
-            N::from_bits(x_bits << 3),
-            N::from_bits(y_bits << 3),
-            N::from_bits(z_bits << 3),
-        ]);
-        let normal = self.matrices.current_direction.mul_vector_3(&v);
-        // Calculate colour.
-        self.lighting.set_normal(normal);
+    pub fn set_light_colour(&mut self, data: u32) -> isize {
+        self.lighting.set_light_colour(data);
+        1
     }
 
     // TODO: tex
@@ -210,7 +176,7 @@ impl GeometryEngine {
     /// Called before vertex data is input.
     /// 
     /// Also decides which primitive type to use.
-    pub fn begin_vertex_list(&mut self, data: u32) {
+    pub fn begin_vertex_list(&mut self, data: u32) -> isize {
         let primitive = match data & 0b11 {
             0b00 => {
                 self.staged_polygon.resize(3);
@@ -231,10 +197,12 @@ impl GeometryEngine {
             _ => unreachable!()
         };
         self.primitive = Some(primitive);
+        1
     }
 
-    pub fn end_vertex_list(&mut self) {
+    pub fn end_vertex_list(&mut self) -> isize {
         self.primitive = None;
+        1
     }
 
     /// Set vertex coordinates. Uses 2 parameter words. I4F12 format.
@@ -242,81 +210,77 @@ impl GeometryEngine {
     /// First param: X in lower half, Y in upper half.
     /// 
     /// Second param: Z in lower half.
-    pub fn set_vertex_coords_16(&mut self, data: u32) {
-        if self.current_hi {
-            self.current_vertex[2] = I4F12::from_bits(bytes::u32::lo(data) as i16);
-            self.current_hi = false;
-            self.process_vertex();
-        } else {
-            self.current_vertex[0] = I4F12::from_bits(bytes::u32::lo(data) as i16);
-            self.current_vertex[1] = I4F12::from_bits(bytes::u32::hi(data) as i16);
-            self.current_hi = true;
-        }
+    pub fn set_vertex_coords_16(&mut self, lo: u32, hi: u32) -> isize {
+        self.current_vertex[0] = I4F12::from_bits(bytes::u32::lo(lo) as i16);
+        self.current_vertex[1] = I4F12::from_bits(bytes::u32::hi(lo) as i16);
+        self.current_vertex[2] = I4F12::from_bits(bytes::u32::lo(hi) as i16);
+        self.process_vertex() + 1
     }
     
     /// Set vertex coordinates. I4F6 format.
     /// 
     /// Param: X, Y, Z, each 10 bits.
-    pub fn set_vertex_coords_10(&mut self, data: u32) {
+    pub fn set_vertex_coords_10(&mut self, data: u32) -> isize {
         let x = (data & 0x3FF) << 6;
         let y = ((data >> 10) & 0x3FF) << 6;
         let z = ((data >> 20) & 0x3FF) << 6;
         self.current_vertex[0] = I4F12::from_bits(x as i16);
         self.current_vertex[1] = I4F12::from_bits(y as i16);
         self.current_vertex[2] = I4F12::from_bits(z as i16);
-        self.process_vertex();
+        self.process_vertex()
     }
     
     /// Set vertex coordinates X and Y. I4F12 format. Keep old Z.
     /// 
     /// Param: X in lower half, Y in upper half.
-    pub fn set_vertex_coords_xy(&mut self, data: u32) {
+    pub fn set_vertex_coords_xy(&mut self, data: u32) -> isize {
         self.current_vertex[0] = I4F12::from_bits(bytes::u32::lo(data) as i16);
         self.current_vertex[1] = I4F12::from_bits(bytes::u32::hi(data) as i16);
-        self.process_vertex();
+        self.process_vertex()
     }
     
     /// Set vertex coordinates X and Z. I4F12 format. Keep old Y.
     /// 
     /// Param: X in lower half, Z in upper half.
-    pub fn set_vertex_coords_xz(&mut self, data: u32) {
+    pub fn set_vertex_coords_xz(&mut self, data: u32) -> isize {
         self.current_vertex[0] = I4F12::from_bits(bytes::u32::lo(data) as i16);
         self.current_vertex[2] = I4F12::from_bits(bytes::u32::hi(data) as i16);
-        self.process_vertex();
+        self.process_vertex()
     }
     
     /// Set vertex coordinates Y and Z. I4F12 format. Keep old X.
     /// 
     /// Param: Y in lower half, Z in upper half.
-    pub fn set_vertex_coords_yz(&mut self, data: u32) {
+    pub fn set_vertex_coords_yz(&mut self, data: u32) -> isize {
         self.current_vertex[1] = I4F12::from_bits(bytes::u32::lo(data) as i16);
         self.current_vertex[2] = I4F12::from_bits(bytes::u32::hi(data) as i16);
-        self.process_vertex();
+        self.process_vertex()
     }
     
     /// Set vertex coordinates as a diff of current. I1F9 format.
     /// 
     /// Param: X, Y, Z, each 10 bits.
-    pub fn diff_vertex_coords(&mut self, data: u32) {
+    pub fn diff_vertex_coords(&mut self, data: u32) -> isize {
         let x_diff = (data & 0x3FF) << 3;
         let y_diff = ((data >> 10) & 0x3FF) << 3;
         let z_diff = ((data >> 20) & 0x3FF) << 3;
         self.current_vertex[0] += I4F12::from_bits(x_diff as i16);
         self.current_vertex[1] += I4F12::from_bits(y_diff as i16);
         self.current_vertex[2] += I4F12::from_bits(z_diff as i16);
-        self.process_vertex();
+        self.process_vertex()
     }
 
-    pub fn set_polygon_attrs(&mut self, data: u32) {
+    pub fn set_polygon_attrs(&mut self, data: u32) -> isize {
         self.polygon_attrs = PolygonAttrs::from_bits_truncate(data);
         self.lighting.set_enabled(self.polygon_attrs);
+        1
     }
 
 }
 
 // Internal processing
 impl GeometryEngine {
-    fn process_vertex(&mut self) {
+    fn process_vertex(&mut self) -> isize {
         let vertex = Vector::new([
             self.current_vertex[0].into(),
             self.current_vertex[1].into(),
@@ -326,7 +290,7 @@ impl GeometryEngine {
 
         // Transform the vertex.
         // Result is a I12F12.
-        let transformed_vertex = self.matrices.current_clip.mul_vector_4(&vertex);
+        let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
         // TODO: mask?
         let w = transformed_vertex.elements[3];
         let w2 = w * 2;
@@ -356,13 +320,14 @@ impl GeometryEngine {
             screen_p: Coords{x: viewport_x, y: viewport_y},
             depth: depth,
             colour: self.lighting.get_vertex_colour(),
-            tex_s: 0,   // TODO
-            tex_t: 0,   // TODO
+            tex_coords: Coords { x: I12F4::ZERO, y: I12F4::ZERO }   // TODO
         });
 
         if self.should_emit() {
             self.emit_polygon();
         }
+
+        8
     }
 
     fn should_emit(&mut self) -> bool {
