@@ -64,20 +64,21 @@ DS:
 - Loads of unaligned memory accesses.
 
 ### DS Status of selected games:
+- Age of Empires: Age of Kings: Loads main menu, freezes
 - Animal Crossing Wild World: (FLASH): Loads up titles, locks up
 - Chrono Trigger: Sets up save RAM, then shows intro video. Game loads up and runs ok!
 - Dragon Quest IX: Shows intro cards and video. Magenta screen when game begins.
 - Dragon Quest IV: Black screen - getting stuck in halt loop
 - Dragon Quest V: Black screen
 - Dragon Quest VI: Black screen
-- Final Fantasy Tactics A2: Shows a static screen after loading for a bit. (Now crashes on 3d test)
+- Final Fantasy Tactics A2: Shows a screen after loading for a bit, then goes black.
 - Final Fantasy III: Sets up save ram, shows titles, plays intro video, main menu, then tries to access LCDC image and crashes.
 - Final Fantasy IV: Sets up save ram, shows titles, plays intro video, main menu, then black screen when game begins.
 - Hotel Dusk: Room 215: Shows right/left handed text while flickering.
 - Kirby Super Star: Initialises save data, then shows some screens with incorrect colour. Is it trying to blend stuff here?
 - Mario Kart DS: (FLASH) Mostly works except no 3D support yet. Actual game runs choppy + seems a little off..?
 - Mario and Luigi: Bowser's Inside Story: Blank screen (firmware/save issues)
-- Mario and Luigi: Partners in Time: Loads up mostly ok with some glitches, menu title is glitched (3D), intro has serious graphical issues (now crashes on 3d test)
+- Mario and Luigi: Partners in Time: Loads up mostly ok with some glitches, menu title is glitched (3D), intro has serious graphical issues
 - Mario Party DS: Seems to work OK except no 3D support.
 - Metroid Prime Hunters: Initial titles are broken. Shows intro video. No 3D support.
 - New Super Mario Bros: Seems to work OK except no 3D support.

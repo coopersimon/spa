@@ -48,6 +48,14 @@ pub struct GeometryEngine {
     pub matrices:   Box<MatrixUnit>,
     lighting:       Box<LightingUnit>,
 
+    /// Result of the box test:
+    /// FALSE if ALL of the box faces are OUTSIDE view frustrum.
+    pub box_test_res:   bool,
+    /// Result of the position test.
+    pub pos_test_res:   [u32; 4],
+    /// Result of the direction (vector) test.
+    pub dir_test_res:   [u16; 3],
+
     /// Current polygon attributes.
     polygon_attrs:  PolygonAttrs,
     /// Current texture attributes.
@@ -87,6 +95,10 @@ impl GeometryEngine {
 
             matrices:       Box::new(MatrixUnit::new()),
             lighting:       Box::new(LightingUnit::new()),
+
+            box_test_res:   false,
+            pos_test_res:   [0; 4],
+            dir_test_res:   [0; 3],
 
             polygon_attrs:  PolygonAttrs::default(),
             texture_attrs:  TextureAttrs::default(),
@@ -298,6 +310,89 @@ impl GeometryEngine {
         1
     }
 
+    pub fn box_test(&mut self, args: &[u32]) -> isize {
+        use crate::utils::bits::u8;
+
+        let base_x = I4F12::from_bits(bytes::u32::lo(args[0]) as i16);
+        let base_y = I4F12::from_bits(bytes::u32::hi(args[0]) as i16);
+        let base_z = I4F12::from_bits(bytes::u32::lo(args[1]) as i16);
+        
+        let len_x = I4F12::from_bits(bytes::u32::hi(args[1]) as i16);
+        let len_y = I4F12::from_bits(bytes::u32::lo(args[2]) as i16);
+        let len_z = I4F12::from_bits(bytes::u32::hi(args[2]) as i16);
+
+        // We fail the test if ALL of the corners of the box are OUTSIDE the view.
+        let mut fail_test = true;
+
+        // Test to see if each vertex is outside view space.
+        for vertex in 0..8_u8 {
+            let x = if u8::test_bit(vertex, 0) { base_x + len_x } else { base_x };
+            let y = if u8::test_bit(vertex, 1) { base_y + len_y } else { base_y };
+            let z = if u8::test_bit(vertex, 2) { base_z + len_z } else { base_z };
+
+            let vertex = Vector::new([
+                x.into(),
+                y.into(),
+                z.into(),
+                N::ONE
+            ]);
+    
+            let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
+            let w = transformed_vertex.w();
+            let w2_recip = N::ONE.checked_div(w * 2).unwrap_or(N::MAX);
+            let normal_x = (transformed_vertex.x() + w) * w2_recip;
+            let normal_y = (transformed_vertex.y() + w) * w2_recip;
+            let normal_z = (transformed_vertex.z() + w) * w2_recip;
+
+            let outside_x = (normal_x >= N::ONE) || (normal_x < N::ZERO);
+            let outside_y = (normal_y >= N::ONE) || (normal_y < N::ZERO);
+            let outside_z = (normal_z >= N::ONE) || (normal_z < N::ZERO);
+
+            fail_test = fail_test && (outside_x && outside_y && outside_z);
+        }
+
+        self.box_test_res = !fail_test;
+
+        103
+    }
+
+    pub fn position_test(&mut self, args: &[u32]) -> isize {
+        self.current_vertex[0] = I4F12::from_bits(bytes::u32::lo(args[0]) as i16);
+        self.current_vertex[1] = I4F12::from_bits(bytes::u32::hi(args[0]) as i16);
+        self.current_vertex[2] = I4F12::from_bits(bytes::u32::lo(args[1]) as i16);
+        let vertex = Vector::new([
+            self.current_vertex[0].into(),
+            self.current_vertex[1].into(),
+            self.current_vertex[2].into(),
+            N::ONE
+        ]);
+
+        let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
+        self.pos_test_res[0] = transformed_vertex.x().to_bits() as u32;
+        self.pos_test_res[1] = transformed_vertex.y().to_bits() as u32;
+        self.pos_test_res[2] = transformed_vertex.z().to_bits() as u32;
+        self.pos_test_res[3] = transformed_vertex.w().to_bits() as u32;
+
+        9
+    }
+
+    pub fn direction_test(&mut self, data: u32) -> isize {
+        let x_bits = (data & 0x3FF) as i32;
+        let y_bits = ((data >> 10) & 0x3FF) as i32;
+        let z_bits = ((data >> 20) & 0x3FF) as i32;
+        let v = Vector::new([
+            N::from_bits(x_bits << 3),
+            N::from_bits(y_bits << 3),
+            N::from_bits(z_bits << 3),
+        ]);
+
+        let direction = self.matrices.dir_matrix().mul_vector_3(&v);
+        self.dir_test_res[0] = direction.x().to_bits() as u16;
+        self.dir_test_res[1] = direction.y().to_bits() as u16;
+        self.dir_test_res[2] = direction.z().to_bits() as u16;
+
+        5
+    }
 }
 
 // Internal processing
@@ -314,14 +409,14 @@ impl GeometryEngine {
         // Result is a I12F12.
         let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
         // TODO: mask?
-        let w = transformed_vertex.elements[3];
+        let w = transformed_vertex.w();
         let w2_recip = N::ONE.checked_div(w * 2).unwrap_or(N::MAX);
-        let x = (transformed_vertex.elements[0] + w) * w2_recip;
-        let y = (transformed_vertex.elements[1] + w) * w2_recip;
+        let x = (transformed_vertex.x() + w) * w2_recip;
+        let y = (transformed_vertex.y() + w) * w2_recip;
         let depth = if self.w_buffer {
             w.to_fixed::<I23F9>()
         } else {
-            let z = (transformed_vertex.elements[2] + w) * w2_recip;
+            let z = (transformed_vertex.z() + w) * w2_recip;
             z.to_fixed::<I23F9>()
         };
 
