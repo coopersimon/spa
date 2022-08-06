@@ -30,11 +30,13 @@ impl GeomCommandFifo {
         if self.command_fifo.len() == COMMAND_FIFO_LEN {
             panic!("GPU command fifo full");   // TODO: handle (ignore incoming data? / freeze)
         }
+        //println!("GX PUSH: {:X}", data);
         self.command_fifo.push_back(data);
     }
 
     /// Push via a memory address.
     pub fn push_command_cpu(&mut self, data: u32, command: u32, num_args: usize) {
+        //println!("GX CMD: {:X} ({:X})", command, data);
         if self.current_command_args > 0 {
             self.push_command_buffer(data);
             self.current_command_args -= 1;

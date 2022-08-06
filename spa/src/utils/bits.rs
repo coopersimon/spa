@@ -64,4 +64,11 @@ pub mod u32 {
     pub const fn test_bit(val: u32, n: usize) -> bool {
         (val & bit(n)) != 0
     }
+
+    /// Sign extend val from the number of bits specified.
+    pub const fn sign_extend(val: u32, bits: usize) -> i32 {
+        let shift = 32 - bits;
+        let signed = val as i32;
+        (signed << shift) >> shift
+    }
 }
