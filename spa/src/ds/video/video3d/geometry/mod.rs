@@ -9,8 +9,7 @@ use lighting::*;
 use fixed::{types::{I4F12, I12F4, I23F9, I13F3}, traits::ToFixed};
 use crate::{
     utils::{
-        bits::u32,
-        bytes, circbuffer::CircularBuffer
+        bits::u32, bytes
     },
 };
 use super::types::*;
@@ -101,7 +100,7 @@ impl GeometryEngine {
         }
     }
 
-    pub fn set_dot_polygon_depth(&mut self, data: u32) {
+    pub fn set_dot_polygon_depth(&mut self, data: u16) {
         let bits = (data & 0x7FFF) as i16;
         self.dot_polygon_w = I13F3::from_bits(bits);
     }

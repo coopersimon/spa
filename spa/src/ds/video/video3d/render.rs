@@ -26,7 +26,7 @@ pub struct RenderingEngine {
     pub fog_enabled:    bool,
     pub fog_colour:     Colour,
     pub fog_alpha:      u8,
-    pub fog_offset:     u32,
+    pub fog_offset:     u16,
     pub fog_table:      Vec<u8>,
 
     pub toon_table:     Vec<Colour>,
@@ -61,7 +61,7 @@ impl RenderingEngine {
         }
     }
 
-    pub fn write_control(&mut self, data: u32) {
+    pub fn write_control(&mut self, data: u16) {
         self.control = Display3DControl::from_bits_truncate(data);
     }
 }
@@ -75,8 +75,7 @@ impl RenderingEngine {
         self.clear_poly_id = ((data >> 24) & 0x3F) as u8;
     }
 
-    /// Set clear depth value, and image offset.
-    pub fn set_clear_depth_image(&mut self, data: u32) {
+    pub fn set_clear_depth(&mut self, data: u16) {
         let depth = (data & 0x7FFF) as i32;
         let depth_low = if depth == 0x7FFF {
             0x1FF
@@ -84,24 +83,27 @@ impl RenderingEngine {
             0
         };
         self.clear_depth = I23F9::from_bits((depth << 9) | depth_low);
-
-        let clear_image_coords = bytes::u32::hi(data);
-        self.clear_image_x = bytes::u16::lo(clear_image_coords);
-        self.clear_image_y = bytes::u16::hi(clear_image_coords);
+    }
+    
+    pub fn set_clear_image(&mut self, data: u16) {
+        self.clear_image_x = bytes::u16::lo(data);
+        self.clear_image_y = bytes::u16::hi(data);
     }
 
-    pub fn set_toon_table(&mut self, index: usize, data: u32) {
-        self.toon_table[index * 2] = Colour::from_555(bytes::u32::lo(data));
-        self.toon_table[(index * 2) + 1] = Colour::from_555(bytes::u32::hi(data));
+    pub fn set_toon_table(&mut self, index: usize, data: u16) {
+        //self.toon_table[index * 2] = Colour::from_555(bytes::u32::lo(data));
+        //self.toon_table[(index * 2) + 1] = Colour::from_555(bytes::u32::hi(data));
+        self.toon_table[index] = Colour::from_555(data);
     }
 
-    pub fn set_alpha_test(&mut self, data: u32) {
+    pub fn set_alpha_test(&mut self, data: u16) {
         self.alpha_test = (data & 0x1F) as u8;
     }
 
-    pub fn set_edge_colour(&mut self, index: usize, data: u32) {
-        self.edge_colour[index * 2] = Colour::from_555(bytes::u32::lo(data));
-        self.edge_colour[(index * 2) + 1] = Colour::from_555(bytes::u32::hi(data));
+    pub fn set_edge_colour(&mut self, index: usize, data: u16) {
+        //self.edge_colour[index * 2] = Colour::from_555(bytes::u32::lo(data));
+        //self.edge_colour[(index * 2) + 1] = Colour::from_555(bytes::u32::hi(data));
+        self.edge_colour[index] = Colour::from_555(data);
     }
 
     pub fn set_fog_colour(&mut self, data: u32) {
@@ -109,7 +111,7 @@ impl RenderingEngine {
         self.fog_alpha = (bytes::u32::hi(data) & 0x1F) as u8;
     }
 
-    pub fn set_fog_offset(&mut self, data: u32) {
+    pub fn set_fog_offset(&mut self, data: u16) {
         self.fog_offset = data & 0x7FFF;
     }
 

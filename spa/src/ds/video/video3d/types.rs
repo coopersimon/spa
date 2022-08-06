@@ -5,25 +5,25 @@ use std::{
 use bitflags::bitflags;
 use fixed::types::{I12F4, I23F9};
 use crate::{
-    utils::bits::u32,
+    utils::bits::{u16, u32},
     common::colour::Colour
 };
 
 bitflags! {
     #[derive(Default)]
-    pub struct Display3DControl: u32 {
-        const CLEAR_IMAGE       = u32::bit(14);
-        const LIST_RAM_OVERFLOW = u32::bit(13);
-        const LINE_UNDERFLOW    = u32::bit(12);
-        const FOG_SHIFT         = u32::bits(8, 11);
-        const FOG_ENABLE        = u32::bit(7);
-        const FOG_MODE          = u32::bit(6);
-        const EDGE_MARKING      = u32::bit(5);
-        const ANTI_ALIAS        = u32::bit(4);
-        const BLENDING_ENABLE   = u32::bit(3);
-        const ALPHA_TEST_ENABLE = u32::bit(2);
-        const HIGHLIGHT_SHADING = u32::bit(1);
-        const TEX_MAP_ENABLE    = u32::bit(0);
+    pub struct Display3DControl: u16 {
+        const CLEAR_IMAGE       = u16::bit(14);
+        const LIST_RAM_OVERFLOW = u16::bit(13);
+        const LINE_UNDERFLOW    = u16::bit(12);
+        const FOG_SHIFT         = u16::bits(8, 11);
+        const FOG_ENABLE        = u16::bit(7);
+        const FOG_MODE          = u16::bit(6);
+        const EDGE_MARKING      = u16::bit(5);
+        const ANTI_ALIAS        = u16::bit(4);
+        const BLENDING_ENABLE   = u16::bit(3);
+        const ALPHA_TEST_ENABLE = u16::bit(2);
+        const HIGHLIGHT_SHADING = u16::bit(1);
+        const TEX_MAP_ENABLE    = u16::bit(0);
     }
 }
 pub enum PrimitiveType {

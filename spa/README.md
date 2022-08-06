@@ -84,7 +84,7 @@ DS:
 - Phantom Hourglass: Shows titles then freezes.
 - Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. Gameplay starts up ok, with some graphical glitches on lower screen.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
-- Pokemon Diamond: (FLASH) shows initial titles then freezes
+- Pokemon Diamond: (FLASH) seems to run ok (No 3D support.)
 - Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.
 - Super Mario 64 DS: Shows an initial nintendo logo, takes a long time to load before showing pre-menu screen, shows some more stuff (requires touchscreen)
 - The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)
