@@ -10,7 +10,8 @@ use std::sync::Arc;
 
 use crate::{utils::{
     meminterface::MemInterface32,
-    bits::u32
+    bits::u32,
+    bytes
 }, ds::interrupt::Interrupts};
 
 use commandfifo::GeomCommandFifo;
@@ -96,38 +97,14 @@ impl Video3D {
 impl MemInterface32 for Video3D {
     fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
-            0x0400_0060 => {
-                //println!("read _60");
-                self.rendering_engine.lock().control.bits()
-            },
+            0x0400_0060 => self.rendering_engine.lock().control.bits().into(),
 
-            0x0400_0320 => {
-                
-                //println!("read 320");
-                46
-            },   // TODO: Rendered line count
+            0x0400_0320 => 46,   // TODO: Rendered line count
 
-            // TODO: 16-bit accesses
-            0x0400_0330..=0x0400_033F => 0,
-            0x0400_0340 => 0,
-            0x0400_0354 => 0,
-            0x0400_035C => 0,
-            // 8-bit
-            0x0400_0360..=0x0400_037F => 0,
-            // 16-bit
-            0x0400_0380..=0x0400_03BF => 0,
-            0x0400_0610 => 0,
-            
             0x0400_04A4 => 0,   // ?? Read by Super mario 64
 
-            0x0400_0600 => {
-                //println!("read 600");
-                self.get_geom_engine_status().bits()
-            },
-            0x0400_0604 => {
-                //println!("read 604");
-                100
-            },   // POLY+VTX COUNT
+            0x0400_0600 => self.get_geom_engine_status().bits(),
+            0x0400_0604 => 100,   // TODO: POLY+VTX COUNT
             0x0400_0620..=0x0400_0634 => 0, // test result
 
             0x0400_0640..=0x0400_067F => self.read_clip_matrix((addr / 4) % 16),
@@ -139,18 +116,53 @@ impl MemInterface32 for Video3D {
         }
     }
 
-    fn write_word(&mut self, addr: u32, data: u32) {
+    fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
             0x0400_0060 => self.rendering_engine.lock().write_control(data),
 
-            0x0400_0330..=0x0400_033F => self.rendering_engine.lock().set_edge_colour(((addr & 0xF) / 4) as usize, data),
+            0x0400_0330..=0x0400_033F => self.rendering_engine.lock().set_edge_colour(((addr & 0xF) / 2) as usize, data),
             0x0400_0340 => self.rendering_engine.lock().set_alpha_test(data),
-            0x0400_0350 => self.rendering_engine.lock().set_clear_colour_attr(data),
-            0x0400_0354 => self.rendering_engine.lock().set_clear_depth_image(data),
-            0x0400_0358 => self.rendering_engine.lock().set_fog_colour(data),
+            0x0400_0354 => self.rendering_engine.lock().set_clear_depth(data),
+            0x0400_0356 => self.rendering_engine.lock().set_clear_image(data),
             0x0400_035C => self.rendering_engine.lock().set_fog_offset(data),
+
+            // 8-bit
+            //0x0400_0360..=0x0400_037F => 0,
+
+            0x0400_0380..=0x0400_03BF => self.rendering_engine.lock().set_toon_table(((addr & 0x3F) / 2) as usize, data),
+            
+            0x0400_0610 => self.geometry_engine.set_dot_polygon_depth(data),
+
+            _ => panic!("invalid 16-bit write to {:X}", addr)
+        }
+    }
+
+    fn write_word(&mut self, addr: u32, data: u32) {
+        match addr {
+            0x0400_0060 => self.rendering_engine.lock().write_control(bytes::u32::lo(data)),
+
+            0x0400_0330..=0x0400_033F => {
+                let index = ((addr & 0xF) / 2) as usize;
+                let mut render_engine = self.rendering_engine.lock();
+                render_engine.set_edge_colour(index, bytes::u32::lo(data));
+                render_engine.set_edge_colour(index + 1, bytes::u32::hi(data));
+            },
+            0x0400_0340 => self.rendering_engine.lock().set_alpha_test(bytes::u32::lo(data)),
+            0x0400_0350 => self.rendering_engine.lock().set_clear_colour_attr(data),
+            0x0400_0354 => {
+                let mut render_engine = self.rendering_engine.lock();
+                render_engine.set_clear_depth(bytes::u32::lo(data));
+                render_engine.set_clear_image(bytes::u32::hi(data));
+            },
+            0x0400_0358 => self.rendering_engine.lock().set_fog_colour(data),
+            0x0400_035C => self.rendering_engine.lock().set_fog_offset(bytes::u32::lo(data)),
             0x0400_0360..=0x0400_037F => self.rendering_engine.lock().set_fog_table(((addr & 0x1F) / 4) as usize, data),
-            0x0400_0380..=0x0400_03BF => self.rendering_engine.lock().set_toon_table(((addr & 0x3F) / 4) as usize, data),
+            0x0400_0380..=0x0400_03BF => {
+                let index = ((addr & 0x3F) / 2) as usize;
+                let mut render_engine = self.rendering_engine.lock();
+                render_engine.set_toon_table(index, bytes::u32::lo(data));
+                render_engine.set_toon_table(index + 1, bytes::u32::hi(data));
+            },
 
             0x0400_0400..=0x0400_043F => self.geom_command_fifo.push_command_buffer(data),              // Command buffer
 
@@ -200,7 +212,7 @@ impl MemInterface32 for Video3D {
             0x0400_05C8 => self.geom_command_fifo.push_command_cpu(data, 0x72, 1),    // Vector test
 
             0x0400_0600 => self.set_geom_engine_status(data),
-            0x0400_0610 => self.geometry_engine.set_dot_polygon_depth(data),
+            0x0400_0610 => self.geometry_engine.set_dot_polygon_depth(bytes::u32::lo(data)),
 
             // TODO: tests
             _ => panic!("writing invalid gpu address {:X}", addr)
