@@ -105,12 +105,17 @@ impl MemInterface32 for Video3D {
 
             0x0400_0600 => self.get_geom_engine_status().bits(),
             0x0400_0604 => 100,   // TODO: POLY+VTX COUNT
-            0x0400_0620..=0x0400_0634 => 0, // test result
+            0x0400_0620..=0x0400_062F => self.geometry_engine.pos_test_res[((addr / 4) % 4) as usize],
+            0x0400_0630 => bytes::u32::make(
+                self.geometry_engine.dir_test_res[1],
+                self.geometry_engine.dir_test_res[0]
+            ),
+            0x0400_0634 => bytes::u32::make(0, self.geometry_engine.dir_test_res[2]),
 
-            0x0400_0640..=0x0400_067F => self.read_clip_matrix((addr / 4) % 16),
-            0x0400_0680..=0x0400_068B => self.read_dir_matrix((addr / 4) % 4),      // 3x3 first row
-            0x0400_068C..=0x0400_0697 => self.read_dir_matrix(4 + (addr / 4) % 4),  // 3x3 second row
-            0x0400_0698..=0x0400_06A3 => self.read_dir_matrix(8 + (addr / 4) % 4),  // 3x3 third row
+            0x0400_0640..=0x0400_067F => self.read_clip_matrix((addr & 0x3F) / 4),
+            0x0400_0680..=0x0400_068B => self.read_dir_matrix((addr & 0xF) / 4),      // 3x3 first row
+            0x0400_068C..=0x0400_0697 => self.read_dir_matrix(4 + ((addr - 0xC) & 0xF) / 4),  // 3x3 second row
+            0x0400_0698..=0x0400_06A3 => self.read_dir_matrix(8 + ((addr - 0x18) & 0xF) / 4),  // 3x3 third row
 
             _ => panic!("reading invalid gpu address {:X}", addr)
         }
@@ -130,7 +135,7 @@ impl MemInterface32 for Video3D {
             //0x0400_0360..=0x0400_037F => 0,
 
             0x0400_0380..=0x0400_03BF => self.rendering_engine.lock().set_toon_table(((addr & 0x3F) / 2) as usize, data),
-            
+
             0x0400_0610 => self.geometry_engine.set_dot_polygon_depth(data),
 
             _ => panic!("invalid 16-bit write to {:X}", addr)
@@ -209,12 +214,11 @@ impl MemInterface32 for Video3D {
 
             0x0400_05C0 => self.geom_command_fifo.push_command_cpu(data, 0x70, 3),    // Box test
             0x0400_05C4 => self.geom_command_fifo.push_command_cpu(data, 0x71, 2),    // Position test
-            0x0400_05C8 => self.geom_command_fifo.push_command_cpu(data, 0x72, 1),    // Vector test
+            0x0400_05C8 => self.geom_command_fifo.push_command_cpu(data, 0x72, 1),    // Direction test
 
             0x0400_0600 => self.set_geom_engine_status(data),
             0x0400_0610 => self.geometry_engine.set_dot_polygon_depth(bytes::u32::lo(data)),
 
-            // TODO: tests
             _ => panic!("writing invalid gpu address {:X}", addr)
         }
     }
@@ -295,10 +299,9 @@ impl Video3D {
             },
             0x60 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_viewport(d)),
 
-            // TODO: test
-            0x70 => panic!("box"),
-            0x71 => panic!("pos"),
-            0x72 => panic!("vec"),
+            0x70 => self.geom_command_fifo.pop_n(3).map(|d| self.geometry_engine.box_test(&d.collect::<Vec<_>>())),
+            0x71 => self.geom_command_fifo.pop_n(2).map(|d| self.geometry_engine.position_test(&d.collect::<Vec<_>>())),
+            0x72 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.direction_test(d)),
 
             _ => Some(0), // Undefined
         };
@@ -325,9 +328,11 @@ impl Video3D {
         status.set(GeometryEngineStatus::CMD_FIFO_UNDER_HALF, self.geom_command_fifo.under_half_full());
         status.set(GeometryEngineStatus::CMD_FIFO_FULL, self.geom_command_fifo.is_full());
 
-        // TODO: mat stack busy
+        // TODO: mat stack busy?
         status.set(GeometryEngineStatus::MAT_STACK_ERROR, self.geometry_engine.matrices.has_stack_error());
-        // TODO: box test
+
+        status.set(GeometryEngineStatus::TEST_BOX_RESULT, self.geometry_engine.box_test_res);
+        // TODO: test busy?
 
         status
     }

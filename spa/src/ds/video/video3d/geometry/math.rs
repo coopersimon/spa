@@ -20,6 +20,26 @@ impl<const S: usize> Vector<S> {
         }
     }
 
+    #[inline]
+    pub fn x(&self) -> N {
+        self.elements[0]
+    }
+    
+    #[inline]
+    pub fn y(&self) -> N {
+        self.elements[1]
+    }
+    
+    #[inline]
+    pub fn z(&self) -> N {
+        self.elements[2]
+    }
+    
+    #[inline]
+    pub fn w(&self) -> N {
+        self.elements[3]
+    }
+
     pub fn add(&self, other: &Self) -> Self {
         let mut out = Self::default();
         for (sum, out) in self.elements.iter().zip(&other.elements).map(|(a, b)| a + b).zip(&mut out.elements) {
