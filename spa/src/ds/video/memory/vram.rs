@@ -63,7 +63,7 @@ impl ARM9VRAM {
             0x0689_4000..=0x0689_7FFF => (self.lcdc[VRAMRegion::G as usize].as_mut(), 0x0689_4000),
             0x0689_8000..=0x0689_FFFF => (self.lcdc[VRAMRegion::H as usize].as_mut(), 0x0689_8000),
             0x068A_0000..=0x068A_3FFF => (self.lcdc[VRAMRegion::I as usize].as_mut(), 0x068A_0000),
-            _ => panic!("accessing LCDC image"),
+            _ => panic!("accessing LCDC image {:X}", addr),
         }
     }
 

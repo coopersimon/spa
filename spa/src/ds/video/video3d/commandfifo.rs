@@ -80,7 +80,7 @@ impl GeomCommandFifo {
     }
 
     pub fn set_interrupt_cond(&mut self, val: GeometryEngineStatus) {
-        self.interrupt_cond = match (val & GeometryEngineStatus::CMD_FIFO_INT).bits() {
+        self.interrupt_cond = match (val & GeometryEngineStatus::CMD_FIFO_INT).bits() >> 30 {
             0b01 => CommandFifoInterruptCond::UnderHalf,
             0b10 => CommandFifoInterruptCond::Empty,
             _ => CommandFifoInterruptCond::Never

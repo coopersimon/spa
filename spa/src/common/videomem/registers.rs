@@ -1131,7 +1131,7 @@ impl MemInterface16 for VideoRegisters {
                 self.bg2_internal_x = I24F8::from_bits(self.bg2_ref_x as i32);
             },
             0x2A => {
-                self.bg2_ref_x = bytes::u32::set_hi(self.bg2_ref_x, sign_extend_12bit(data & 0xFFF));
+                self.bg2_ref_x = bytes::u32::set_hi(self.bg2_ref_x, u16::sign_extend(data, 12) as u16);
                 self.bg2_internal_x = I24F8::from_bits(self.bg2_ref_x as i32);
             },
             0x2C => {
@@ -1139,7 +1139,7 @@ impl MemInterface16 for VideoRegisters {
                 self.bg2_internal_y = I24F8::from_bits(self.bg2_ref_y as i32);
             },
             0x2E => {
-                self.bg2_ref_y = bytes::u32::set_hi(self.bg2_ref_y, sign_extend_12bit(data & 0xFFF));
+                self.bg2_ref_y = bytes::u32::set_hi(self.bg2_ref_y, u16::sign_extend(data, 12) as u16);
                 self.bg2_internal_y = I24F8::from_bits(self.bg2_ref_y as i32);
             },
             0x30 => {
@@ -1163,7 +1163,7 @@ impl MemInterface16 for VideoRegisters {
                 self.bg3_internal_x = I24F8::from_bits(self.bg3_ref_x as i32);
             },
             0x3A => {
-                self.bg3_ref_x = bytes::u32::set_hi(self.bg3_ref_x, sign_extend_12bit(data & 0xFFF));
+                self.bg3_ref_x = bytes::u32::set_hi(self.bg3_ref_x, u16::sign_extend(data, 12) as u16);
                 self.bg3_internal_x = I24F8::from_bits(self.bg3_ref_x as i32);
             },
             0x3C => {
@@ -1171,7 +1171,7 @@ impl MemInterface16 for VideoRegisters {
                 self.bg3_internal_y = I24F8::from_bits(self.bg3_ref_y as i32);
             },
             0x3E => {
-                self.bg3_ref_y = bytes::u32::set_hi(self.bg3_ref_y, sign_extend_12bit(data & 0xFFF));
+                self.bg3_ref_y = bytes::u32::set_hi(self.bg3_ref_y, u16::sign_extend(data, 12) as u16);
                 self.bg3_internal_y = I24F8::from_bits(self.bg3_ref_y as i32);
             },
             0x40 => {
@@ -1216,14 +1216,5 @@ impl MemInterface16 for VideoRegisters {
             0x6E => {},
             _ => panic!("writing to invalid video register address {:X}", addr)
         }
-    }
-}
-
-#[inline]
-const fn sign_extend_12bit(val: u16) -> u16 {
-    if u16::test_bit(val, 11) {
-        val | 0xF000
-    } else {
-        val
     }
 }

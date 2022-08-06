@@ -116,6 +116,7 @@ impl MemInterface32 for Video3D {
             0x0400_0360..=0x0400_037F => 0,
             // 16-bit
             0x0400_0380..=0x0400_03BF => 0,
+            0x0400_0610 => 0,
             
             0x0400_04A4 => 0,   // ?? Read by Super mario 64
 
