@@ -40,6 +40,7 @@ pub struct SoftwareRenderer {
     mode:           RendererMode,
     h_res:          usize,
     palette_cache:  PaletteCache,
+    pub line_3d:        Vec<Colour>,
 }
 
 impl SoftwareRenderer {
@@ -53,6 +54,7 @@ impl SoftwareRenderer {
             mode:   mode,
             h_res:  h_res,
             palette_cache:  PaletteCache::new(),
+            line_3d:        vec![Colour::black(); 256],
         }
     }
 
@@ -647,6 +649,10 @@ impl SoftwareRenderer {
         };
         use BackgroundTypeData::*;
         match &bg.type_data {
+            Render3D(d) => {
+                let scrolled_x = (x as u16).wrapping_add(d.scroll_x);
+                Some(self.line_3d[(scrolled_x & 0xFF) as usize])
+            },
             Tiled(t) => {
                 let scrolled_x = (x as u32).wrapping_add(t.scroll_x as u32);
                 let scrolled_y = (y as u32).wrapping_add(t.scroll_y as u32);

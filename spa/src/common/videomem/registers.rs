@@ -454,18 +454,24 @@ impl VideoRegisters {
 
     fn get_tiled_bg0(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG0) {
-            let tiled_data = TiledBackgroundData {
-                tile_map_addr:  (self.bg0_control.tile_map_block() * 2 * 1024) + self.lcd_control_hi.bg_map_base(),
-                tile_data_addr: (self.bg0_control.tile_data_block() * 16 * 1024) + self.lcd_control_hi.bg_tile_base(),
-                use_8bpp:       self.bg0_control.use_8_bpp(),
-                scroll_x:       self.bg0_x_offset,
-                scroll_y:       self.bg0_y_offset,
-                layout:         self.bg0_control.layout(),
-                ext_palette:    if self.bg_ext_palette() {
-                    Some(if self.bg0_control.affine_wraparound() {2} else {0})
-                } else {
-                    None
-                }
+            let type_data = if self.lcd_control.contains(LCDControl::BG0_3D) {
+                BackgroundTypeData::Render3D(Render3DBackgroundData {
+                    scroll_x:       self.bg0_x_offset,
+                })
+            } else {
+                BackgroundTypeData::Tiled(TiledBackgroundData {
+                    tile_map_addr:  (self.bg0_control.tile_map_block() * 2 * 1024) + self.lcd_control_hi.bg_map_base(),
+                    tile_data_addr: (self.bg0_control.tile_data_block() * 16 * 1024) + self.lcd_control_hi.bg_tile_base(),
+                    use_8bpp:       self.bg0_control.use_8_bpp(),
+                    scroll_x:       self.bg0_x_offset,
+                    scroll_y:       self.bg0_y_offset,
+                    layout:         self.bg0_control.layout(),
+                    ext_palette:    if self.bg_ext_palette() {
+                        Some(if self.bg0_control.affine_wraparound() {2} else {0})
+                    } else {
+                        None
+                    }
+                })
             };
             Some(BackgroundData {
                 priority:       self.bg0_control.priority(),
@@ -480,7 +486,7 @@ impl VideoRegisters {
                     self.colour_special.contains(ColourSpecialControl::BG0_TARGET_2)
                 ),
                 mosaic:     self.bg0_control.is_mosaic(),
-                type_data:  BackgroundTypeData::Tiled(tiled_data)
+                type_data:  type_data
             })
         } else {
             None
