@@ -22,7 +22,7 @@ pub struct BackgroundData {
 #[derive(Clone)]
 /// Background data for use by renderers
 pub enum BackgroundTypeData {
-    // TODO: 3d?
+    Render3D(Render3DBackgroundData),
     Tiled(TiledBackgroundData),
     Affine(AffineBackgroundData),
     Bitmap(BitmapBackgroundData),
@@ -74,6 +74,12 @@ pub enum BackgroundMapLayout {
     Wide,   // 2x1 map
     Tall,   // 1x2 map
     Large   // 2x2 map
+}
+
+/// Data for 3D background.
+#[derive(Clone)]
+pub struct Render3DBackgroundData {
+    pub scroll_x:   u16
 }
 
 /// Data for a tiled background.

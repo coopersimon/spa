@@ -42,7 +42,6 @@ pub struct ProceduralRendererThread {
 
     upper:      RenderTarget,
     lower:      RenderTarget,
-    line_3d:    Vec<Colour>,
 
     vram:   RendererVRAM
 }
@@ -58,8 +57,6 @@ impl Renderer for ProceduralRenderer {
                 engine_a:   SoftwareRenderer::new(RendererMode::NDSA),
                 engine_b:   SoftwareRenderer::new(RendererMode::NDSB),
                 engine_3d:  Software3DRenderer::new(),
-
-                line_3d:    vec![Colour::default(); 256],
 
                 upper, lower, vram
             };
@@ -112,7 +109,7 @@ impl ProceduralRendererThread {
             let engine_3d_vram = self.vram.engine_3d_vram.lock();
             let render_engine = self.vram.render_engine.lock();
 
-            self.engine_3d.draw(&render_engine, &engine_3d_vram, &mut self.line_3d, line as u8);
+            self.engine_3d.draw(&render_engine, &engine_3d_vram, &mut self.engine_a.line_3d, line as u8);
         }
 
         if power_cnt.contains(GraphicsPowerControl::ENABLE_A) {
