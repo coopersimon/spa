@@ -17,18 +17,18 @@ use super::types::*;
 
 #[derive(Clone, Copy)]
 enum Primitive {
-    Triangle,
+    Triangle(usize),
     /// The first polygon of a triangle strip.
-    TriangleStripFirst,
+    TriangleStripFirst(usize),
     /// Subsequent polygons of a triangle strip.
-    TriangleStripReady,
-    Quad,
+    TriangleStrip,
+    Quad(usize),
     /// The first polygon of a quad strip.
-    QuadStripFirst,
+    QuadStripFirst(usize),
     /// The vertex after emitting a subsequent quad strip polygon.
-    QuadStripBuffer,
-    /// The vertex before emitting a subsequent quad strip polygon.
-    QuadStripReady
+    QuadStrip(usize),
+    // The vertex before emitting a subsequent quad strip polygon.
+    //QuadStripReady
 }
 
 pub struct GeometryEngine {
@@ -60,8 +60,16 @@ pub struct GeometryEngine {
 
     /// Current polygon vertices for outputting to Vertex RAM.
     /// Will only be written if it passes the W-test.
-    staged_polygon:     CircularBuffer<Vertex>,
+    staged_polygon:     Vec<ClipVertex>,
+    staged_index:       usize,
+    stage_size:         usize,
     primitive:          Option<Primitive>,
+}
+
+#[derive(Default, Clone)]
+struct ClipVertex {
+    vtx:        Vertex,
+    clip_vtx:   Option<Vertex>
 }
 
 impl GeometryEngine {
@@ -86,7 +94,9 @@ impl GeometryEngine {
             tex_palette:    0,
             current_vertex: [I4F12::ZERO; 3],
 
-            staged_polygon:     CircularBuffer::new(),
+            staged_polygon:     vec![ClipVertex::default(); 4],
+            staged_index:       0,
+            stage_size:         3,
             primitive:          None,
         }
     }
@@ -171,7 +181,20 @@ impl GeometryEngine {
         1
     }
 
-    // TODO: tex
+    pub fn set_tex_attrs(&mut self, data: u32) -> isize {
+        self.texture_attrs = TextureAttrs::from_bits_truncate(data);
+        1
+    }
+    
+    pub fn set_tex_palette(&mut self, data: u32) -> isize {
+        self.tex_palette = (data & 0x1FFF) as u16;
+        1
+    }
+    
+    pub fn set_tex_coords(&mut self, data: u32) -> isize {
+        // TODO
+        1
+    }
 
     /// Called before vertex data is input.
     /// 
@@ -179,20 +202,20 @@ impl GeometryEngine {
     pub fn begin_vertex_list(&mut self, data: u32) -> isize {
         let primitive = match data & 0b11 {
             0b00 => {
-                self.staged_polygon.resize(3);
-                Primitive::Triangle
+                self.stage_size = 3;
+                Primitive::Triangle(0)
             },
             0b01 => {
-                self.staged_polygon.resize(4);
-                Primitive::Quad
+                self.stage_size = 4;
+                Primitive::Quad(0)
             },
             0b10 => {
-                self.staged_polygon.resize(3);
-                Primitive::TriangleStripFirst
+                self.stage_size = 3;
+                Primitive::TriangleStripFirst(0)
             },
             0b11 => {
-                self.staged_polygon.resize(4);
-                Primitive::QuadStripFirst
+                self.stage_size = 4;
+                Primitive::QuadStripFirst(0)
             },
             _ => unreachable!()
         };
@@ -293,67 +316,150 @@ impl GeometryEngine {
         let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
         // TODO: mask?
         let w = transformed_vertex.elements[3];
-        let w2 = w * 2;
-        let x = (transformed_vertex.elements[0]) + w / w2;
-        let y = (transformed_vertex.elements[1]) + w / w2;
+        let w2_recip = N::ONE.checked_div(w * 2).unwrap_or(N::MAX);
+        let x = (transformed_vertex.elements[0] + w) * w2_recip;
+        let y = (transformed_vertex.elements[1] + w) * w2_recip;
         let depth = if self.w_buffer {
             w.to_fixed::<I23F9>()
         } else {
-            let z = (transformed_vertex.elements[2]) + w / w2;
+            let z = (transformed_vertex.elements[2] + w) * w2_recip;
             z.to_fixed::<I23F9>()
         };
 
-        if x >= N::ONE || x < N::ZERO {
+        /*if x >= N::ONE || x < N::ZERO {
             // TODO: CLIP X
             println!("clip x");
         }
         if y >= N::ONE || y < N::ZERO {
             // TODO: CLIP Y
             println!("clip y");
-        }
+        }*/
 
         // TODO: not sure about these calcs.
         let viewport_x = I12F4::from_num(self.viewport_x) + (x * N::from_num(self.viewport_width)).to_fixed::<I12F4>();
         let viewport_y = I12F4::from_num(self.viewport_y) + (y * N::from_num(self.viewport_height)).to_fixed::<I12F4>();
 
-        self.staged_polygon.push(Vertex {
+        self.output_vertex(Vertex {
             screen_p: Coords{x: viewport_x, y: viewport_y},
             depth: depth,
             colour: self.lighting.get_vertex_colour(),
             tex_coords: Coords { x: I12F4::ZERO, y: I12F4::ZERO }   // TODO
         });
 
-        if self.should_emit() {
-            self.emit_polygon();
-        }
-
         8
     }
 
-    fn should_emit(&mut self) -> bool {
-        if !self.staged_polygon.is_full() {
-            return false;
-        }
-        match self.primitive.expect("trying to output vertex without calling begin") {
-            Primitive::QuadStripBuffer => {
-                // Only output a new polygon every second quad strip vertex.
-                self.primitive = Some(Primitive::QuadStripReady);
-                return false;
-            }
-            _ => ()
-        }
+    /// Advance the staging state machine and possibly output a polygon.
+    fn output_vertex(&mut self, vertex: Vertex) {
+        use Primitive::*;
         
+        self.staged_polygon[self.staged_index] = ClipVertex {
+            vtx: vertex,
+            clip_vtx: None
+        };
+        self.staged_index = (self.staged_index + 1) % self.stage_size;
 
-        // TODO: check 1-dot display
-        // For each vertex test if x&y are within 1 dot.
-
-        // TODO: back/front face culling
-
-        true
+        // Advance the staging state machine.
+        match self.primitive.unwrap() {
+            Triangle(2) => {
+                self.try_emit();
+                self.primitive = Some(Triangle(0));
+            },
+            Triangle(n) => {
+                self.primitive = Some(Triangle(n+1));
+            },
+            TriangleStripFirst(2) | TriangleStrip => {
+                self.try_emit();
+                self.primitive = Some(TriangleStrip);
+            },
+            TriangleStripFirst(n) => {
+                self.primitive = Some(TriangleStripFirst(n+1));
+            },
+            Quad(3) => {
+                self.try_emit();
+                self.primitive = Some(Quad(0));
+            },
+            Quad(n) => {
+                self.primitive = Some(Quad(n+1));
+            },
+            QuadStripFirst(3) => {
+                self.try_emit();
+                self.primitive = Some(QuadStrip(0));
+            },
+            QuadStripFirst(n) => {
+                self.primitive = Some(QuadStripFirst(n+1));
+            },
+            QuadStrip(1) => {
+                self.try_emit();
+                self.primitive = Some(QuadStrip(0));
+            },
+            QuadStrip(n) => {
+                self.primitive = Some(QuadStrip(n+1));
+            },
+        }
     }
 
-    /// Output a polygon, and any associated new vertices.
-    fn emit_polygon(&mut self) {
+    /// Test if this polygon should be output, and if so write it to buffers.
+    /// 
+    /// Test:
+    /// - If all vertices are off-screen
+    /// - Winding of vertices
+    /// - One-dot display
+    fn try_emit(&mut self) {
+        // Test winding
+
+        // Clip + test
+
+        // One-dot display test
+
+        // Output
+    }
+
+    /// Clip the vertices, producing 1 or 2 new vertices per clip.
+    /// 
+    /// Test if this polygon should be output or not.
+    fn clip_and_test(&mut self) -> bool {
+        // Clip
+        for n in 0..self.stage_size {
+            let index = (self.staged_index + n) % self.stage_size;
+            // If needs clipping...
+                // Clip edge 0-1
+                // Clip edge 2-0
+            // If no output...
+                // Skip triangle
+        }
+        true
+    }
+    
+    /// Write a polygon + new vertices to list RAM.
+    fn emit_polygon(&mut self, new_vertices: usize, old_vertices: usize) {
+        let mut polygon = Polygon {
+            attrs:      self.polygon_attrs,
+            tex:        self.texture_attrs,
+            palette:    self.tex_palette,
+            x_max:      I12F4::ZERO,
+            x_min:      I12F4::MAX,
+            vertex_indices: Vec::new(),
+        };
+
+        let mut y_max = I12F4::ZERO;
+        let mut y_min = I12F4::MAX;
+        for n in 0..self.stage_size {
+            let index = (self.staged_index + n) % self.stage_size;
+            let vertex = &self.staged_polygon[index];
+            //y_max = std::cmp::max(y_max, vertex.screen_p.y);
+            //y_min = std::cmp::min(y_min, vertex.screen_p.y);
+            //polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
+            //polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
+            // if output
+            //let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
+
+            //polygon.vertex_indices.push(v_idx);
+        }
+    }
+
+    // Output a polygon, and any associated new vertices.
+    /*fn emit_polygon(&mut self) {
         let mut polygon = Polygon {
             attrs:      self.polygon_attrs,
             tex:        self.texture_attrs,
@@ -443,5 +549,5 @@ impl GeometryEngine {
                 self.primitive = Some(Primitive::QuadStripBuffer);
             }
         }
-    }
+    }*/
 }

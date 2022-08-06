@@ -62,6 +62,10 @@ impl Video3D {
     }
 
     pub fn clock(&mut self, cycles: usize) -> (Interrupts, bool) {
+        if self.pending_swap.is_some() {
+            return (Interrupts::empty(), false);
+        }
+
         while self.cycle_count >= 0 {
             if let Some(cycles_used) = self.process_command() {
                 self.cycle_count -= cycles_used;
@@ -92,16 +96,37 @@ impl Video3D {
 impl MemInterface32 for Video3D {
     fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
-            0x0400_0060 => self.rendering_engine.lock().control.bits(),
+            0x0400_0060 => {
+                //println!("read _60");
+                self.rendering_engine.lock().control.bits()
+            },
 
-            0x0400_0320 => 46,   // TODO: Rendered line count
+            0x0400_0320 => {
+                
+                //println!("read 320");
+                46
+            },   // TODO: Rendered line count
 
+            // TODO: 16-bit accesses
+            0x0400_0330..=0x0400_033F => 0,
             0x0400_0340 => 0,
             0x0400_0354 => 0,
             0x0400_035C => 0,
+            // 8-bit
+            0x0400_0360..=0x0400_037F => 0,
+            // 16-bit
+            0x0400_0380..=0x0400_03BF => 0,
+            
+            0x0400_04A4 => 0,   // ?? Read by Super mario 64
 
-            0x0400_0600 => self.get_geom_engine_status().bits(),
-            0x0400_0604 => 0,   // POLY+VTX COUNT
+            0x0400_0600 => {
+                //println!("read 600");
+                self.get_geom_engine_status().bits()
+            },
+            0x0400_0604 => {
+                //println!("read 604");
+                100
+            },   // POLY+VTX COUNT
             0x0400_0620..=0x0400_0634 => 0, // test result
 
             0x0400_0640..=0x0400_067F => self.read_clip_matrix((addr / 4) % 16),
@@ -205,6 +230,7 @@ impl Video3D {
         }
 
         let command = (self.current_commands & 0xFF) as u8;
+        //println!("EXEC {:X}", command);
 
         let cycles = match command {
             0x00 => Some(0),  // NOP
@@ -226,7 +252,7 @@ impl Video3D {
 
             0x20 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_vertex_colour(d)),
             0x21 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_normal(d)),
-            0x22 => Some(0),  // TEX COORD
+            0x22 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_tex_coords(d)),
 
             0x23 => self.geom_command_fifo.pop_n(2).map(|mut d| self.geometry_engine.set_vertex_coords_16(d.next().unwrap(), d.next().unwrap())),
             0x24 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_vertex_coords_10(d)),
@@ -236,8 +262,8 @@ impl Video3D {
             0x28 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.diff_vertex_coords(d)),
             
             0x29 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_polygon_attrs(d)),
-            0x2A => Some(0),  // TEX PARAM
-            0x2B => Some(0),  // TEX PALETTE BASE
+            0x2A => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_tex_attrs(d)),
+            0x2B => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_tex_palette(d)),
 
             0x30 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_dif_amb_colour(d)),
             0x31 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_spe_emi_colour(d)),
@@ -250,11 +276,16 @@ impl Video3D {
 
             0x50 => {
                 self.pending_swap = self.geom_command_fifo.pop();
-                Some(0)
+                // TODO: verify this is Some() ?
+                self.current_commands >>= 8;
+                None
             },
             0x60 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_viewport(d)),
 
             // TODO: test
+            0x70 => panic!("box"),
+            0x71 => panic!("pos"),
+            0x72 => panic!("vec"),
 
             _ => Some(0), // Undefined
         };
