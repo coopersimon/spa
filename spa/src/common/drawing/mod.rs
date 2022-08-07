@@ -5,7 +5,7 @@ pub mod background;
 
 use fixed::types::I24F8;
 use crate::utils::bits::u16;
-use crate::common::colour::Colour;
+use crate::common::colour::*;
 use crate::common::videomem::{
     VideoMemory, VideoRegisters, VRAM2D
 };
@@ -30,6 +30,7 @@ const SMALL_BITMAP_TOP: u32 = (160 - SMALL_BITMAP_HEIGHT) / 2;
 /// Width of bitmap in GBA mode 4, 5.
 const LARGE_BITMAP_WIDTH: u32 = 240;
 
+#[derive(PartialEq)]
 pub enum RendererMode {
     GBA,
     NDSA,
@@ -40,7 +41,7 @@ pub struct SoftwareRenderer {
     mode:           RendererMode,
     h_res:          usize,
     palette_cache:  PaletteCache,
-    pub line_3d:        Vec<Colour>,
+    pub line_3d:    Vec<ColourAlpha>,
 }
 
 impl SoftwareRenderer {
@@ -50,11 +51,14 @@ impl SoftwareRenderer {
             RendererMode::GBA   => 240,
             /* NDS */_          => 256,
         };
+        let line_3d = if mode == RendererMode::NDSA {
+            vec![ColourAlpha::default(); 256]
+        } else {Vec::new()};
         Self {
-            mode:   mode,
-            h_res:  h_res,
+            mode:           mode,
+            h_res:          h_res,
             palette_cache:  PaletteCache::new(),
-            line_3d:        vec![Colour::black(); 256],
+            line_3d:        line_3d,
         }
     }
 
@@ -112,7 +116,7 @@ impl SoftwareRenderer {
     /// For when screen should be blanked.
     pub fn draw_blank_line(&self, target: &mut [u8]) {
         for p in target {
-            *p = 0;
+            *p = 0xFF;
         }
     }
 }
@@ -651,7 +655,7 @@ impl SoftwareRenderer {
         match &bg.type_data {
             Render3D(d) => {
                 let scrolled_x = (x as u16).wrapping_add(d.scroll_x);
-                Some(self.line_3d[(scrolled_x & 0xFF) as usize])
+                self.line_3d[(scrolled_x & 0xFF) as usize].colour()
             },
             Tiled(t) => {
                 let scrolled_x = (x as u32).wrapping_add(t.scroll_x as u32);

@@ -1,5 +1,22 @@
 /// Colour for general drawing.
 
+/// A colour in R8G8B8A8 format.
+#[derive(Clone, Copy, Default)]
+pub struct ColourAlpha {
+    pub col:    Colour,
+    pub alpha:  u8,
+}
+
+impl ColourAlpha {
+    pub fn colour(&self) -> Option<Colour> {
+        if self.alpha != 0 {
+            Some(self.col)
+        } else {
+            None
+        }
+    }
+}
+
 /// A colour in R8G8B8 format.
 #[derive(Clone, Copy, Default)]
 pub struct Colour {
