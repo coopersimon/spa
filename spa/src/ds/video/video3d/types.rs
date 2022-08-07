@@ -4,6 +4,7 @@ use std::{
 };
 use bitflags::bitflags;
 use fixed::types::{I12F4, I23F9};
+use super::geometry::N;
 use crate::{
     utils::bits::{u16, u32},
     common::colour::Colour
@@ -89,8 +90,8 @@ impl TextureAttrs {
 
 #[derive(Eq)]
 pub struct PolygonOrder {
-    pub y_max:    I12F4, // In screen space (0: top, 191: bottom)
-    pub y_min:    I12F4, // In screen space (0: top, 191: bottom)
+    pub y_max:    N, // In screen space (0: top, 191: bottom)
+    pub y_min:    N, // In screen space (0: top, 191: bottom)
     pub polygon_index:  usize,
 }
 
@@ -132,8 +133,6 @@ pub struct Polygon {
     pub attrs:          PolygonAttrs,
     pub tex:            TextureAttrs,
     pub palette:        u16,
-    pub x_max:          I12F4,
-    pub x_min:          I12F4,
     pub vertex_indices: Vec<usize>
 }
 
@@ -153,8 +152,8 @@ impl Polygon {
 /// Coordinates for a point in screen-space.
 #[derive(Default, Clone, Copy)]
 pub struct Coords {
-    pub x: I12F4,   // also tex s
-    pub y: I12F4    // also tex t
+    pub x: N,   // also tex s
+    pub y: N    // also tex t
 }
 
 /// A single vertex. 12 bytes.
@@ -210,7 +209,7 @@ impl PolygonRAM {
     }
 
     /// Insert a polygon.
-    pub fn insert_polygon(&mut self, polygon: Polygon, y_max: I12F4, y_min: I12F4) {
+    pub fn insert_polygon(&mut self, polygon: Polygon, y_max: N, y_min: N) {
         let polygon_index = self.polygons.len();
 
         let polygon_order = PolygonOrder {

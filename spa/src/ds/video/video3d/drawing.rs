@@ -1,6 +1,6 @@
 use super::{
     render::RenderingEngine,
-    types::{Display3DControl, PolygonAttrs, Coords, Polygon}
+    types::{Display3DControl, PolygonAttrs, Coords, Polygon}, geometry::N
 };
 use fixed::{types::I12F4, types::I23F9, traits::ToFixed};
 use crate::{
@@ -101,7 +101,7 @@ impl Software3DRenderer {
     }
     
     fn draw_opaque_polygons(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], line: u8) {
-        let y = I12F4::from_num(line) + I12F4::from_bits(0b1000);
+        let y = N::from_num(line) + N::from_num(0.5);
 
         for p in render_engine.polygon_ram.opaque_polygons.iter()
             //.skip_while(|el| el.y_max < line || el.y_min > line)
@@ -117,7 +117,7 @@ impl Software3DRenderer {
             // TODO: find step for trinity (depth, vtx col, tex coords)
 
             for x_idx in a.screen_p.x.to_num::<i16>()..=b.screen_p.x.to_num::<i16>() {
-                let x = I12F4::from_num(x_idx) + I12F4::from_bits(0b1000);
+                let x = N::from_num(x_idx) + N::from_num(0.5);
                 // TODO: inc trinity by step
 
                 // TODO: interpolate
@@ -164,7 +164,7 @@ impl Software3DRenderer {
     /// Find the first two points where this polygon intersects the render line.
     /// 
     /// Returns the two points with interpolated attributes, in order of x position.
-    fn find_intersect_points(render_engine: &RenderingEngine, polygon: &Polygon, y: I12F4) -> Option<[Vertex; 2]> {
+    fn find_intersect_points(render_engine: &RenderingEngine, polygon: &Polygon, y: N) -> Option<[Vertex; 2]> {
         let n_vertices = polygon.vertex_indices.len();
 
         // Find start and end points.
@@ -183,17 +183,17 @@ impl Software3DRenderer {
             }
 
             // Weight of point a (normalised between 0-1)
-            let factor_a = (y - vtx_b.screen_p.y).checked_div(vtx_a.screen_p.y - vtx_b.screen_p.y).unwrap_or(I12F4::ONE);   // TODO: one dot polygon?
+            let factor_a = (y - vtx_b.screen_p.y).checked_div(vtx_a.screen_p.y - vtx_b.screen_p.y).unwrap_or(N::ONE);   // TODO: one dot polygon?
             // X coordinate where the render line intersects the polygon line.
             let intersect_x = factor_a * (vtx_a.screen_p.x - vtx_b.screen_p.x) + vtx_b.screen_p.x;
-            let factor_b = I12F4::ONE - factor_a;
+            let factor_b = N::ONE - factor_a;
 
             // Interpolate
             let vertex = Vertex {
                 screen_p:   Coords { x: intersect_x, y: y },
                 depth:      (vtx_a.depth * factor_a.to_fixed::<I23F9>()) + (vtx_b.depth * factor_b.to_fixed::<I23F9>()),
                 colour:     vtx_a.colour,    // TODO
-                tex_coords: Coords { x: I12F4::ZERO, y: I12F4::ZERO }   // TODO
+                tex_coords: Coords { x: N::ZERO, y: N::ZERO }   // TODO
             };
 
             if lines[0].is_none() {
@@ -281,52 +281,5 @@ impl Software3DRenderer {
             FRAG_MODE_SHADOW => panic!("cannot use shadow mode on opaque polygons"), // invalid for opaque polygons
             _ => unreachable!()
         }
-    }
-}
-
-/// Find the determinant of the matrix defined by the columns:
-/// (v1 - v0), (v2 - v0)
-/// 
-/// This is equal to 2* the area of the triangle defined by these vertices,
-/// and the weighted normal to the plane defined by these vertices.
-#[inline]
-fn edge_function(v0: Coords, v1: Coords, v2: Coords) -> I12F4 {
-    let a = (v2.x - v0.x) * (v1.y - v0.y);
-    let b = (v2.y - v0.y) * (v1.x - v0.x);
-    a - b
-}
-
-fn interpolate_colour(factors: &[I23F9], colours: &[Colour]) -> Colour {
-    let r = factors[0] * colours[2].r.to_fixed::<I23F9>()
-        + factors[1] * colours[0].r.to_fixed::<I23F9>()
-        + factors[2] * colours[1].r.to_fixed::<I23F9>();
-    
-    let g = factors[0] * colours[2].g.to_fixed::<I23F9>()
-        + factors[1] * colours[0].g.to_fixed::<I23F9>()
-        + factors[2] * colours[1].g.to_fixed::<I23F9>();
-    
-    let b = factors[0] * colours[2].b.to_fixed::<I23F9>()
-        + factors[1] * colours[0].b.to_fixed::<I23F9>()
-        + factors[2] * colours[1].b.to_fixed::<I23F9>();
-    
-    Colour {
-        r: r.to_num::<u8>(),
-        g: g.to_num::<u8>(),
-        b: b.to_num::<u8>()
-    }
-}
-
-fn interpolate_tex_coords(factors: &[I23F9], tex_coords: &[Coords]) -> Coords {
-    let x = factors[0] * tex_coords[2].x.to_fixed::<I23F9>()
-        + factors[1] * tex_coords[0].x.to_fixed::<I23F9>()
-        + factors[2] * tex_coords[1].x.to_fixed::<I23F9>();
-    
-    let y = factors[0] * tex_coords[2].y.to_fixed::<I23F9>()
-        + factors[1] * tex_coords[0].y.to_fixed::<I23F9>()
-        + factors[2] * tex_coords[1].y.to_fixed::<I23F9>();
-    
-    Coords {
-        x: x.to_fixed::<I12F4>(),
-        y: y.to_fixed::<I12F4>()
     }
 }
