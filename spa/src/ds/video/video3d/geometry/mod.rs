@@ -10,7 +10,7 @@ use fixed::{types::{I4F12, I12F4, I20F12, I23F9, I13F3}, traits::ToFixed};
 use crate::{
     common::colour::Colour,
     utils::{
-        bits::u32, bytes
+        bits, bits::u32, bytes
     },
 };
 use super::types::*;
@@ -300,16 +300,16 @@ impl GeometryEngine {
         self.process_vertex()
     }
     
-    /// Set vertex coordinates as a diff of current. I1F9 format.
+    /// Set vertex coordinates as a diff of current. F10 format.
     /// 
     /// Param: X, Y, Z, each 10 bits.
     pub fn diff_vertex_coords(&mut self, data: u32) -> isize {
-        let x_diff = (data & 0x3FF) << 3;
-        let y_diff = ((data >> 10) & 0x3FF) << 3;
-        let z_diff = ((data >> 20) & 0x3FF) << 3;
-        self.current_vertex[0] += I4F12::from_bits(x_diff as i16);
-        self.current_vertex[1] += I4F12::from_bits(y_diff as i16);
-        self.current_vertex[2] += I4F12::from_bits(z_diff as i16);
+        let x_diff = data & 0x3FF;
+        let y_diff = (data >> 10) & 0x3FF;
+        let z_diff = (data >> 20) & 0x3FF;
+        self.current_vertex[0] += I4F12::from_bits(bits::u16::sign_extend(x_diff as u16, 10));
+        self.current_vertex[1] += I4F12::from_bits(bits::u16::sign_extend(y_diff as u16, 10));
+        self.current_vertex[2] += I4F12::from_bits(bits::u16::sign_extend(z_diff as u16, 10));
         self.process_vertex()
     }
 
@@ -408,9 +408,9 @@ impl GeometryEngine {
 impl GeometryEngine {
     fn process_vertex(&mut self) -> isize {
         let vertex = Vector::new([
-            self.current_vertex[0].into(),
-            self.current_vertex[1].into(),
-            self.current_vertex[2].into(),
+            self.current_vertex[0].to_fixed::<N>(),
+            self.current_vertex[1].to_fixed::<N>(),
+            self.current_vertex[2].to_fixed::<N>(),
             N::ONE
         ]);
 
@@ -424,8 +424,8 @@ impl GeometryEngine {
         let z = (transformed_vertex.z() + w) * w2_recip;
 
         // TODO: not sure about these calcs.
-        let viewport_x = I12F4::from_num(self.viewport_x) + (x * N::from_num(self.viewport_width)).to_fixed::<I12F4>();
-        let viewport_y = I12F4::from_num(self.viewport_y) + (y * N::from_num(self.viewport_height)).to_fixed::<I12F4>();
+        let viewport_x = N::from_num(self.viewport_x) + (x * N::from_num(self.viewport_width));
+        let viewport_y = N::from_num(self.viewport_y) + (y * N::from_num(self.viewport_height));
 
         self.staged_polygon[self.staged_index] = StagedVertex {
             position: Vector::new([
@@ -433,7 +433,7 @@ impl GeometryEngine {
             ]),
             screen_p: Coords{x: viewport_x, y: viewport_y},
             colour: self.lighting.get_vertex_colour(),
-            tex_coords: Coords { x: I12F4::ZERO, y: I12F4::ZERO },   // TODO
+            tex_coords: Coords { x: N::ZERO, y: N::ZERO },   // TODO
 
             needs_clip: None,
             idx:        None
@@ -520,7 +520,7 @@ impl GeometryEngine {
     /// 
     /// Returns true if the polygon should be shown.
     fn test_winding(&self) -> bool {
-        let size = (0..self.stage_size).fold(I12F4::ZERO, |acc, n| {
+        let size = (0..self.stage_size).fold(N::ZERO, |acc, n| {
             let stage_index_0 = (self.staged_index + n) % self.stage_size;
             let stage_index_1 = if self.stage_wind_ccw {
                 (stage_index_0 + 1) % self.stage_size
@@ -533,9 +533,9 @@ impl GeometryEngine {
             acc + segment_size
         });
 
-        if size > I12F4::ZERO {
+        if size > N::ZERO {
             self.polygon_attrs.contains(PolygonAttrs::RENDER_FRONT)
-        } else if size < I12F4::ZERO {
+        } else if size < N::ZERO {
             self.polygon_attrs.contains(PolygonAttrs::RENDER_BACK)
         } else {
             // Always display line polygons.
@@ -626,19 +626,15 @@ impl GeometryEngine {
             attrs:      self.polygon_attrs,
             tex:        self.texture_attrs,
             palette:    self.tex_palette,
-            x_max:      I12F4::ZERO,
-            x_min:      I12F4::MAX,
             vertex_indices: Vec::new(),
         };
         
-        let mut y_max = I12F4::ZERO;
-        let mut y_min = I12F4::MAX;
+        let mut y_max = N::ZERO;
+        let mut y_min = N::MAX;
 
         let mut emit_vertex = |vertex: &mut StagedVertex| {
             y_max = std::cmp::max(y_max, vertex.screen_p.y);
             y_min = std::cmp::min(y_min, vertex.screen_p.y);
-            polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
-            polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
 
             if let Some(idx) = vertex.idx {
                 polygon.vertex_indices.push(idx);

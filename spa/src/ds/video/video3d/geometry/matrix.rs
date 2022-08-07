@@ -15,6 +15,7 @@ pub struct MatrixUnit {
 
     current_projection: Matrix,
     projection_stack:   Matrix,
+    proj_pointer:       usize,
 
     current_clip:       Matrix,
 
@@ -43,7 +44,7 @@ impl MatrixUnit {
     }
 
     pub fn proj_stack_level(&self) -> u32 {
-        0   // TODO
+        self.proj_pointer as u32
     }
 
     pub fn pos_dir_stack_level(&self) -> u32 {
@@ -74,7 +75,10 @@ impl MatrixUnit {
     
     pub fn push_matrix(&mut self) -> isize {
         match self.mode {
-            PROJ_MODE => self.projection_stack = self.current_projection.clone(),
+            PROJ_MODE => {
+                self.projection_stack = self.current_projection.clone();
+                self.proj_pointer = 1;
+            },
             POS_MODE | POS_DIR_MODE => {
                 self.position_stack[self.pos_dir_pointer] = self.current_position.clone();
                 self.direction_stack[self.pos_dir_pointer] = self.current_direction.clone();
@@ -90,6 +94,7 @@ impl MatrixUnit {
         let signed_pops = u32::sign_extend(pops, 6);
         match self.mode {
             PROJ_MODE => {
+                self.proj_pointer = 0;
                 self.current_projection = self.projection_stack.clone();
                 self.current_clip = self.current_position.mul(&self.current_projection);
             }
@@ -108,7 +113,10 @@ impl MatrixUnit {
     
     pub fn store_matrix(&mut self, pos: u32) -> isize {
         match self.mode {
-            PROJ_MODE => self.projection_stack = self.current_projection.clone(),
+            PROJ_MODE => {
+                println!("store proj {}", pos);
+                self.projection_stack = self.current_projection.clone()
+            },
             POS_MODE | POS_DIR_MODE => {
                 self.position_stack[pos as usize] = self.current_position.clone();
                 self.direction_stack[pos as usize] = self.current_direction.clone();
@@ -122,6 +130,7 @@ impl MatrixUnit {
     pub fn restore_matrix(&mut self, pos: u32) -> isize {
         match self.mode {
             PROJ_MODE => {
+                println!("restore proj {}", pos);
                 self.current_projection = self.projection_stack.clone();
                 self.current_clip = self.current_position.mul(&self.current_projection);
             },
@@ -144,6 +153,7 @@ impl MatrixUnit {
             },
             POS_MODE => {
                 self.current_position = Matrix::identity();
+                self.current_clip = self.current_position.mul(&self.current_projection);
             },
             POS_DIR_MODE => {
                 self.current_position = Matrix::identity();
@@ -166,6 +176,7 @@ impl MatrixUnit {
             },
             POS_MODE => {
                 self.current_position = Matrix::from_4x4(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
             },
             POS_DIR_MODE => {
                 self.current_position = Matrix::from_4x4(value);
@@ -188,6 +199,7 @@ impl MatrixUnit {
             },
             POS_MODE => {
                 self.current_position = Matrix::from_4x3(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
             },
             POS_DIR_MODE => {
                 self.current_position = Matrix::from_4x3(value);
@@ -211,6 +223,7 @@ impl MatrixUnit {
             },
             POS_MODE => {
                 self.current_position.mul_4x4(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
                 35
             },
             POS_DIR_MODE => {
@@ -236,6 +249,7 @@ impl MatrixUnit {
             },
             POS_MODE => {
                 self.current_position.mul_4x3(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
                 31
             },
             POS_DIR_MODE => {
@@ -261,6 +275,7 @@ impl MatrixUnit {
             },
             POS_MODE => {
                 self.current_position.mul_3x3(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
                 28
             },
             POS_DIR_MODE => {
@@ -302,6 +317,7 @@ impl MatrixUnit {
             },
             POS_MODE => {
                 self.current_position.mul_trans(value);
+                self.current_clip = self.current_position.mul(&self.current_projection);
                 22
             },
             POS_DIR_MODE => {
