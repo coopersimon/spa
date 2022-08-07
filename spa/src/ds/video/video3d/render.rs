@@ -91,8 +91,6 @@ impl RenderingEngine {
     }
 
     pub fn set_toon_table(&mut self, index: usize, data: u16) {
-        //self.toon_table[index * 2] = Colour::from_555(bytes::u32::lo(data));
-        //self.toon_table[(index * 2) + 1] = Colour::from_555(bytes::u32::hi(data));
         self.toon_table[index] = Colour::from_555(data);
     }
 
@@ -101,8 +99,6 @@ impl RenderingEngine {
     }
 
     pub fn set_edge_colour(&mut self, index: usize, data: u16) {
-        //self.edge_colour[index * 2] = Colour::from_555(bytes::u32::lo(data));
-        //self.edge_colour[(index * 2) + 1] = Colour::from_555(bytes::u32::hi(data));
         self.edge_colour[index] = Colour::from_555(data);
     }
 

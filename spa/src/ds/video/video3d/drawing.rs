@@ -1,11 +1,11 @@
 use super::{
     render::RenderingEngine,
-    types::{Display3DControl, PolygonAttrs, Coords}
+    types::{Display3DControl, PolygonAttrs, Coords, Polygon}
 };
 use fixed::{types::I12F4, types::I23F9, traits::ToFixed};
 use crate::{
-    ds::video::memory::Engine3DVRAM,
-    common::colour::Colour,
+    ds::video::{memory::Engine3DVRAM, video3d::types::Vertex},
+    common::colour::*,
     utils::bits::u16, utils::bytes
 };
 
@@ -33,7 +33,7 @@ impl Software3DRenderer {
         }
     }
 
-    pub fn draw(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [Colour], line: u8) {
+    pub fn draw(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], line: u8) {
         self.clear_buffers(render_engine, vram, target, line);
 
         self.draw_opaque_polygons(render_engine, vram, target, line);
@@ -60,7 +60,7 @@ const FRAG_MODE_SHADOW: u8 = 0b11;
 
 impl Software3DRenderer {
     /// Fill the drawing buffers with clear values or clear image.
-    fn clear_buffers(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [Colour], line: u8) {
+    fn clear_buffers(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], line: u8) {
         self.stencil_buffer.fill(false);
 
         if render_engine.control.contains(Display3DControl::CLEAR_IMAGE) {
@@ -84,7 +84,8 @@ impl Software3DRenderer {
 
                 self.attr_buffer[x as usize] = clear_attrs;
                 self.depth_buffer[x as usize] = I23F9::from_bits(((depth & 0x7FFF) as i32) << 9);   // TODO: frac part.
-                target[x as usize] = Colour::from_555(colour);
+                target[x as usize].col = Colour::from_555(colour);
+                target[x as usize].alpha = if u16::test_bit(colour, 15) {0x1F} else {0};
             }
         } else {
             let clear_attrs = Attributes {
@@ -95,123 +96,190 @@ impl Software3DRenderer {
             };
             self.attr_buffer.fill(clear_attrs);
             self.depth_buffer.fill(render_engine.clear_depth);
-            target.fill(render_engine.clear_colour);
+            target.fill(ColourAlpha { col: render_engine.clear_colour, alpha: render_engine.clear_alpha });
         }
     }
-
-    fn draw_opaque_polygons(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [Colour], line: u8) {
+    
+    fn draw_opaque_polygons(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], line: u8) {
         let y = I12F4::from_num(line) + I12F4::from_bits(0b1000);
 
         for p in render_engine.polygon_ram.opaque_polygons.iter()
-            .skip_while(|el| el.y_max < line || el.y_min > line)
-            .take_while(|el| el.y_max >= line && el.y_min <= line)
+            //.skip_while(|el| el.y_max < line || el.y_min > line)
+            //.take_while(|el| el.y_max >= line && el.y_min <= line)
         {
+            if p.y_max < y || p.y_min > y {
+                continue;
+            }
             let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
-            let x_min = polygon.x_min.to_num::<u8>();
-            let x_max = polygon.x_max.to_num::<u8>();   // TODO: +1 ?
-            let vertices = polygon.vertex_indices.iter()
-                .map(|i| &render_engine.polygon_ram.vertices[*i])
-                .collect::<Vec<_>>();
+            
+            let [a, b] = Self::find_intersect_points(render_engine, polygon, y).unwrap();
+            
+            // TODO: find step for trinity (depth, vtx col, tex coords)
 
-            let area = edge_function(vertices[0].screen_p, vertices[1].screen_p, vertices[2].screen_p);
-            let area_recip = I23F9::ONE / area.to_fixed::<I23F9>();
-
-            'polygon_test: for x_idx in x_min..=x_max {
-                // Test against the centre of the pixel.
+            for x_idx in a.screen_p.x.to_num::<i16>()..=b.screen_p.x.to_num::<i16>() {
                 let x = I12F4::from_num(x_idx) + I12F4::from_bits(0b1000);
-                let p = Coords {x, y};
-                let mut interpolation_factors = Vec::new(); // TODO: not vec
-                // Check if point is inside polygon.
-                for i in 0..polygon.vertex_indices.len() {
-                    // Find determinant of line vector and vector from point to pixel.
-                    let j = (i + 1) % polygon.vertex_indices.len();
-                    let v_i = vertices[i];
-                    let v_j = vertices[j];
-                    let factor = edge_function(v_i.screen_p, v_j.screen_p, p);
-                    if factor < I12F4::ZERO {
-                        // Point is outside this polygon.
-                        continue 'polygon_test;
-                    }
-                    let normalised_factor = factor.to_fixed::<I23F9>() * area_recip;
-                    interpolation_factors.push(normalised_factor);
-                }
-                
-                let depth = interpolation_factors[0] * vertices[2].depth +
-                    interpolation_factors[1] * vertices[0].depth +
-                    interpolation_factors[2] * vertices[1].depth;
+                // TODO: inc trinity by step
 
-                if self.depth_buffer[x_idx as usize] <= depth { // TODO: remove fractional part?
+                // TODO: interpolate
+                // Evaluate depth
+                if self.depth_buffer[x_idx as usize] <= a.depth { // TODO: remove fractional part?
                     // Point is behind buffer value.
-                    if !polygon.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH) || self.depth_buffer[x_idx as usize] < depth {
+                    if !polygon.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH) || self.depth_buffer[x_idx as usize] < a.depth {
                         continue;
                     }
                 }
 
-                self.depth_buffer[x_idx as usize] = depth;
-
+                // We are sure that we want to render this fragment.
+                self.depth_buffer[x_idx as usize] = a.depth;
                 self.attr_buffer[x_idx as usize].opaque_id = polygon.attrs.id();
                 self.attr_buffer[x_idx as usize].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
 
-                let frag_colour = interpolate_colour(&interpolation_factors, &vertices.iter().map(|v| v.colour).collect::<Vec<_>>());
+                // TODO: interpolate
+                let frag_colour = a.colour;
                 
                 let tex_format = polygon.tex.format();
-                let (tex_colour, tex_alpha) = if tex_format == 0 {
+                let tex_colour = if tex_format == 0 {
                     // No texture.
-                    (Colour::black(), 0x1F_u16)
+                    ColourAlpha {
+                        col: Colour { r: 0xFF, g: 0xFF, b: 0xFF },
+                        alpha: 0x1F
+                    }
                 } else {
-                    let tex_coords = interpolate_tex_coords(&interpolation_factors, &vertices.iter().map(|v| v.tex_coords).collect::<Vec<_>>());
+                    // TODO: interpolate
+                    let tex_coords = a.tex_coords;
                     // TODO: Lookup tex colour + alpha
-                    let tex_colour = Colour::black();
-                    let tex_alpha = 0x1F_u16;
-                    (tex_colour, tex_alpha)
+                    let tex_colour = Colour { r: 0xFF, g: 0xFF, b: 0xFF };
+                    let tex_alpha = 0x1F;
+                    ColourAlpha {
+                        col: tex_colour,
+                        alpha: tex_alpha
+                    }
                 };
 
-                // Blend fragment colour.
-                match polygon.attrs.mode() {
-                    FRAG_MODE_MODULATION => {
-                        let r = ((frag_colour.r as u16) + 1) * ((tex_colour.r as u16) + 1) - 1;
-                        let g = ((frag_colour.g as u16) + 1) * ((tex_colour.g as u16) + 1) - 1;
-                        let b = ((frag_colour.b as u16) + 1) * ((tex_colour.b as u16) + 1) - 1;
-                        target[x_idx as usize] = Colour {
-                            r: bytes::u16::hi(r),
-                            g: bytes::u16::hi(g),
-                            b: bytes::u16::hi(b)
-                        };
-
-                        let alpha = tex_alpha * 0x1F;
-                        self.attr_buffer[x_idx as usize].alpha = (alpha >> 5) as u8;
-                    },
-                    FRAG_MODE_DECAL => {
-                        if tex_alpha == 0 {
-                            target[x_idx as usize] = frag_colour;
-                        } else if tex_alpha == 0x1F {
-                            target[x_idx as usize] = tex_colour;
-                        } else {
-                            let frag_alpha = 0x1F - tex_alpha;
-                            let r = ((frag_colour.r as u16) * frag_alpha) * ((tex_colour.r as u16) * tex_alpha);
-                            let g = ((frag_colour.g as u16) * frag_alpha) * ((tex_colour.g as u16) * tex_alpha);
-                            let b = ((frag_colour.b as u16) * frag_alpha) * ((tex_colour.b as u16) * tex_alpha);
-                            target[x_idx as usize] = Colour {
-                                r: bytes::u16::hi(r),
-                                g: bytes::u16::hi(g),
-                                b: bytes::u16::hi(b)
-                            };
-                        }
-                        self.attr_buffer[x_idx as usize].alpha = 0x1F;
-                    },
-                    FRAG_MODE_TOON_HIGHLIGHT => {
-                        let index = (frag_colour.r >> 3) as usize;
-                        let table_colour = render_engine.toon_table[index];
-                        if render_engine.control.contains(Display3DControl::HIGHLIGHT_SHADING) {
-                            // TODO
-                        } else {
-                            // TODO
-                        }
-                    },
-                    FRAG_MODE_SHADOW => (), // invalid for opaque polygons
-                    _ => unreachable!()
-                }
+                target[x_idx as usize] = Self::blend_fragment_colour(render_engine, polygon, frag_colour, tex_colour)
             }
+        }
+    }
+
+    /// Find the first two points where this polygon intersects the render line.
+    /// 
+    /// Returns the two points with interpolated attributes, in order of x position.
+    fn find_intersect_points(render_engine: &RenderingEngine, polygon: &Polygon, y: I12F4) -> Option<[Vertex; 2]> {
+        let n_vertices = polygon.vertex_indices.len();
+
+        // Find start and end points.
+        let mut lines = [None, None];
+        for i in 0..n_vertices {
+            // Find where render line intersects polygon lines.
+            let v_index_a = polygon.vertex_indices[i];
+            let v_index_b = polygon.vertex_indices[(i + 1) % n_vertices];
+
+            let vtx_a = &render_engine.polygon_ram.vertices[v_index_a];
+            let vtx_b = &render_engine.polygon_ram.vertices[v_index_b];
+
+            if (y > vtx_a.screen_p.y && y > vtx_b.screen_p.y) || (y < vtx_a.screen_p.y && y < vtx_b.screen_p.y) {
+                // This line does not intersect the render line.
+                continue;
+            }
+
+            // Weight of point a (normalised between 0-1)
+            let factor_a = (y - vtx_b.screen_p.y).checked_div(vtx_a.screen_p.y - vtx_b.screen_p.y).unwrap_or(I12F4::ONE);   // TODO: one dot polygon?
+            // X coordinate where the render line intersects the polygon line.
+            let intersect_x = factor_a * (vtx_a.screen_p.x - vtx_b.screen_p.x) + vtx_b.screen_p.x;
+            let factor_b = I12F4::ONE - factor_a;
+
+            // Interpolate
+            let vertex = Vertex {
+                screen_p:   Coords { x: intersect_x, y: y },
+                depth:      (vtx_a.depth * factor_a.to_fixed::<I23F9>()) + (vtx_b.depth * factor_b.to_fixed::<I23F9>()),
+                colour:     vtx_a.colour,    // TODO
+                tex_coords: Coords { x: I12F4::ZERO, y: I12F4::ZERO }   // TODO
+            };
+
+            if lines[0].is_none() {
+                // First line.
+                lines[0] = Some(vertex);
+            } else if lines[1].is_none() {
+                // Second line - we are done.
+                lines[1] = Some(vertex);
+                break;
+            }
+        }
+
+        if let [Some(vtx_a), Some(vtx_b)] = lines {
+            if vtx_a.screen_p.x < vtx_b.screen_p.x {
+                Some([vtx_a, vtx_b])
+            } else {
+                Some([vtx_b, vtx_a])
+            }
+        } else {
+            None
+        }
+    }
+
+    fn blend_fragment_colour(render_engine: &RenderingEngine, polygon: &Polygon, frag_colour: Colour, tex_colour: ColourAlpha) -> ColourAlpha {
+        match polygon.attrs.mode() {
+            FRAG_MODE_MODULATION => {
+                let r = ((frag_colour.r as u16) + 1) * ((tex_colour.col.r as u16) + 1) - 1;
+                let g = ((frag_colour.g as u16) + 1) * ((tex_colour.col.g as u16) + 1) - 1;
+                let b = ((frag_colour.b as u16) + 1) * ((tex_colour.col.b as u16) + 1) - 1;
+                let a = (tex_colour.alpha as u16) * 0x1F;
+
+                ColourAlpha {
+                    col: Colour {
+                        r: bytes::u16::hi(r),
+                        g: bytes::u16::hi(g),
+                        b: bytes::u16::hi(b)
+                    },
+                    alpha: (a >> 5) as u8
+                }
+            },
+
+            FRAG_MODE_DECAL => {
+                if tex_colour.alpha == 0 {
+                    ColourAlpha {
+                        col: frag_colour,
+                        alpha: 0x1F
+                    }
+                } else if tex_colour.alpha == 0x1F {
+                    tex_colour
+                } else {
+                    let tex_alpha = tex_colour.alpha as u16;
+                    let frag_alpha = 0x1F - tex_alpha;
+                    let r = ((frag_colour.r as u16) * frag_alpha).saturating_add((tex_colour.col.r as u16) * tex_alpha);
+                    let g = ((frag_colour.g as u16) * frag_alpha).saturating_add((tex_colour.col.g as u16) * tex_alpha);
+                    let b = ((frag_colour.b as u16) * frag_alpha).saturating_add((tex_colour.col.b as u16) * tex_alpha);
+                    ColourAlpha {
+                        col: Colour {
+                            r: (r >> 5) as u8,
+                            g: (g >> 5) as u8,
+                            b: (b >> 5) as u8
+                        },
+                        alpha: 0x1F
+                    }
+                }
+            },
+
+            FRAG_MODE_TOON_HIGHLIGHT => {
+                let index = (frag_colour.r >> 3) as usize;
+                let table_colour = render_engine.toon_table[index];
+                if render_engine.control.contains(Display3DControl::HIGHLIGHT_SHADING) {
+                    // TODO
+                    ColourAlpha {
+                        col: frag_colour,
+                        alpha: 0x1F
+                    }
+                } else {
+                    // TODO
+                    ColourAlpha {
+                        col: frag_colour,
+                        alpha: 0x1F
+                    }
+                }
+            },
+
+            FRAG_MODE_SHADOW => panic!("cannot use shadow mode on opaque polygons"), // invalid for opaque polygons
+            _ => unreachable!()
         }
     }
 }

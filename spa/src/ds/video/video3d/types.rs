@@ -26,12 +26,6 @@ bitflags! {
         const TEX_MAP_ENABLE    = u16::bit(0);
     }
 }
-pub enum PrimitiveType {
-    Triangle,
-    TriangleStrip,
-    Quad,
-    QuadStrip
-}
 
 bitflags! {
     #[derive(Default)]
@@ -143,6 +137,19 @@ pub struct Polygon {
     pub vertex_indices: Vec<usize>
 }
 
+impl Polygon {
+    /// Check if polygon is opaque.
+    /// 
+    /// A polygon is opaque if it is wireframe (alpha 0),
+    /// or alpha is max, and it must not have a translucent
+    /// texture type (A3I5 or A5I3).
+    pub fn is_opaque(&self) -> bool {
+        let alpha = self.attrs.alpha();
+        let tex_format = self.tex.format();
+        (alpha == 0 || alpha == 31) && (tex_format != 1 && tex_format != 6)
+    }
+}
+
 /// Coordinates for a point in screen-space.
 #[derive(Default, Clone, Copy)]
 pub struct Coords {
@@ -204,19 +211,18 @@ impl PolygonRAM {
 
     /// Insert a polygon.
     pub fn insert_polygon(&mut self, polygon: Polygon, y_max: I12F4, y_min: I12F4) {
-        let alpha = polygon.attrs.alpha();
         let polygon_index = self.polygons.len();
 
         let polygon_order = PolygonOrder {
             y_max, y_min, polygon_index
         };
-        
-        self.polygons.push(polygon);
 
-        if alpha == 31 || alpha == 0 {
+        if polygon.is_opaque() {
             self.opaque_polygons.insert(polygon_order);
         } else {
             self.trans_polygons.insert(polygon_order);
         }
+        
+        self.polygons.push(polygon);
     }
 }
