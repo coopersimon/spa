@@ -6,8 +6,9 @@ pub use math::*;
 use matrix::*;
 use lighting::*;
 
-use fixed::{types::{I4F12, I12F4, I23F9, I13F3}, traits::ToFixed};
+use fixed::{types::{I4F12, I12F4, I20F12, I23F9, I13F3}, traits::ToFixed};
 use crate::{
+    common::colour::Colour,
     utils::{
         bits::u32, bytes
     },
@@ -67,16 +68,22 @@ pub struct GeometryEngine {
 
     /// Current polygon vertices for outputting to Vertex RAM.
     /// Will only be written if it passes the W-test.
-    staged_polygon:     Vec<ClipVertex>,
+    staged_polygon:     Vec<StagedVertex>,
     staged_index:       usize,
     stage_size:         usize,
+    stage_wind_ccw:     bool,
     primitive:          Option<Primitive>,
 }
 
-#[derive(Default, Clone)]
-struct ClipVertex {
-    vtx:        Vertex,
-    clip_vtx:   Option<Vertex>
+#[derive(Clone, Default)]
+struct StagedVertex {
+    position:   Vector<4>,
+    screen_p:   Coords,
+    colour:     Colour,
+    tex_coords: Coords,
+
+    needs_clip: Option<bool>,
+    idx:        Option<usize>,
 }
 
 impl GeometryEngine {
@@ -105,9 +112,10 @@ impl GeometryEngine {
             tex_palette:    0,
             current_vertex: [I4F12::ZERO; 3],
 
-            staged_polygon:     vec![ClipVertex::default(); 4],
+            staged_polygon:     vec![StagedVertex::default(); 4],
             staged_index:       0,
             stage_size:         3,
+            stage_wind_ccw:     true,
             primitive:          None,
         }
     }
@@ -230,6 +238,7 @@ impl GeometryEngine {
             },
             _ => unreachable!()
         };
+        self.stage_wind_ccw = true;
         self.primitive = Some(primitive);
         1
     }
@@ -408,49 +417,36 @@ impl GeometryEngine {
         // Transform the vertex.
         // Result is a I12F12.
         let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
-        // TODO: mask?
         let w = transformed_vertex.w();
         let w2_recip = N::ONE.checked_div(w * 2).unwrap_or(N::MAX);
         let x = (transformed_vertex.x() + w) * w2_recip;
         let y = (transformed_vertex.y() + w) * w2_recip;
-        let depth = if self.w_buffer {
-            w.to_fixed::<I23F9>()
-        } else {
-            let z = (transformed_vertex.z() + w) * w2_recip;
-            z.to_fixed::<I23F9>()
-        };
-
-        /*if x >= N::ONE || x < N::ZERO {
-            // TODO: CLIP X
-            println!("clip x");
-        }
-        if y >= N::ONE || y < N::ZERO {
-            // TODO: CLIP Y
-            println!("clip y");
-        }*/
+        let z = (transformed_vertex.z() + w) * w2_recip;
 
         // TODO: not sure about these calcs.
         let viewport_x = I12F4::from_num(self.viewport_x) + (x * N::from_num(self.viewport_width)).to_fixed::<I12F4>();
         let viewport_y = I12F4::from_num(self.viewport_y) + (y * N::from_num(self.viewport_height)).to_fixed::<I12F4>();
 
-        self.output_vertex(Vertex {
+        self.staged_polygon[self.staged_index] = StagedVertex {
+            position: Vector::new([
+                x, y, z, w
+            ]),
             screen_p: Coords{x: viewport_x, y: viewport_y},
-            depth: depth,
             colour: self.lighting.get_vertex_colour(),
-            tex_coords: Coords { x: I12F4::ZERO, y: I12F4::ZERO }   // TODO
-        });
+            tex_coords: Coords { x: I12F4::ZERO, y: I12F4::ZERO },   // TODO
+
+            needs_clip: None,
+            idx:        None
+        };
+        self.output_vertex();
 
         8
     }
 
     /// Advance the staging state machine and possibly output a polygon.
-    fn output_vertex(&mut self, vertex: Vertex) {
+    fn output_vertex(&mut self) {
         use Primitive::*;
         
-        self.staged_polygon[self.staged_index] = ClipVertex {
-            vtx: vertex,
-            clip_vtx: None
-        };
         self.staged_index = (self.staged_index + 1) % self.stage_size;
 
         // Advance the staging state machine.
@@ -464,6 +460,7 @@ impl GeometryEngine {
             },
             TriangleStripFirst(2) | TriangleStrip => {
                 self.try_emit();
+                self.stage_wind_ccw = !self.stage_wind_ccw;
                 self.primitive = Some(TriangleStrip);
             },
             TriangleStripFirst(n) => {
@@ -478,6 +475,7 @@ impl GeometryEngine {
             },
             QuadStripFirst(3) => {
                 self.try_emit();
+                self.stage_wind_ccw = !self.stage_wind_ccw;
                 self.primitive = Some(QuadStrip(0));
             },
             QuadStripFirst(n) => {
@@ -485,6 +483,7 @@ impl GeometryEngine {
             },
             QuadStrip(1) => {
                 self.try_emit();
+                self.stage_wind_ccw = !self.stage_wind_ccw;
                 self.primitive = Some(QuadStrip(0));
             },
             QuadStrip(n) => {
@@ -500,60 +499,129 @@ impl GeometryEngine {
     /// - Winding of vertices
     /// - One-dot display
     fn try_emit(&mut self) {
-        // Test winding
+        if !self.test_winding() {
+            return;
+        }
 
-        // Clip + test
+        if !self.test_in_view() {
+            return;
+        }
 
-        // One-dot display test
-
-        // Output
+        if !self.test_one_dot_display() {
+            return;
+        }
+        
+        self.clip_and_emit_polygon();
     }
+
+    /// Test winding for the current polygon.
+    /// This checks if the front or back face is showing,
+    /// and if that face should be displayed.
+    /// 
+    /// Returns true if the polygon should be shown.
+    fn test_winding(&self) -> bool {
+        let size = (0..self.stage_size).fold(I12F4::ZERO, |acc, n| {
+            let stage_index_0 = (self.staged_index + n) % self.stage_size;
+            let stage_index_1 = if self.stage_wind_ccw {
+                (stage_index_0 + 1) % self.stage_size
+            } else {
+                (stage_index_0 - 1) % self.stage_size
+            };
+            let v0 = &self.staged_polygon[stage_index_0];
+            let v1 = &self.staged_polygon[stage_index_1];
+            let segment_size = (v1.screen_p.x - v0.screen_p.x) * (v1.screen_p.y + v0.screen_p.y);
+            acc + segment_size
+        });
+
+        if size > I12F4::ZERO {
+            self.polygon_attrs.contains(PolygonAttrs::RENDER_FRONT)
+        } else if size < I12F4::ZERO {
+            self.polygon_attrs.contains(PolygonAttrs::RENDER_BACK)
+        } else {
+            // Always display line polygons.
+            true
+        }
+    }
+    
+    /// Test if current polygon is in view.
+    /// 
+    /// If any vertices are outside the view, mark them for clipping.
+    /// If ALL vertices are outside the view, return FALSE.
+    fn test_in_view(&mut self) -> bool {
+        let mut all_outside_view = true;
+        let mut intersects_far_plane = false;
+
+        for stage_idx in 0..self.stage_size {
+            let vertex = &mut self.staged_polygon[stage_idx];
+            let v_outside_view = if let Some(needs_clip) = vertex.needs_clip {
+                needs_clip
+            } else {
+                // Calc if in view.
+                let needs_clip = vertex.position.x() < I20F12::ZERO ||
+                    vertex.position.x() >= I20F12::ONE ||
+                    vertex.position.y() < I20F12::ZERO ||
+                    vertex.position.y() >= I20F12::ONE ||
+                    vertex.position.z() < I20F12::ZERO ||
+                    vertex.position.z() >= I20F12::ONE;
+                vertex.needs_clip = Some(needs_clip);
+                needs_clip
+            };
+
+            // TEMP
+            if v_outside_view {
+                return false;
+            }
+            // TEMP
+
+            all_outside_view = all_outside_view && v_outside_view;
+
+            intersects_far_plane = intersects_far_plane || (
+                vertex.position.z() >= I23F9::ONE
+            );
+        }
+
+        let hide = all_outside_view || (
+            intersects_far_plane && !self.polygon_attrs.contains(PolygonAttrs::FAR_PLANE_CLIP)
+        );
+
+        !hide
+    }
+
+    /// Test one-dot display for the current polygon.
+    /// 
+    /// If all of the vertices are within the same screen dot,
+    /// optionally test against the one-dot depth value.
+    fn test_one_dot_display(&self) -> bool {
+        // Only do this test if the polygon attr is set to 0.
+        if !self.polygon_attrs.contains(PolygonAttrs::RENDER_DOT) {
+            let v0 = &self.staged_polygon[self.staged_index];
+            let screen_x = v0.screen_p.x.to_num::<i16>();
+            let screen_y = v0.screen_p.y.to_num::<i16>();
+            let mut dot_w = v0.position.w();
+            for n in 1..self.stage_size {
+                let stage_index = (self.staged_index + n) % self.stage_size;
+                let v = &self.staged_polygon[stage_index];
+                // TODO: test if within a dot?
+                if v.screen_p.x.to_num::<i16>() != screen_x ||
+                    v.screen_p.y.to_num::<i16>() != screen_y {
+                    // Not a one-dot polygon.
+                    return true;
+                }
+                dot_w = std::cmp::min(dot_w, v.position.w());
+            }
+            // If the smallest dot w is larger than the test value,
+            // DO NOT output this polygon.
+            dot_w <= self.dot_polygon_w
+        } else {
+            true
+        }
+    }
+
 
     /// Clip the vertices, producing 1 or 2 new vertices per clip.
     /// 
-    /// Test if this polygon should be output or not.
-    fn clip_and_test(&mut self) -> bool {
-        // Clip
-        for n in 0..self.stage_size {
-            let index = (self.staged_index + n) % self.stage_size;
-            // If needs clipping...
-                // Clip edge 0-1
-                // Clip edge 2-0
-            // If no output...
-                // Skip triangle
-        }
-        true
-    }
-    
-    /// Write a polygon + new vertices to list RAM.
-    fn emit_polygon(&mut self, new_vertices: usize, old_vertices: usize) {
-        let mut polygon = Polygon {
-            attrs:      self.polygon_attrs,
-            tex:        self.texture_attrs,
-            palette:    self.tex_palette,
-            x_max:      I12F4::ZERO,
-            x_min:      I12F4::MAX,
-            vertex_indices: Vec::new(),
-        };
-
-        let mut y_max = I12F4::ZERO;
-        let mut y_min = I12F4::MAX;
-        for n in 0..self.stage_size {
-            let index = (self.staged_index + n) % self.stage_size;
-            let vertex = &self.staged_polygon[index];
-            //y_max = std::cmp::max(y_max, vertex.screen_p.y);
-            //y_min = std::cmp::min(y_min, vertex.screen_p.y);
-            //polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
-            //polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
-            // if output
-            //let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
-
-            //polygon.vertex_indices.push(v_idx);
-        }
-    }
-
-    // Output a polygon, and any associated new vertices.
-    /*fn emit_polygon(&mut self) {
+    /// It will only output the polygon if some of the vertices are inside the view frustrum.
+    fn clip_and_emit_polygon(&mut self) {
         let mut polygon = Polygon {
             attrs:      self.polygon_attrs,
             tex:        self.texture_attrs,
@@ -563,85 +631,55 @@ impl GeometryEngine {
             vertex_indices: Vec::new(),
         };
         
-        match self.primitive.expect("trying to output vertex without calling begin") {
-            Primitive::Triangle => {
-                let mut y_max = I12F4::ZERO;
-                let mut y_min = I12F4::MAX;
-                for vertex in self.staged_polygon.iter() {
-                    y_max = std::cmp::max(y_max, vertex.screen_p.y);
-                    y_min = std::cmp::min(y_min, vertex.screen_p.y);
-                    polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
-                    polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
-                    let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
-                    polygon.vertex_indices.push(v_idx);
+        let mut y_max = I12F4::ZERO;
+        let mut y_min = I12F4::MAX;
+
+        let mut emit_vertex = |vertex: &mut StagedVertex| {
+            y_max = std::cmp::max(y_max, vertex.screen_p.y);
+            y_min = std::cmp::min(y_min, vertex.screen_p.y);
+            polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
+            polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
+
+            if let Some(idx) = vertex.idx {
+                polygon.vertex_indices.push(idx);
+            } else {
+                let idx = self.polygon_ram.insert_vertex(Vertex {
+                    screen_p: vertex.screen_p.clone(),
+                    depth: if self.w_buffer {
+                        vertex.position.w().to_fixed::<I23F9>()
+                    } else {
+                        vertex.position.z().to_fixed::<I23F9>()
+                    },
+                    colour:     vertex.colour,
+                    tex_coords: vertex.tex_coords.clone()
+                });
+                vertex.idx = Some(idx);
+                polygon.vertex_indices.push(idx);
+            }
+        };
+        
+        for n in 0..self.stage_size {
+            let stage_index = (self.staged_index + n) % self.stage_size;
+            
+            if self.staged_polygon[stage_index].needs_clip.unwrap() {
+                let vertex = &self.staged_polygon[stage_index];
+
+                let stage_index_1 = (stage_index + 1) % self.stage_size;
+                let v1 = &self.staged_polygon[stage_index_1];
+                if !v1.needs_clip.unwrap() {
+                    // TODO: interpolate
                 }
-                self.polygon_ram.insert_polygon(polygon, y_max, y_min);
-                self.staged_polygon.resize(3);
-            },
-            Primitive::TriangleStripFirst => {
-                let mut y_max = I12F4::ZERO;
-                let mut y_min = I12F4::MAX;
-                for vertex in self.staged_polygon.iter() {
-                    y_max = std::cmp::max(y_max, vertex.screen_p.y);
-                    y_min = std::cmp::min(y_min, vertex.screen_p.y);
-                    polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
-                    polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
-                    let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
-                    polygon.vertex_indices.push(v_idx);
+
+                let stage_index_2 = (self.stage_size + stage_index - 1) % self.stage_size;
+                let v2 = &self.staged_polygon[stage_index_2];
+                if !v2.needs_clip.unwrap() {
+                    // TODO: interpolate
                 }
-                self.polygon_ram.insert_polygon(polygon, y_max, y_min);
-                self.primitive = Some(Primitive::TriangleStripReady);
-            },
-            Primitive::TriangleStripReady => {  // TODO
-                let v_idx = self.polygon_ram.insert_vertex(self.staged_polygon.end().clone());
-                polygon.vertex_indices.push(v_idx);
-                self.polygon_ram.insert_polygon(polygon, I12F4::ZERO, I12F4::ZERO);
-                // TODO: insert previous indices.
-            },
-            Primitive::Quad => {
-                let mut y_max = I12F4::ZERO;
-                let mut y_min = I12F4::MAX;
-                for vertex in self.staged_polygon.iter() {
-                    y_max = std::cmp::max(y_max, vertex.screen_p.y);
-                    y_min = std::cmp::min(y_min, vertex.screen_p.y);
-                    polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
-                    polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
-                    let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
-                    polygon.vertex_indices.push(v_idx);
-                }
-                self.polygon_ram.insert_polygon(polygon, y_max, y_min);
-                self.staged_polygon.resize(4);
-            },
-            Primitive::QuadStripFirst => {
-                let mut y_max = I12F4::ZERO;
-                let mut y_min = I12F4::MAX;
-                for vertex in self.staged_polygon.iter() {
-                    y_max = std::cmp::max(y_max, vertex.screen_p.y);
-                    y_min = std::cmp::min(y_min, vertex.screen_p.y);
-                    polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
-                    polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
-                    let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
-                    polygon.vertex_indices.push(v_idx);
-                }
-                self.polygon_ram.insert_polygon(polygon, y_max, y_min);
-                self.primitive = Some(Primitive::QuadStripBuffer);
-            },
-            Primitive::QuadStripBuffer => panic!("trying to emit a quad strip polygon when not ready"),
-            Primitive::QuadStripReady => {
-                let mut y_max = I12F4::ZERO;
-                let mut y_min = I12F4::MAX;
-                for vertex in self.staged_polygon.iter() {
-                    y_max = std::cmp::max(y_max, vertex.screen_p.y);
-                    y_min = std::cmp::min(y_min, vertex.screen_p.y);
-                    polygon.x_max = std::cmp::max(polygon.x_max, vertex.screen_p.x);
-                    polygon.x_min = std::cmp::min(polygon.x_min, vertex.screen_p.x);
-                    let v_idx = self.polygon_ram.insert_vertex(vertex.clone());
-                    polygon.vertex_indices.push(v_idx);
-                    // TODO: insert previous indices.
-                }
-                self.polygon_ram.insert_polygon(polygon, y_max, y_min);
-                self.primitive = Some(Primitive::QuadStripBuffer);
+            } else {
+                emit_vertex(&mut self.staged_polygon[stage_index]);
             }
         }
-    }*/
+        
+        self.polygon_ram.insert_polygon(polygon, y_max, y_min);
+    }
 }
