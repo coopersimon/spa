@@ -31,11 +31,11 @@ enum Primitive {
 
 const TRI_ORDER: [usize; 3] = [0, 1, 2];
 const TRI_STRIP_ORDER_A: [usize; 3] = [0, 1, 2];
-const TRI_STRIP_ORDER_B: [usize; 3] = [2, 1, 0];
+const TRI_STRIP_ORDER_B: [usize; 3] = [1, 0, 2];
 
 const QUAD_ORDER: [usize; 4] = [0, 1, 2, 3];
-const QUAD_STRIP_ORDER_A: [usize; 4] = [0, 1, 3, 2];
-const QUAD_STRIP_ORDER_B: [usize; 4] = [2, 3, 1, 0];
+const QUAD_STRIP_ORDER: [usize; 4] = [0, 1, 3, 2];
+//const QUAD_STRIP_ORDER_B: [usize; 4] = [2, 3, 1, 0];
 
 pub struct GeometryEngine {
     pub polygon_ram:    Box<PolygonRAM>,
@@ -47,8 +47,6 @@ pub struct GeometryEngine {
 
     /// Use W or Z value for depth-buffering.
     w_buffer:       bool,
-    /// Manually sort translucent polygons.
-    manual_sort:    bool,
     /// Test w against this value for 1-dot polygons.
     dot_polygon_w:  I13F3,
 
@@ -103,7 +101,6 @@ impl GeometryEngine {
             viewport_height:    0,
             
             w_buffer:       false,
-            manual_sort:    false,
             dot_polygon_w:  I13F3::from_bits(0x7FFF),
 
             matrices:       Box::new(MatrixUnit::new()),
@@ -147,7 +144,6 @@ impl GeometryEngine {
     /// Actual swapping of polygon/vertex buffers happens outside.
     pub fn swap_buffers(&mut self, data: u32) {
         self.w_buffer = u32::test_bit(data, 0);
-        self.manual_sort = u32::test_bit(data, 1);
     }
 
     pub fn set_vertex_colour(&mut self, data: u32) -> isize {
@@ -243,7 +239,7 @@ impl GeometryEngine {
             },
             0b11 => {
                 self.stage_size = 4;
-                self.output_order = &QUAD_STRIP_ORDER_A;
+                self.output_order = &QUAD_STRIP_ORDER;
                 Primitive::QuadStripFirst(0)
             },
             _ => unreachable!()
@@ -429,7 +425,7 @@ impl GeometryEngine {
         let w = transformed_vertex.w();
         let w2_recip = N::ONE.checked_div(w * 2).unwrap_or(N::MAX);
         let x = (transformed_vertex.x() + w) * w2_recip;
-        let y = N::ONE - ((transformed_vertex.y() + w) * w2_recip);
+        let y = N::ONE - (transformed_vertex.y() + w) * w2_recip;
         let z = (transformed_vertex.z() + w) * w2_recip;
 
         let viewport_x = N::from_num(self.viewport_x) + (x * N::from_num(self.viewport_width));
@@ -490,11 +486,6 @@ impl GeometryEngine {
             
             QuadStripFirst(3) | QuadStrip(1) => {
                 self.try_emit();
-                if self.output_order == &QUAD_STRIP_ORDER_A {
-                    self.output_order = &QUAD_STRIP_ORDER_B;
-                } else {
-                    self.output_order = &QUAD_STRIP_ORDER_A;
-                }
                 self.primitive = Some(QuadStrip(0));
             },
             QuadStripFirst(n) => {
@@ -595,6 +586,8 @@ impl GeometryEngine {
         }
 
         let hide = all_outside_view || (
+            // If far plane clip is set to 0, and it touches the far plane,
+            // ignore this polygon.
             intersects_far_plane && !self.polygon_attrs.contains(PolygonAttrs::FAR_PLANE_CLIP)
         );
 
@@ -612,8 +605,8 @@ impl GeometryEngine {
             let screen_x = v0.screen_p.x.to_num::<i16>();
             let screen_y = v0.screen_p.y.to_num::<i16>();
             let mut dot_w = v0.position.w();
-            for n in 1..self.stage_size {
-                let v = &self.staged_polygon[n];
+            for stage_idx in 1..self.stage_size {
+                let v = &self.staged_polygon[stage_idx];
                 // TODO: test if within a dot?
                 if v.screen_p.x.to_num::<i16>() != screen_x ||
                     v.screen_p.y.to_num::<i16>() != screen_y {

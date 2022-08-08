@@ -176,7 +176,11 @@ pub struct Vertex {
 /// Contains polygon order, polygon metadata, and vertex data.
 pub struct PolygonRAM {
     pub opaque_polygons:    BTreeSet<PolygonOrder>,
-    pub trans_polygons:     BTreeSet<PolygonOrder>,
+
+    pub use_manual_mode:        bool,   // Insert transparent polys in order.
+    pub trans_polygon_auto:     BTreeSet<PolygonOrder>,
+    pub trans_polygon_manual:   Vec<PolygonOrder>,
+
     pub polygons:           Vec<Polygon>,
     pub vertices:           Vec<Vertex>
 }
@@ -184,17 +188,23 @@ pub struct PolygonRAM {
 impl PolygonRAM {
     pub fn new() -> Self {
         Self {
-            opaque_polygons: BTreeSet::new(),
-            trans_polygons: BTreeSet::new(),
-            polygons: Vec::new(),
-            vertices: Vec::new()
+            opaque_polygons:        BTreeSet::new(),
+            use_manual_mode:        false,
+            trans_polygon_auto:     BTreeSet::new(),
+            trans_polygon_manual:   Vec::new(),
+            polygons:   Vec::new(),
+            vertices:   Vec::new()
         }
     }
 
     /// Clear the polygon and vertex RAM for the next geometry engine write cycle.
-    pub fn clear(&mut self) {
+    /// 
+    /// Also set if polygons should be inserted in manual or automatic order.
+    pub fn clear(&mut self, use_manual_mode: bool) {
         self.opaque_polygons.clear();
-        self.trans_polygons.clear();
+        self.use_manual_mode = use_manual_mode;
+        self.trans_polygon_auto.clear();
+        self.trans_polygon_manual.clear();
         self.polygons.clear();
         self.vertices.clear();
     }
@@ -218,8 +228,10 @@ impl PolygonRAM {
 
         if polygon.is_opaque() {
             self.opaque_polygons.insert(polygon_order);
+        } else if self.use_manual_mode {
+            self.trans_polygon_manual.push(polygon_order);
         } else {
-            self.trans_polygons.insert(polygon_order);
+            self.trans_polygon_auto.insert(polygon_order);
         }
         
         self.polygons.push(polygon);
