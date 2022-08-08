@@ -98,6 +98,8 @@ impl Matrix {
     /// Current = C, new current = C', other = M
     /// 
     /// C' = MC
+    /// 
+    /// The rows of other are multiplied by the columns of self.
     pub fn mul_4x4(&mut self, other: &[N]) {
         let m00 = other[0] * self.elements[0] + other[1] * self.elements[4] + other[2] * self.elements[8] + other[3] * self.elements[12];
         let m10 = other[0] * self.elements[1] + other[1] * self.elements[5] + other[2] * self.elements[9] + other[3] * self.elements[13];
@@ -281,9 +283,9 @@ impl Matrix {
     /// Used for normal & lighting calculations.
     pub fn mul_vector_3(&self, vector: &Vector<3>) -> Vector<3> {
         Vector::new([
-            vector.elements[0] * self.elements[0] + vector.elements[1] * self.elements[1] + vector.elements[2] * self.elements[2],
-            vector.elements[0] * self.elements[4] + vector.elements[1] * self.elements[5] + vector.elements[2] * self.elements[6],
-            vector.elements[0] * self.elements[8] + vector.elements[1] * self.elements[9] + vector.elements[2] * self.elements[10],
+            vector.elements[0] * self.elements[0] + vector.elements[1] * self.elements[4] + vector.elements[2] * self.elements[8],
+            vector.elements[0] * self.elements[1] + vector.elements[1] * self.elements[5] + vector.elements[2] * self.elements[9],
+            vector.elements[0] * self.elements[2] + vector.elements[1] * self.elements[6] + vector.elements[2] * self.elements[10],
         ])
     }
     
@@ -293,10 +295,10 @@ impl Matrix {
     pub fn mul_vector_4(&self, vector: &Vector<4>) -> Vector<4> {
         // TODO: input could implicitly use W=1?
         Vector::new([
-            vector.elements[0] * self.elements[0] + vector.elements[1] * self.elements[1] + vector.elements[2] * self.elements[2] + vector.elements[3] * self.elements[3],
-            vector.elements[0] * self.elements[4] + vector.elements[1] * self.elements[5] + vector.elements[2] * self.elements[6] + vector.elements[3] * self.elements[7],
-            vector.elements[0] * self.elements[8] + vector.elements[1] * self.elements[9] + vector.elements[2] * self.elements[10] + vector.elements[3] * self.elements[11],
-            vector.elements[0] * self.elements[12] + vector.elements[1] * self.elements[13] + vector.elements[2] * self.elements[14] + vector.elements[3] * self.elements[15],
+            vector.elements[0] * self.elements[0] + vector.elements[1] * self.elements[4] + vector.elements[2] * self.elements[8] + vector.elements[3] * self.elements[12],
+            vector.elements[0] * self.elements[1] + vector.elements[1] * self.elements[5] + vector.elements[2] * self.elements[9] + vector.elements[3] * self.elements[13],
+            vector.elements[0] * self.elements[2] + vector.elements[1] * self.elements[6] + vector.elements[2] * self.elements[10] + vector.elements[3] * self.elements[14],
+            vector.elements[0] * self.elements[3] + vector.elements[1] * self.elements[7] + vector.elements[2] * self.elements[11] + vector.elements[3] * self.elements[15],
         ])
     }
 }
