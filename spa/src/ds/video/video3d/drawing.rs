@@ -101,7 +101,7 @@ impl Software3DRenderer {
     }
     
     fn draw_opaque_polygons(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], line: u8) {
-        let y = N::from_num(line) + N::from_num(0.5);
+        let y = N::from_num(line) + N::from_num(0.5_f32);
 
         for p in render_engine.polygon_ram.opaque_polygons.iter()
             //.skip_while(|el| el.y_max < line || el.y_min > line)
@@ -112,30 +112,39 @@ impl Software3DRenderer {
             }
             let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
             
-            let [a, b] = Self::find_intersect_points(render_engine, polygon, y).unwrap();
-            
-            // TODO: find step for trinity (depth, vtx col, tex coords)
+            let [vtx_a, vtx_b] = Self::find_intersect_points(render_engine, polygon, y).unwrap();
 
-            for x_idx in a.screen_p.x.to_num::<i16>()..=b.screen_p.x.to_num::<i16>() {
-                let x = N::from_num(x_idx) + N::from_num(0.5);
-                // TODO: inc trinity by step
+            let x_diff = N::ONE.checked_div(vtx_b.screen_p.x - vtx_a.screen_p.x).unwrap_or(N::ZERO);
 
-                // TODO: interpolate
+            for x_idx in vtx_a.screen_p.x.to_num::<i16>()..=vtx_b.screen_p.x.to_num::<i16>() {
+                let x = N::from_num(x_idx) + N::from_num(0.5_f32);
+                let factor_b = (x - vtx_a.screen_p.x) * x_diff;
+                let factor_a = N::ONE - factor_b;
+
+                let depth = (vtx_a.depth * factor_a.to_fixed::<I23F9>()) + (vtx_b.depth * factor_b.to_fixed::<I23F9>());
+
                 // Evaluate depth
-                if self.depth_buffer[x_idx as usize] <= a.depth { // TODO: remove fractional part?
+                if self.depth_buffer[x_idx as usize] <= depth { // TODO: remove fractional part?
                     // Point is behind buffer value.
-                    if !polygon.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH) || self.depth_buffer[x_idx as usize] < a.depth {
+                    if !polygon.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH) || self.depth_buffer[x_idx as usize] < depth {
                         continue;
                     }
                 }
 
                 // We are sure that we want to render this fragment.
-                self.depth_buffer[x_idx as usize] = a.depth;
+                self.depth_buffer[x_idx as usize] = depth;
                 self.attr_buffer[x_idx as usize].opaque_id = polygon.attrs.id();
                 self.attr_buffer[x_idx as usize].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
 
-                // TODO: interpolate
-                let frag_colour = a.colour;
+                // Interpolate vertex colour
+                let r = (N::from_num(vtx_a.colour.r) * factor_a) + (N::from_num(vtx_b.colour.r) * factor_b);
+                let g = (N::from_num(vtx_a.colour.g) * factor_a) + (N::from_num(vtx_b.colour.g) * factor_b);
+                let b = (N::from_num(vtx_a.colour.b) * factor_a) + (N::from_num(vtx_b.colour.b) * factor_b);
+                let frag_colour = Colour {
+                    r: r.to_num::<u8>(),
+                    g: g.to_num::<u8>(),
+                    b: b.to_num::<u8>()
+                };
                 
                 let tex_format = polygon.tex.format();
                 let tex_colour = if tex_format == 0 {
@@ -145,8 +154,9 @@ impl Software3DRenderer {
                         alpha: 0x1F
                     }
                 } else {
-                    // TODO: interpolate
-                    let tex_coords = a.tex_coords;
+                    let tex_s = (vtx_a.tex_coords.x * factor_a) + (vtx_b.tex_coords.x * factor_b);
+                    let tex_t = (vtx_a.tex_coords.y * factor_a) + (vtx_b.tex_coords.y * factor_b);
+                    //let tex_coords = a.tex_coords;
                     // TODO: Lookup tex colour + alpha
                     let tex_colour = Colour { r: 0xFF, g: 0xFF, b: 0xFF };
                     let tex_alpha = 0x1F;
@@ -188,12 +198,19 @@ impl Software3DRenderer {
             let intersect_x = factor_a * (vtx_a.screen_p.x - vtx_b.screen_p.x) + vtx_b.screen_p.x;
             let factor_b = N::ONE - factor_a;
 
-            // Interpolate
+            // Interpolate attributes
+            let depth = (vtx_a.depth * factor_a.to_fixed::<I23F9>()) + (vtx_b.depth * factor_b.to_fixed::<I23F9>());
+            let r = (N::from_num(vtx_a.colour.r) * factor_a) + (N::from_num(vtx_b.colour.r) * factor_b);
+            let g = (N::from_num(vtx_a.colour.g) * factor_a) + (N::from_num(vtx_b.colour.g) * factor_b);
+            let b = (N::from_num(vtx_a.colour.b) * factor_a) + (N::from_num(vtx_b.colour.b) * factor_b);
+            let tex_s = (vtx_a.tex_coords.x * factor_a) + (vtx_b.tex_coords.x * factor_b);
+            let tex_t = (vtx_a.tex_coords.y * factor_a) + (vtx_b.tex_coords.y * factor_b);
+
             let vertex = Vertex {
                 screen_p:   Coords { x: intersect_x, y: y },
-                depth:      (vtx_a.depth * factor_a.to_fixed::<I23F9>()) + (vtx_b.depth * factor_b.to_fixed::<I23F9>()),
-                colour:     vtx_a.colour,    // TODO
-                tex_coords: Coords { x: N::ZERO, y: N::ZERO }   // TODO
+                depth:      depth,
+                colour:     Colour { r: r.to_num::<u8>(), g: g.to_num::<u8>(), b: b.to_num::<u8>() },
+                tex_coords: Coords { x: tex_s, y: tex_t }
             };
 
             if lines[0].is_none() {

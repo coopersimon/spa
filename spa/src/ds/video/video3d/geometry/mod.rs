@@ -27,9 +27,15 @@ enum Primitive {
     QuadStripFirst(usize),
     /// The vertex after emitting a subsequent quad strip polygon.
     QuadStrip(usize),
-    // The vertex before emitting a subsequent quad strip polygon.
-    //QuadStripReady
 }
+
+const TRI_ORDER: [usize; 3] = [0, 1, 2];
+const TRI_STRIP_ORDER_A: [usize; 3] = [0, 1, 2];
+const TRI_STRIP_ORDER_B: [usize; 3] = [2, 1, 0];
+
+const QUAD_ORDER: [usize; 4] = [0, 1, 2, 3];
+const QUAD_STRIP_ORDER_A: [usize; 4] = [0, 1, 3, 2];
+const QUAD_STRIP_ORDER_B: [usize; 4] = [2, 3, 1, 0];
 
 pub struct GeometryEngine {
     pub polygon_ram:    Box<PolygonRAM>,
@@ -71,7 +77,7 @@ pub struct GeometryEngine {
     staged_polygon:     Vec<StagedVertex>,
     staged_index:       usize,
     stage_size:         usize,
-    stage_wind_ccw:     bool,
+    output_order:       &'static [usize],
     primitive:          Option<Primitive>,
 }
 
@@ -115,7 +121,7 @@ impl GeometryEngine {
             staged_polygon:     vec![StagedVertex::default(); 4],
             staged_index:       0,
             stage_size:         3,
-            stage_wind_ccw:     true,
+            output_order:       &TRI_ORDER,
             primitive:          None,
         }
     }
@@ -222,23 +228,26 @@ impl GeometryEngine {
         let primitive = match data & 0b11 {
             0b00 => {
                 self.stage_size = 3;
+                self.output_order = &TRI_ORDER;
                 Primitive::Triangle(0)
             },
             0b01 => {
                 self.stage_size = 4;
+                self.output_order = &QUAD_ORDER;
                 Primitive::Quad(0)
             },
             0b10 => {
                 self.stage_size = 3;
+                self.output_order = &TRI_STRIP_ORDER_A;
                 Primitive::TriangleStripFirst(0)
             },
             0b11 => {
                 self.stage_size = 4;
+                self.output_order = &QUAD_STRIP_ORDER_A;
                 Primitive::QuadStripFirst(0)
             },
             _ => unreachable!()
         };
-        self.stage_wind_ccw = true;
         self.primitive = Some(primitive);
         1
     }
@@ -420,10 +429,9 @@ impl GeometryEngine {
         let w = transformed_vertex.w();
         let w2_recip = N::ONE.checked_div(w * 2).unwrap_or(N::MAX);
         let x = (transformed_vertex.x() + w) * w2_recip;
-        let y = (transformed_vertex.y() + w) * w2_recip;
+        let y = N::ONE - ((transformed_vertex.y() + w) * w2_recip);
         let z = (transformed_vertex.z() + w) * w2_recip;
 
-        // TODO: not sure about these calcs.
         let viewport_x = N::from_num(self.viewport_x) + (x * N::from_num(self.viewport_width));
         let viewport_y = N::from_num(self.viewport_y) + (y * N::from_num(self.viewport_height));
 
@@ -458,14 +466,20 @@ impl GeometryEngine {
             Triangle(n) => {
                 self.primitive = Some(Triangle(n+1));
             },
+
             TriangleStripFirst(2) | TriangleStrip => {
                 self.try_emit();
-                self.stage_wind_ccw = !self.stage_wind_ccw;
+                if self.output_order == &TRI_STRIP_ORDER_A {
+                    self.output_order = &TRI_STRIP_ORDER_B;
+                } else {
+                    self.output_order = &TRI_STRIP_ORDER_A;
+                }
                 self.primitive = Some(TriangleStrip);
             },
             TriangleStripFirst(n) => {
                 self.primitive = Some(TriangleStripFirst(n+1));
             },
+
             Quad(3) => {
                 self.try_emit();
                 self.primitive = Some(Quad(0));
@@ -473,18 +487,18 @@ impl GeometryEngine {
             Quad(n) => {
                 self.primitive = Some(Quad(n+1));
             },
-            QuadStripFirst(3) => {
+            
+            QuadStripFirst(3) | QuadStrip(1) => {
                 self.try_emit();
-                self.stage_wind_ccw = !self.stage_wind_ccw;
+                if self.output_order == &QUAD_STRIP_ORDER_A {
+                    self.output_order = &QUAD_STRIP_ORDER_B;
+                } else {
+                    self.output_order = &QUAD_STRIP_ORDER_A;
+                }
                 self.primitive = Some(QuadStrip(0));
             },
             QuadStripFirst(n) => {
                 self.primitive = Some(QuadStripFirst(n+1));
-            },
-            QuadStrip(1) => {
-                self.try_emit();
-                self.stage_wind_ccw = !self.stage_wind_ccw;
-                self.primitive = Some(QuadStrip(0));
             },
             QuadStrip(n) => {
                 self.primitive = Some(QuadStrip(n+1));
@@ -521,12 +535,12 @@ impl GeometryEngine {
     /// Returns true if the polygon should be shown.
     fn test_winding(&self) -> bool {
         let size = (0..self.stage_size).fold(N::ZERO, |acc, n| {
-            let stage_index_0 = (self.staged_index + n) % self.stage_size;
-            let stage_index_1 = if self.stage_wind_ccw {
-                (stage_index_0 + 1) % self.stage_size
-            } else {
-                (stage_index_0 - 1) % self.stage_size
-            };
+            let current_index = self.output_order[n];
+            let next_index = self.output_order[(n + 1) % self.stage_size];
+
+            let stage_index_0 = (self.staged_index + current_index) % self.stage_size;
+            let stage_index_1 = (self.staged_index + next_index) % self.stage_size;
+
             let v0 = &self.staged_polygon[stage_index_0];
             let v1 = &self.staged_polygon[stage_index_1];
             let segment_size = (v1.screen_p.x - v0.screen_p.x) * (v1.screen_p.y + v0.screen_p.y);
@@ -594,13 +608,12 @@ impl GeometryEngine {
     fn test_one_dot_display(&self) -> bool {
         // Only do this test if the polygon attr is set to 0.
         if !self.polygon_attrs.contains(PolygonAttrs::RENDER_DOT) {
-            let v0 = &self.staged_polygon[self.staged_index];
+            let v0 = &self.staged_polygon[0];
             let screen_x = v0.screen_p.x.to_num::<i16>();
             let screen_y = v0.screen_p.y.to_num::<i16>();
             let mut dot_w = v0.position.w();
             for n in 1..self.stage_size {
-                let stage_index = (self.staged_index + n) % self.stage_size;
-                let v = &self.staged_polygon[stage_index];
+                let v = &self.staged_polygon[n];
                 // TODO: test if within a dot?
                 if v.screen_p.x.to_num::<i16>() != screen_x ||
                     v.screen_p.y.to_num::<i16>() != screen_y {
@@ -655,18 +668,21 @@ impl GeometryEngine {
         };
         
         for n in 0..self.stage_size {
-            let stage_index = (self.staged_index + n) % self.stage_size;
+            let current_index = self.output_order[n];
+            let stage_index = (self.staged_index + current_index) % self.stage_size;
             
             if self.staged_polygon[stage_index].needs_clip.unwrap() {
                 let vertex = &self.staged_polygon[stage_index];
 
-                let stage_index_1 = (stage_index + 1) % self.stage_size;
+                let next_index = self.output_order[(n + 1) % self.stage_size];
+                let stage_index_1 = (self.staged_index + next_index) % self.stage_size;
                 let v1 = &self.staged_polygon[stage_index_1];
                 if !v1.needs_clip.unwrap() {
                     // TODO: interpolate
                 }
 
-                let stage_index_2 = (self.stage_size + stage_index - 1) % self.stage_size;
+                let next_index = self.output_order[(self.stage_size + n - 1) % self.stage_size];
+                let stage_index_2 = (self.staged_index + next_index) % self.stage_size;
                 let v2 = &self.staged_polygon[stage_index_2];
                 if !v2.needs_clip.unwrap() {
                     // TODO: interpolate
