@@ -230,7 +230,8 @@ impl Video3D {
             &mut self.geometry_engine.polygon_ram,
             &mut self.rendering_engine.lock().polygon_ram
         );
-        self.geometry_engine.polygon_ram.clear();
+        let manual_sort = u32::test_bit(data, 1);
+        self.geometry_engine.polygon_ram.clear(manual_sort);
         self.geometry_engine.swap_buffers(data);
         392
     }

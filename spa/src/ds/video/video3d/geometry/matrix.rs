@@ -114,7 +114,7 @@ impl MatrixUnit {
     pub fn store_matrix(&mut self, pos: u32) -> isize {
         match self.mode {
             PROJ_MODE => {
-                println!("store proj {}", pos);
+                //println!("store proj {}", pos);
                 self.projection_stack = self.current_projection.clone()
             },
             POS_MODE | POS_DIR_MODE => {
@@ -130,7 +130,7 @@ impl MatrixUnit {
     pub fn restore_matrix(&mut self, pos: u32) -> isize {
         match self.mode {
             PROJ_MODE => {
-                println!("restore proj {}", pos);
+                //println!("restore proj {}", pos);
                 self.current_projection = self.projection_stack.clone();
                 self.current_clip = self.current_position.mul(&self.current_projection);
             },
