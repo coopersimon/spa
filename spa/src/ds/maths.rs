@@ -147,7 +147,7 @@ impl MemInterface32 for Accelerators {
                 self.start_div();
             },
             0x0400_02B0 => {
-                self.sqrt_control.set(SqrtControl::MODE, u32::test_bit(data, 1));
+                self.sqrt_control.set(SqrtControl::MODE, u32::test_bit(data, 0));
                 self.start_sqrt();
             },
             0x0400_02B8 => {

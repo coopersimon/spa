@@ -6,7 +6,7 @@ pub use math::*;
 use matrix::*;
 use lighting::*;
 
-use fixed::{types::{I4F12, I12F4, I20F12, I23F9, I13F3}, traits::ToFixed};
+use fixed::{types::{I4F12, I20F12, I23F9, I13F3}, traits::ToFixed};
 use crate::{
     common::colour::Colour,
     utils::{
@@ -152,13 +152,13 @@ impl GeometryEngine {
     }
 
     pub fn set_normal(&mut self, data: u32) -> isize {
-        let x_bits = (data & 0x3FF) as i32;
-        let y_bits = ((data >> 10) & 0x3FF) as i32;
-        let z_bits = ((data >> 20) & 0x3FF) as i32;
+        let x_bits = (data & 0x3FF) as u16;
+        let y_bits = ((data >> 10) & 0x3FF) as u16;
+        let z_bits = ((data >> 20) & 0x3FF) as u16;
         let v = Vector::new([
-            N::from_bits(x_bits << 3),
-            N::from_bits(y_bits << 3),
-            N::from_bits(z_bits << 3),
+            N::from_bits(bits::u16::sign_extend(x_bits << 3, 3).into()),
+            N::from_bits(bits::u16::sign_extend(y_bits << 3, 3).into()),
+            N::from_bits(bits::u16::sign_extend(z_bits << 3, 3).into()),
         ]);
         let normal = self.matrices.dir_matrix().mul_vector_3(&v);
         // Calculate colour.
@@ -183,13 +183,13 @@ impl GeometryEngine {
     }
     
     pub fn set_light_direction(&mut self, data: u32) -> isize {
-        let x_bits = (data & 0x3FF) as i32;
-        let y_bits = ((data >> 10) & 0x3FF) as i32;
-        let z_bits = ((data >> 20) & 0x3FF) as i32;
+        let x_bits = (data & 0x3FF) as u16;
+        let y_bits = ((data >> 10) & 0x3FF) as u16;
+        let z_bits = ((data >> 20) & 0x3FF) as u16;
         let v = Vector::new([
-            N::from_bits(x_bits << 3),
-            N::from_bits(y_bits << 3),
-            N::from_bits(z_bits << 3),
+            N::from_bits(bits::u16::sign_extend(x_bits << 3, 3).into()),
+            N::from_bits(bits::u16::sign_extend(y_bits << 3, 3).into()),
+            N::from_bits(bits::u16::sign_extend(z_bits << 3, 3).into()),
         ]);
         let direction = self.matrices.dir_matrix().mul_vector_3(&v);
         let light = (data >> 30) as usize;
@@ -565,9 +565,9 @@ impl GeometryEngine {
                 let needs_clip = vertex.position.x() < I20F12::ZERO ||
                     vertex.position.x() >= I20F12::ONE ||
                     vertex.position.y() < I20F12::ZERO ||
-                    vertex.position.y() >= I20F12::ONE ||
+                    vertex.position.y() >= I20F12::ONE/* ||
                     vertex.position.z() < I20F12::ZERO ||
-                    vertex.position.z() >= I20F12::ONE;
+                    vertex.position.z() >= I20F12::ONE*/;
                 vertex.needs_clip = Some(needs_clip);
                 needs_clip
             };
@@ -650,7 +650,7 @@ impl GeometryEngine {
                     depth: if self.w_buffer {
                         vertex.position.w().to_fixed::<I23F9>()
                     } else {
-                        vertex.position.z().to_fixed::<I23F9>()
+                        vertex.position.z().to_fixed::<I23F9>() * 0x7FFF
                     },
                     colour:     vertex.colour,
                     tex_coords: vertex.tex_coords.clone()
