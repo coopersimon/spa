@@ -446,5 +446,29 @@ impl Engine3DVRAM {
             _ => None
         }
     }
+
+    pub fn get_tex_byte(&self, addr: u32) -> u8 {
+        if let Some((mask, tex_ram)) = self.lookup_tex(addr) {
+            tex_ram.read_byte(addr & mask)
+        } else {
+            0
+        }
+    }
+
+    pub fn get_tex_halfword(&self, addr: u32) -> u16 {
+        if let Some((mask, tex_ram)) = self.lookup_tex(addr) {
+            tex_ram.read_halfword(addr & mask)
+        } else {
+            0
+        }
+    }
+    
+    pub fn get_palette_halfword(&self, addr: u32) -> u16 {
+        if let Some((mask, palette_ram)) = self.lookup_tex_palette(addr) {
+            palette_ram.read_halfword(addr & mask)
+        } else {
+            0
+        }
+    }
 }
 
