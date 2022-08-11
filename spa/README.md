@@ -76,7 +76,7 @@ DS:
 - Final Fantasy IV: Sets up save ram, shows titles, plays intro video, main menu, 3D visuals
 - Hotel Dusk: Room 215: Shows right/left handed text while flickering.
 - Kirby Super Star: Initialises save data, then shows some screens with incorrect colour. Is it trying to blend stuff here?
-- Mario Kart DS: (FLASH) Titles + menu work ok, 3D visuals
+- Mario Kart DS: (FLASH) Titles + menu work ok, 3D visuals look decent now.
 - Mario and Luigi: Bowser's Inside Story: Blank screen (firmware/save issues)
 - Mario and Luigi: Partners in Time: Loads up mostly ok, menu title 3D is ok, intro has serious graphical issues
 - Mario Party DS: 2D stuff looks ok. 3D visuals.
@@ -85,9 +85,9 @@ DS:
 - Phantom Hourglass: Just white screen now.
 - Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. Gameplay starts up ok, with some graphical glitches on lower screen.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
-- Pokemon Diamond: (FLASH) 2d elements of game work ok, 3D in intro looks reasonable, 3D in title looks good
+- Pokemon Diamond: (FLASH) 2d elements of game work ok, 3D in intro looks reasonable, 3D in title has vanished? (since changing how w2 normalises vertex coords)
 - Pokemon Black: Black screen
-- Pokemon HeartGold: 2d elements of game work ok, 3D in intro looks reasonable, 3D in title looks good
+- Pokemon HeartGold: 2d elements of game work ok, 3D in intro looks reasonable, 3D in title has vanished? (since changing how w2 normalises vertex coords)
 - Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.
 - Super Mario 64 DS: Shows an initial nintendo logo, takes a long time to load before showing menus. 3D is a bit borked.
 - The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)
