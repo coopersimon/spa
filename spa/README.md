@@ -65,7 +65,7 @@ DS:
 
 ### DS Status of selected games:
 - Age of Empires: Age of Kings: Loads main menu, freezes
-- Animal Crossing Wild World: (FLASH): Loads up titles shows menu and gameplay (3d)
+- Animal Crossing Wild World: (FLASH): Loads up titles shows menu and gameplay. 3D visuals
 - Chrono Trigger: Sets up save RAM, then shows intro video. Game loads up and runs ok!
 - Dragon Quest IX: Shows intro cards and video. Magenta screen when game begins.
 - Dragon Quest IV: Black screen - getting stuck in halt loop
@@ -73,27 +73,36 @@ DS:
 - Dragon Quest VI: Black screen
 - Final Fantasy Tactics A2: Shows a screen after loading for a bit, then goes black.
 - Final Fantasy III: Sets up save ram, shows titles, now locks up.
-- Final Fantasy IV: Sets up save ram, shows titles, plays intro video, main menu, (3d) recognisable, looks interesting
+- Final Fantasy IV: Sets up save ram, shows titles, plays intro video, main menu, 3D visuals
 - Hotel Dusk: Room 215: Shows right/left handed text while flickering.
 - Kirby Super Star: Initialises save data, then shows some screens with incorrect colour. Is it trying to blend stuff here?
-- Mario Kart DS: (FLASH) Titles + menu work ok, silhouettes of karts look ok, gameplay is ok
+- Mario Kart DS: (FLASH) Titles + menu work ok, 3D visuals
 - Mario and Luigi: Bowser's Inside Story: Blank screen (firmware/save issues)
-- Mario and Luigi: Partners in Time: Loads up mostly ok with some glitches, menu title uses 3d textured polys, intro has serious graphical issues
-- Mario Party DS: 2D stuff looks ok. Gameplay 3D doesn't display apart from the odd mesh.
+- Mario and Luigi: Partners in Time: Loads up mostly ok, menu title 3D is ok, intro has serious graphical issues
+- Mario Party DS: 2D stuff looks ok. 3D visuals.
 - Metroid Prime Hunters: Initial titles are broken. Shows intro video. Gets to menu then locks up.
-- New Super Mario Bros: Intro + menu is ok, 3d is ok
+- New Super Mario Bros: Intro + menu is ok, 3D visuals (very broken)
 - Phantom Hourglass: Just white screen now.
 - Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. Gameplay starts up ok, with some graphical glitches on lower screen.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
-- Pokemon Diamond: (FLASH) 2d elements of game work ok, 3d is ok.
+- Pokemon Diamond: (FLASH) 2d elements of game work ok, 3D in intro looks reasonable, 3D in title looks good
+- Pokemon Black: Black screen
+- Pokemon HeartGold: 2d elements of game work ok, 3D in intro looks reasonable, 3D in title looks good
 - Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.
-- Super Mario 64 DS: Shows an initial nintendo logo, takes a long time to load before showing menus. 3d is ok.
+- Super Mario 64 DS: Shows an initial nintendo logo, takes a long time to load before showing menus. 3D is a bit borked.
 - The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)
 - Yoshi's Island DS: Shows titles, intro, menu, pre-gameplay video, and gameplay correctly!
 
 #### NDS TODO
 - Audio
-- 3D Video
+- 3D Video:
+    - Correct clipping around screen edges
+    - Some depth issues
+    - Rasterising precision improvement
+    - Fix some broken colouring
+    - Lighting issues
+    - Toon + highlight shading
+    - Post-processing (fog + edge + anti-aliasing)
 - 2D main RAM video mode
 - Engine A video capture & blending fixes
 - Touchscreen precision
