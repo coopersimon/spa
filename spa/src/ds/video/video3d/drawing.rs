@@ -98,7 +98,7 @@ impl Software3DRenderer {
     }
     
     fn draw_opaque_polygons(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], line: u8) {
-        let y = N::from_num(line) + N::from_num(0.5_f32);
+        let y = N::from_num(line);
 
         for p in render_engine.polygon_ram.opaque_polygons.iter()
             //.skip_while(|el| el.y_max < line || el.y_min > line)
@@ -120,7 +120,7 @@ impl Software3DRenderer {
 
             // TODO: wireframe
             for x_idx in vtx_a.screen_p.x.to_num::<i16>()..=vtx_b.screen_p.x.to_num::<i16>() {
-                let x = N::from_num(x_idx) + N::from_num(0.5_f32);
+                let x = N::from_num(x_idx);
                 let factor_b = (x - vtx_a.screen_p.x) * x_diff;
                 let factor_a = N::ONE - factor_b;
 
@@ -157,7 +157,7 @@ impl Software3DRenderer {
     }
     
     fn draw_trans_polygons(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], line: u8) {
-        let y = N::from_num(line) + N::from_num(0.5_f32);
+        let y = N::from_num(line);
 
         if render_engine.polygon_ram.use_manual_mode {
             render_engine.polygon_ram.trans_polygon_manual.iter()
@@ -188,7 +188,7 @@ impl Software3DRenderer {
                 continue;
             }
 
-            let x = N::from_num(x_idx) + N::from_num(0.5_f32);
+            let x = N::from_num(x_idx);
             let factor_b = (x - vtx_a.screen_p.x) * x_diff;
             let factor_a = N::ONE - factor_b;
 
@@ -516,8 +516,8 @@ impl Software3DRenderer {
         let (s, t) = Self::get_tex_coords(tex_coords, tex_attrs);
         let block_s = s / 4;
         let block_t = t / 4;
-        let block_width = tex_attrs.width() * 4;
-        let block_addr = (block_t * block_width) + (block_s * 4);
+        let block_width = tex_attrs.width();
+        let block_addr = tex_attrs.addr() + (block_t * block_width) + (block_s * 4);
         
         let sub_block_s = s % 4;
         let sub_block_t = t % 4;
@@ -530,7 +530,8 @@ impl Software3DRenderer {
         let block_palette_data = vram.get_tex_halfword(block_palette_addr);
 
         let base_palette_addr = (palette as u32) << 4;
-        let palette_addr = base_palette_addr + ((block_palette_addr & 0x3FFF) << 2);
+        let block_palette_offset = ((block_palette_data & 0x3FFF) as u32) << 2;
+        let palette_addr = base_palette_addr + block_palette_offset;
         
         let transparent_3 = !u16::test_bit(block_palette_data, 15);
         if u16::test_bit(block_palette_data, 14) {

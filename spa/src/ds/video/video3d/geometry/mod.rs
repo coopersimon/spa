@@ -162,9 +162,9 @@ impl GeometryEngine {
         let y_bits = ((data >> 10) & 0x3FF) as u16;
         let z_bits = ((data >> 20) & 0x3FF) as u16;
         let v = Vector::new([
-            N::from_bits(bits::u16::sign_extend(x_bits << 3, 3).into()),
-            N::from_bits(bits::u16::sign_extend(y_bits << 3, 3).into()),
-            N::from_bits(bits::u16::sign_extend(z_bits << 3, 3).into()),
+            N::from_bits(bits::u16::sign_extend(x_bits << 3, 13).into()),
+            N::from_bits(bits::u16::sign_extend(y_bits << 3, 13).into()),
+            N::from_bits(bits::u16::sign_extend(z_bits << 3, 13).into()),
         ]);
         let normal = self.matrices.dir_matrix().mul_vector_3(&v);
         let tex_cycles = if self.texture_attrs.transform_mode() == 2 {
@@ -204,9 +204,9 @@ impl GeometryEngine {
         let y_bits = ((data >> 10) & 0x3FF) as u16;
         let z_bits = ((data >> 20) & 0x3FF) as u16;
         let v = Vector::new([
-            N::from_bits(bits::u16::sign_extend(x_bits << 3, 3).into()),
-            N::from_bits(bits::u16::sign_extend(y_bits << 3, 3).into()),
-            N::from_bits(bits::u16::sign_extend(z_bits << 3, 3).into()),
+            N::from_bits(bits::u16::sign_extend(x_bits << 3, 13).into()),
+            N::from_bits(bits::u16::sign_extend(y_bits << 3, 13).into()),
+            N::from_bits(bits::u16::sign_extend(z_bits << 3, 13).into()),
         ]);
         let direction = self.matrices.dir_matrix().mul_vector_3(&v);
         let light = (data >> 30) as usize;
@@ -386,10 +386,10 @@ impl GeometryEngine {
     
             let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
             let w = transformed_vertex.w();
-            let w2_recip = N::ONE.checked_div(w * 2).unwrap_or(N::MAX);
-            let normal_x = (transformed_vertex.x() + w) * w2_recip;
-            let normal_y = (transformed_vertex.y() + w) * w2_recip;
-            let normal_z = (transformed_vertex.z() + w) * w2_recip;
+            let w2 = w * 2;
+            let normal_x = (transformed_vertex.x() + w) / w2;
+            let normal_y = (transformed_vertex.y() + w) / w2;
+            let normal_z = (transformed_vertex.z() + w) / w2;
 
             let outside_x = (normal_x >= N::ONE) || (normal_x < N::ZERO);
             let outside_y = (normal_y >= N::ONE) || (normal_y < N::ZERO);
@@ -424,13 +424,13 @@ impl GeometryEngine {
     }
 
     pub fn direction_test(&mut self, data: u32) -> isize {
-        let x_bits = (data & 0x3FF) as i32;
-        let y_bits = ((data >> 10) & 0x3FF) as i32;
-        let z_bits = ((data >> 20) & 0x3FF) as i32;
+        let x_bits = (data & 0x3FF) as u16;
+        let y_bits = ((data >> 10) & 0x3FF) as u16;
+        let z_bits = ((data >> 20) & 0x3FF) as u16;
         let v = Vector::new([
-            N::from_bits(x_bits << 3),
-            N::from_bits(y_bits << 3),
-            N::from_bits(z_bits << 3),
+            N::from_bits(bits::u16::sign_extend(x_bits << 3, 13).into()),
+            N::from_bits(bits::u16::sign_extend(y_bits << 3, 13).into()),
+            N::from_bits(bits::u16::sign_extend(z_bits << 3, 13).into()),
         ]);
 
         let direction = self.matrices.dir_matrix().mul_vector_3(&v);
@@ -465,10 +465,10 @@ impl GeometryEngine {
         // Result is a I12F12.
         let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
         let w = transformed_vertex.w();
-        let w2_recip = N::ONE.checked_div(w * 2).unwrap_or(N::MAX);
-        let x = (transformed_vertex.x() + w) * w2_recip;
-        let y = N::ONE - (transformed_vertex.y() + w) * w2_recip;
-        let z = (transformed_vertex.z() + w) * w2_recip;
+        let w2 = w * 2;
+        let x = (transformed_vertex.x() + w).checked_div(w2).unwrap_or(N::MAX);
+        let y = N::ONE - (transformed_vertex.y() + w).checked_div(w2).unwrap_or(N::MAX);
+        let z = (transformed_vertex.z() + w).checked_div(w2).unwrap_or(N::MAX);
         
         self.staged_polygon[self.staged_index] = StagedVertex {
             position: Vector::new([
@@ -600,7 +600,10 @@ impl GeometryEngine {
     fn test_in_view(&mut self) -> bool {
         let mut all_outside_view = true;
         let mut intersects_far_plane = false;
-
+        
+        let X_MAX = N::ONE - N::from_bits(1);
+        let Y_MAX = N::ONE - N::from_bits(1);
+        
         for stage_idx in 0..self.stage_size {
             let vertex = &mut self.staged_polygon[stage_idx];
             let v_outside_view = if let Some(needs_clip) = vertex.needs_clip {
@@ -608,9 +611,9 @@ impl GeometryEngine {
             } else {
                 // Calc if in view.
                 let needs_clip = vertex.position.x() < I20F12::ZERO ||
-                    vertex.position.x() >= I20F12::ONE ||
+                    vertex.position.x() > X_MAX ||
                     vertex.position.y() < I20F12::ZERO ||
-                    vertex.position.y() >= I20F12::ONE/* ||
+                    vertex.position.y() > Y_MAX/* ||
                     vertex.position.z() < I20F12::ZERO ||
                     vertex.position.z() >= I20F12::ONE*/;
                 vertex.needs_clip = Some(needs_clip);
@@ -739,21 +742,21 @@ impl GeometryEngine {
     /// Clip point a, based on the line between a and b.
     fn clip_and_interpolate(&self, vtx_a: &StagedVertex, vtx_b: &StagedVertex, wbuffer: bool) -> Vertex {
         
-        // TODO: ?
-        let X_MAX = N::ONE - N::from_bits(1 << 4);
+        // TODO: const the below.
+        let X_MAX = N::ONE - N::from_bits(1);
+        let Y_MAX = N::ONE - N::from_bits(1);
+
         if vtx_a.position.x() < N::ZERO {
-            let factor_a = -vtx_a.position.x().checked_div(vtx_b.position.x() - vtx_a.position.x()).unwrap();
-            //let gradient = (v1.position.y() - v0.position.y()).checked_div(v1.position.x() - v0.position.x()).unwrap_or(N::MAX);
-            let y = (factor_a * (vtx_b.position.y() - vtx_a.position.y())) + vtx_a.position.y();
+            let factor_a = -vtx_b.position.x() / (vtx_a.position.x()- vtx_b.position.x());
+            let y = (factor_a * (vtx_a.position.y() - vtx_b.position.y())) + vtx_b.position.y();
             //println!("try clip ({}, {}) => ({}, {}) : ({}, {})", vtx_a.position.x(), vtx_a.position.y(), vtx_b.position.x(), vtx_b.position.y(), N::ZERO, y);
             if y >= N::ZERO && y < N::ONE {
                 let factor_b = N::ONE - factor_a;
                 return Self::interpolate(vtx_a, vtx_b, wbuffer, factor_a, factor_b, self.get_screen_coords(N::ZERO, y));
             }
-        } else if vtx_a.position.x() >= N::ONE {
-            let factor_a = (X_MAX - vtx_a.position.x()).checked_div(vtx_b.position.x() - vtx_a.position.x()).unwrap();
-            //let gradient = (v1.position.y() - v0.position.y()).checked_div(v1.position.x() - v0.position.x()).unwrap_or(N::MAX);
-            let y = (factor_a * (vtx_b.position.y() - vtx_a.position.y())) + vtx_a.position.y();
+        } else if vtx_a.position.x() > X_MAX {
+            let factor_a = (X_MAX - vtx_b.position.x()) / (vtx_a.position.x() - vtx_b.position.x());
+            let y = (factor_a * (vtx_a.position.y() - vtx_b.position.y())) + vtx_b.position.y();
             //println!("try clip ({}, {}) => ({}, {}) : ({}, {})", vtx_a.position.x(), vtx_a.position.y(), vtx_b.position.x(), vtx_b.position.y(), X_MAX, y);
             if y >= N::ZERO && y < N::ONE {
                 let factor_b = N::ONE - factor_a;
@@ -761,19 +764,17 @@ impl GeometryEngine {
             }
         }
         
-        let Y_MAX = N::ONE - N::from_bits(1 << 4);
         if vtx_a.position.y() < N::ZERO {
-            //let gradient = (v1.position.x() - v0.position.x()).checked_div(v1.position.y() - v0.position.y()).unwrap_or(N::MAX);
-            let factor_a = -vtx_a.position.y().checked_div(vtx_b.position.y() - vtx_a.position.y()).unwrap();
-            let x = (factor_a * (vtx_b.position.x() - vtx_a.position.x())) + vtx_a.position.x();
+            let factor_a = -vtx_b.position.y() / (vtx_a.position.y() - vtx_b.position.y());
+            let x = (factor_a * (vtx_a.position.x() - vtx_b.position.x())) + vtx_b.position.x();
             //println!("try clip ({}, {}) => ({}, {}) : ({}, {})", vtx_a.position.x(), vtx_a.position.y(), vtx_b.position.x(), vtx_b.position.y(), x, N::ZERO);
             if x >= N::ZERO && x < N::ONE {
                 let factor_b = N::ONE - factor_a;
                 return Self::interpolate(vtx_a, vtx_b, wbuffer, factor_a, factor_b, self.get_screen_coords(x, N::ZERO));
             }
-        } else if vtx_a.position.y() >= N::ONE {
-            let factor_a = (Y_MAX - vtx_a.position.y()).checked_div(vtx_b.position.y() - vtx_a.position.y()).unwrap();
-            let x = (factor_a * (vtx_b.position.x() - vtx_a.position.x())) + vtx_a.position.x();
+        } else if vtx_a.position.y() > Y_MAX {
+            let factor_a = (Y_MAX - vtx_b.position.y()) / (vtx_a.position.y() - vtx_b.position.y());
+            let x = (factor_a * (vtx_a.position.x() - vtx_b.position.x())) + vtx_b.position.x();
             //println!("try clip ({}, {}) => ({}, {}) : ({}, {})", vtx_a.position.x(), vtx_a.position.y(), vtx_b.position.x(), vtx_b.position.y(), x, Y_MAX);
             if x >= N::ZERO && x < N::ONE {
                 let factor_b = N::ONE - factor_a;
