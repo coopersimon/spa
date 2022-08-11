@@ -195,8 +195,8 @@ impl ProceduralRendererThread {
                             self.engine_a.draw(&engine_a_mem, &mut line_cache, line);
                         }
                     },
-                    DispCapSourceA::_3D => {
-                        // TODO
+                    DispCapSourceA::_3D => for (a, b) in line_cache.iter_mut().zip(&self.engine_a.line_3d) {
+                        *a = b.col;
                     }
                 },
                 DispCapMode::B(src_b) => match src_b {
@@ -215,8 +215,8 @@ impl ProceduralRendererThread {
                                 self.engine_a.draw(&engine_a_mem, &mut line_cache, line);
                             }
                         },
-                        DispCapSourceA::_3D => {
-                            // TODO
+                        DispCapSourceA::_3D => for (a, b) in line_cache.iter_mut().zip(&self.engine_a.line_3d) {
+                            *a = b.col;
                         }
                     }
                     match src_b {
@@ -235,9 +235,9 @@ impl ProceduralRendererThread {
             }
 
             // TODO: fix writing here.
-            //let mut lcdc = self.vram.lcdc_vram.lock();
-            //let write_offset = mem.registers.vram_capture_write_offset() + (line as usize) * write_size.0;
-            //self.write_to_vram(&mut lcdc, &mem.registers, &line_cache[0..write_size.0], write_offset);
+            let mut lcdc = self.vram.lcdc_vram.lock();
+            let write_offset = engine_a_mem.registers.vram_capture_write_offset() + (line as usize) * write_size.0;
+            self.write_to_vram(&mut lcdc, &engine_a_mem.registers, &line_cache[0..write_size.0], write_offset);
         }
 
         engine_a_mem.registers.inc_v_count();
