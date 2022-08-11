@@ -1,10 +1,10 @@
 use super::{
     render::RenderingEngine,
-    types::{Display3DControl, PolygonAttrs, Coords, Polygon, PolygonOrder}, geometry::N
+    types::{Display3DControl, PolygonAttrs, Coords, TexCoords, Polygon, PolygonOrder, TextureAttrs}, geometry::N
 };
-use fixed::{types::I12F4, types::I23F9, traits::ToFixed};
+use fixed::{types::I23F9, traits::ToFixed};
 use crate::{
-    ds::video::{memory::Engine3DVRAM, video3d::types::Vertex, render},
+    ds::video::{memory::Engine3DVRAM, video3d::types::Vertex},
     common::colour::*,
     utils::bits::u16, utils::bytes
 };
@@ -13,7 +13,6 @@ use crate::{
 struct Attributes {
     opaque_id:  u8,
     trans_id:   u8,
-    alpha:      u8,
     fog:        bool,
 }
 
@@ -78,7 +77,6 @@ impl Software3DRenderer {
                 let clear_attrs = Attributes {
                     opaque_id:  render_engine.clear_poly_id,
                     trans_id:   render_engine.clear_poly_id,
-                    alpha:      if u16::test_bit(colour, 15) {0x1F} else {0},
                     fog:        u16::test_bit(depth, 15),
                 };
 
@@ -91,7 +89,6 @@ impl Software3DRenderer {
             let clear_attrs = Attributes {
                 opaque_id:  render_engine.clear_poly_id,
                 trans_id:   render_engine.clear_poly_id,
-                alpha:      render_engine.clear_alpha,
                 fog:        render_engine.fog_enabled,
             };
             self.attr_buffer.fill(clear_attrs);
@@ -112,14 +109,17 @@ impl Software3DRenderer {
             }
             let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
             
-            let [vtx_a, vtx_b] = Self::find_intersect_points(render_engine, polygon, y).unwrap();
+            let b = Self::find_intersect_points(render_engine, polygon, y);
+            if b.is_none() {
+                // TODO: why _can_ this return none?
+                continue;
+            }
+            let [vtx_a, vtx_b] = b.unwrap();
 
             let x_diff = N::ONE.checked_div(vtx_b.screen_p.x - vtx_a.screen_p.x).unwrap_or(N::ZERO);
 
             // TODO: wireframe
             for x_idx in vtx_a.screen_p.x.to_num::<i16>()..=vtx_b.screen_p.x.to_num::<i16>() {
-                // TODO: lookup transparent texel and blend as trans pixel
-
                 let x = N::from_num(x_idx) + N::from_num(0.5_f32);
                 let factor_b = (x - vtx_a.screen_p.x) * x_diff;
                 let factor_a = N::ONE - factor_b;
@@ -145,25 +145,13 @@ impl Software3DRenderer {
                     alpha: 0x1F
                 };
 
-                let tex_format = polygon.tex.format();
-                let tex_colour = if tex_format == 0 {
-                    // No texture.
-                    ColourAlpha {
-                        col: Colour { r: 0xFF, g: 0xFF, b: 0xFF },
-                        alpha: 0x1F
-                    }
-                } else {
-                    let tex_coords = Self::interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
-                    // TODO: Lookup tex colour + alpha
-                    let tex_colour = Colour { r: 0xFF, g: 0xFF, b: 0xFF };
-                    let tex_alpha = 0x1F;
-                    ColourAlpha {
-                        col: tex_colour,
-                        alpha: tex_alpha
-                    }
-                };
+                let tex_coords = Self::interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
+                let tex_colour = Self::lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
 
-                target[x_idx as usize] = Self::blend_fragment_colour(render_engine, polygon, vtx_colour, tex_colour);
+                let frag_colour = Self::blend_fragment_colour(render_engine, polygon, vtx_colour, tex_colour);
+                if frag_colour.alpha > 0 {
+                    target[x_idx as usize] = frag_colour;
+                }
             }
         }
     }
@@ -237,23 +225,8 @@ impl Software3DRenderer {
                 alpha: polygon.attrs.alpha()
             };
             
-            let tex_format = polygon.tex.format();
-            let tex_colour = if tex_format == 0 {
-                // No texture.
-                ColourAlpha {
-                    col: Colour { r: 0xFF, g: 0xFF, b: 0xFF },
-                    alpha: 0x1F
-                }
-            } else {
-                let tex_coords = Self::interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
-                // TODO: Lookup tex colour + alpha
-                let tex_colour = Colour { r: 0xFF, g: 0xFF, b: 0xFF };
-                let tex_alpha = 0x1F;
-                ColourAlpha {
-                    col: tex_colour,
-                    alpha: tex_alpha
-                }
-            };
+            let tex_coords = Self::interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
+            let tex_colour = Self::lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
 
             let frag_colour = Self::blend_fragment_colour(render_engine, polygon, vtx_colour, tex_colour);
             if render_engine.control.contains(Display3DControl::ALPHA_TEST_ENABLE) {
@@ -354,10 +327,177 @@ impl Software3DRenderer {
     }
     
     #[inline]
-    fn interpolate_tex_coords(tex_coords_a: Coords, tex_coords_b: Coords, factor_a: N, factor_b: N) -> Coords {
-        let tex_s = (tex_coords_a.x * factor_a) + (tex_coords_b.x * factor_b);
-        let tex_t = (tex_coords_a.y * factor_a) + (tex_coords_b.y * factor_b);
-        Coords { x: tex_s, y: tex_t }
+    fn interpolate_tex_coords(tex_coords_a: TexCoords, tex_coords_b: TexCoords, factor_a: N, factor_b: N) -> TexCoords {
+        let s = (tex_coords_a.s.to_fixed::<N>() * factor_a) + (tex_coords_b.s.to_fixed::<N>() * factor_b);
+        let t = (tex_coords_a.t.to_fixed::<N>() * factor_a) + (tex_coords_b.t.to_fixed::<N>() * factor_b);
+        TexCoords { s: s.to_fixed(), t: t.to_fixed() }
+    }
+
+    /// Lookup texture colour.
+    fn lookup_tex_colour(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
+        match tex_attrs.format() {
+            1 => ColourAlpha {
+                col: Colour { r: 0xFF, g: 0xFF, b: 0xFF },
+                alpha: 0x1F
+            },  // TODO
+            2 => Self::lookup_2bpp_tex(tex_coords, tex_attrs, palette, vram),
+            3 => Self::lookup_4bpp_tex(tex_coords, tex_attrs, palette, vram),
+            4 => Self::lookup_8bpp_tex(tex_coords, tex_attrs, palette, vram),
+            5 => ColourAlpha {
+                col: Colour { r: 0xFF, g: 0xFF, b: 0xFF },
+                alpha: 0x1F
+            },  // TODO
+            6 => ColourAlpha {
+                col: Colour { r: 0xFF, g: 0xFF, b: 0xFF },
+                alpha: 0x1F
+            },  // TODO
+            7 => Self::lookup_dir_tex(tex_coords, tex_attrs, vram),
+            _ => ColourAlpha {  // No texture
+                col: Colour { r: 0xFF, g: 0xFF, b: 0xFF },
+                alpha: 0
+            },
+        }
+    }
+
+    /// Extract texture coordinates.
+    fn get_tex_coords(tex_coords: TexCoords, tex_attrs: TextureAttrs) -> (u32, u32) {
+        let width = tex_attrs.width();
+        let height = tex_attrs.height();
+        let base_tex_s = tex_coords.s.to_num::<i32>();
+        let base_tex_t = tex_coords.t.to_num::<i32>();
+        let unsigned_tex_s = base_tex_s as u32;
+        let unsigned_tex_t = base_tex_t as u32;
+
+        let tex_s = if tex_attrs.contains(TextureAttrs::REPEAT_S) {
+            let mask = width - 1;
+            if tex_attrs.contains(TextureAttrs::FLIP_S) {
+                if (unsigned_tex_s & width) == 0 {  // Don't flip
+                unsigned_tex_s & mask
+                } else {    // flip
+                    let s = unsigned_tex_s & mask;
+                    mask - s
+                }
+            } else {
+                unsigned_tex_s & mask
+            }
+        } else {
+            if base_tex_s >= (width as i32) {
+                width - 1
+            } else if base_tex_s < 0 {
+                0
+            } else {
+                unsigned_tex_s
+            }
+        };
+        
+        let tex_t = if tex_attrs.contains(TextureAttrs::REPEAT_T) {
+            let mask = height - 1;
+            if tex_attrs.contains(TextureAttrs::FLIP_T) {
+                if (unsigned_tex_t & height) == 0 {  // Don't flip
+                unsigned_tex_t & mask
+                } else {    // flip
+                    let t = unsigned_tex_t & mask;
+                    mask - t
+                }
+            } else {
+                unsigned_tex_t & mask
+            }
+        } else {
+            if base_tex_t >= (height as i32) {
+                height - 1
+            } else if base_tex_t < 0 {
+                0
+            } else {
+                unsigned_tex_t
+            }
+        };
+
+        (tex_s, tex_t)
+    }
+
+    /// Lookup 2bpp texel colour.
+    fn lookup_2bpp_tex(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
+        let (s, t) = Self::get_tex_coords(tex_coords, tex_attrs);
+        let width = tex_attrs.width();
+        let pos = (width * t) + s;
+        let offset = pos / 4;
+        let shift = (pos % 4) << 1;
+        let addr = tex_attrs.addr();
+
+        let (mask, tex_ram) = vram.lookup_tex(addr).unwrap();
+        let data = (tex_ram.read_byte((addr + offset) & mask) >> shift) & 0b11;
+
+        if (data == 0) && tex_attrs.contains(TextureAttrs::TRANSPARENT_0) {
+            ColourAlpha {col: Colour::black(), alpha: 0}
+        } else {
+            let palette_offset = (data as u32) << 1;
+            let palette_addr = (palette as u32) << 3;   // TODO: should this be 2?
+            let (mask, palette_ram) = vram.lookup_tex_palette(palette_addr).unwrap();
+            let colour = palette_ram.read_halfword((palette_addr + palette_offset) & mask);
+            ColourAlpha {col: Colour::from_555(colour), alpha: 0x1F}
+        }
+    }
+    
+    /// Lookup 4bpp texel colour.
+    fn lookup_4bpp_tex(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
+        let (s, t) = Self::get_tex_coords(tex_coords, tex_attrs);
+        let width = tex_attrs.width();
+        let pos = (width * t) + s;
+        let offset = pos / 2;
+        let shift = (pos % 2) << 2;
+        let addr = tex_attrs.addr();
+
+        let (mask, tex_ram) = vram.lookup_tex(addr).unwrap();
+        let data = (tex_ram.read_byte((addr + offset) & mask) >> shift) & 0xF;
+
+        if (data == 0) && tex_attrs.contains(TextureAttrs::TRANSPARENT_0) {
+            ColourAlpha {col: Colour::black(), alpha: 0}
+        } else {
+            let palette_offset = (data as u32) << 1;
+            let palette_addr = (palette as u32) << 4;
+            let (mask, palette_ram) = vram.lookup_tex_palette(palette_addr).unwrap();
+            let colour = palette_ram.read_halfword((palette_addr + palette_offset) & mask);
+            ColourAlpha {col: Colour::from_555(colour), alpha: 0x1F}
+        }
+    }
+    
+    /// Lookup 8bpp texel colour.
+    fn lookup_8bpp_tex(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
+        let (s, t) = Self::get_tex_coords(tex_coords, tex_attrs);
+        let width = tex_attrs.width();
+        let pos = (width * t) + s;
+        let offset = pos;
+        let addr = tex_attrs.addr();
+
+        let (mask, tex_ram) = vram.lookup_tex(addr).unwrap();
+        let data = tex_ram.read_byte((addr + offset) & mask);
+
+        if (data == 0) && tex_attrs.contains(TextureAttrs::TRANSPARENT_0) {
+            ColourAlpha {col: Colour::black(), alpha: 0}
+        } else {
+            let palette_offset = (data as u32) << 1;
+            let palette_addr = (palette as u32) << 4;
+            let (mask, palette_ram) = vram.lookup_tex_palette(palette_addr).unwrap();
+            let colour = palette_ram.read_halfword((palette_addr + palette_offset) & mask);
+            ColourAlpha {col: Colour::from_555(colour), alpha: 0x1F}
+        }
+    }
+    
+    /// Lookup direct texel colour.
+    fn lookup_dir_tex(tex_coords: TexCoords, tex_attrs: TextureAttrs, vram: &Engine3DVRAM) -> ColourAlpha {
+        let (s, t) = Self::get_tex_coords(tex_coords, tex_attrs);
+        let width = tex_attrs.width();
+        let pos = (width * t) + s;
+        let offset = pos * 2;
+        let addr = tex_attrs.addr();
+
+        let (mask, tex_ram) = vram.lookup_tex(addr).unwrap();
+        let data = tex_ram.read_halfword((addr + offset) & mask);
+        ColourAlpha {col: Colour::from_555(data), alpha: 0x1F}  // TODO: test top bit
+    }
+
+    fn lookup_a3i5_tex(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
+        ColourAlpha {col: Colour::black(), alpha: 0}
     }
 
     /// Use the polygon's specified blending mode to blend the fragment's colour.
@@ -367,7 +507,7 @@ impl Software3DRenderer {
                 let r = ((vtx_colour.col.r as u16) + 1) * ((tex_colour.col.r as u16) + 1) - 1;
                 let g = ((vtx_colour.col.g as u16) + 1) * ((tex_colour.col.g as u16) + 1) - 1;
                 let b = ((vtx_colour.col.b as u16) + 1) * ((tex_colour.col.b as u16) + 1) - 1;
-                let a = (tex_colour.alpha as u16) * (vtx_colour.alpha as u16);
+                let a = (vtx_colour.alpha as u16) * (tex_colour.alpha as u16);
 
                 ColourAlpha {
                     col: Colour {

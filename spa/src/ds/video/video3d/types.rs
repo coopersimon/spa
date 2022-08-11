@@ -79,12 +79,28 @@ bitflags! {
 }
 
 impl TextureAttrs {
-    pub fn addr(self) -> u32 {
-        (self & TextureAttrs::ADDR).bits() as u32
+    pub fn transform_mode(self) -> u8 {
+        ((self & TextureAttrs::TEX_COORD_TRANS).bits() >> 30) as u8
     }
     
     pub fn format(self) -> u8 {
         ((self & TextureAttrs::FORMAT).bits() >> 26) as u8
+    }
+
+    pub fn height(self) -> u32 {
+        // 8 - 1024 (in powers of 2)
+        let shift = ((self & TextureAttrs::SIZE_T).bits() >> 23) + 3;
+        1 << shift
+    }
+    
+    pub fn width(self) -> u32 {
+        // 8 - 1024 (in powers of 2)
+        let shift = ((self & TextureAttrs::SIZE_S).bits() >> 20) + 3;
+        1 << shift
+    }
+
+    pub fn addr(self) -> u32 {
+        (self & TextureAttrs::ADDR).bits() << 3
     }
 }
 
@@ -152,8 +168,15 @@ impl Polygon {
 /// Coordinates for a point in screen-space.
 #[derive(Default, Clone, Copy)]
 pub struct Coords {
-    pub x: N,   // also tex s
-    pub y: N    // also tex t
+    pub x: N,
+    pub y: N
+}
+
+/// Coordinates for a texture point.
+#[derive(Default, Clone, Copy)]
+pub struct TexCoords {
+    pub s: I12F4,
+    pub t: I12F4
 }
 
 /// A single vertex. 12 bytes.
@@ -168,7 +191,7 @@ pub struct Vertex {
     pub screen_p:   Coords,
     pub depth:      I23F9,
     pub colour:     Colour,
-    pub tex_coords: Coords,
+    pub tex_coords: TexCoords,
 }
 
 /// Polygon and vertex RAM for a frame.
