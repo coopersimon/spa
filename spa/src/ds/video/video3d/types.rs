@@ -28,6 +28,14 @@ bitflags! {
     }
 }
 
+#[derive(PartialEq, Clone, Copy)]
+pub enum PolygonMode {
+    Modulation,
+    Decal,
+    ToonHighlight,
+    Shadow
+}
+
 bitflags! {
     #[derive(Default)]
     pub struct PolygonAttrs: u32 {
@@ -57,8 +65,13 @@ impl PolygonAttrs {
         ((self & PolygonAttrs::POLYGON_ID).bits() >> 24) as u8
     }
     
-    pub fn mode(self) -> u8 {
-        ((self & PolygonAttrs::POLYGON_MODE).bits() >> 4) as u8
+    pub fn mode(self) -> PolygonMode {
+        match (self & PolygonAttrs::POLYGON_MODE).bits() >> 4 {
+            0 => PolygonMode::Modulation,
+            1 => PolygonMode::Decal,
+            2 => PolygonMode::ToonHighlight,
+            _ => PolygonMode::Shadow
+        }
     }
 }
 
