@@ -1,6 +1,6 @@
 use super::{
     render::RenderingEngine,
-    types::{Display3DControl, PolygonAttrs, Coords, TexCoords, Polygon, PolygonOrder, TextureAttrs}, geometry::N
+    types::*, geometry::N
 };
 use fixed::{types::I23F9, traits::ToFixed};
 use crate::{
@@ -51,11 +51,6 @@ impl Software3DRenderer {
 
     }
 }
-
-const FRAG_MODE_MODULATION: u8 = 0b00;
-const FRAG_MODE_DECAL: u8 = 0b01;
-const FRAG_MODE_TOON_HIGHLIGHT: u8 = 0b10;
-const FRAG_MODE_SHADOW: u8 = 0b11;
 
 impl Software3DRenderer {
     /// Fill the drawing buffers with clear values or clear image.
@@ -108,6 +103,7 @@ impl Software3DRenderer {
                 continue;
             }
             let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
+            let mode = polygon.attrs.mode();
             
             let b = Self::find_intersect_points(render_engine, polygon, y);
             if b.is_none() {
@@ -134,11 +130,6 @@ impl Software3DRenderer {
                     }
                 }
 
-                // We are sure that we want to render this fragment.
-                self.depth_buffer[x_idx as usize] = depth;
-                self.attr_buffer[x_idx as usize].opaque_id = polygon.attrs.id();
-                self.attr_buffer[x_idx as usize].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
-
                 // Interpolate vertex colour
                 let vtx_colour = ColourAlpha {
                     col: Self::interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b),
@@ -148,9 +139,16 @@ impl Software3DRenderer {
                 let tex_coords = Self::interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
                 let tex_colour = Self::lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
 
-                let frag_colour = Self::blend_fragment_colour(render_engine, polygon, vtx_colour, tex_colour);
+                let frag_colour = if let Some(tex_colour) = tex_colour {
+                    Self::blend_frag_tex_colour(render_engine, mode, vtx_colour, tex_colour)
+                } else {
+                    Self::blend_fragment_colour(render_engine, mode, vtx_colour)
+                };
                 if frag_colour.alpha > 0 {
                     target[x_idx as usize] = frag_colour;
+                    self.depth_buffer[x_idx as usize] = depth;
+                    self.attr_buffer[x_idx as usize].opaque_id = polygon.attrs.id();
+                    self.attr_buffer[x_idx as usize].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
                 }
             }
         }
@@ -175,6 +173,7 @@ impl Software3DRenderer {
             return;
         }
         let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
+        let mode = polygon.attrs.mode();
         
         let [vtx_a, vtx_b] = Self::find_intersect_points(render_engine, polygon, y).unwrap();
 
@@ -184,7 +183,7 @@ impl Software3DRenderer {
             let id = polygon.attrs.id();
             // TODO: only extract for shadow polygons?
             let stencil_mask = std::mem::replace(&mut self.stencil_buffer[x_idx as usize], false);
-            if self.attr_buffer[x_idx as usize].trans_id == id {
+            if self.attr_buffer[x_idx as usize].trans_id == id && polygon.attrs.alpha() != 0x1F {
                 continue;
             }
 
@@ -196,7 +195,7 @@ impl Software3DRenderer {
 
             // Evaluate depth
             if self.depth_buffer[x_idx as usize] <= depth { // TODO: remove fractional part?
-                if id == 0 && polygon.attrs.mode() == FRAG_MODE_SHADOW {    // TODO: & draw back surface?
+                if id == 0 && mode == PolygonMode::Shadow {
                     // Shadow polygon mask
                     self.stencil_buffer[x_idx as usize] = true;
                     continue;
@@ -207,17 +206,12 @@ impl Software3DRenderer {
                 }
             }
 
-            if polygon.attrs.mode() == FRAG_MODE_SHADOW &&
+            if mode == PolygonMode::Shadow &&
                 (!stencil_mask || self.attr_buffer[x_idx as usize].opaque_id == id) {
                 // We only want to draw the shadow if it passes depth,
                 // is masked, and doesn't match the IDs
                 continue;
             }
-
-            // We are sure that we want to render this fragment.
-            self.depth_buffer[x_idx as usize] = depth;
-            self.attr_buffer[x_idx as usize].trans_id = id;
-            self.attr_buffer[x_idx as usize].fog = self.attr_buffer[x_idx as usize].fog && polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
 
             // Interpolate vertex colour
             let vtx_colour = ColourAlpha {
@@ -228,21 +222,31 @@ impl Software3DRenderer {
             let tex_coords = Self::interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
             let tex_colour = Self::lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
 
-            let frag_colour = Self::blend_fragment_colour(render_engine, polygon, vtx_colour, tex_colour);
-            if render_engine.control.contains(Display3DControl::ALPHA_TEST_ENABLE) {
-                if frag_colour.alpha < render_engine.alpha_test {
-                    return;
-                }
+            let frag_colour = if let Some(tex_colour) = tex_colour {
+                Self::blend_frag_tex_colour(render_engine, mode, vtx_colour, tex_colour)
+            } else {
+                Self::blend_fragment_colour(render_engine, mode, vtx_colour)
+            };
+            if render_engine.control.contains(Display3DControl::ALPHA_TEST_ENABLE) && frag_colour.alpha < render_engine.alpha_test {
+                continue;
+            } else if frag_colour.alpha == 0 {
+                continue;
+            } else if frag_colour.alpha != 0x1F && self.attr_buffer[x_idx as usize].trans_id == id {
+                continue;
             }
 
+            // We are sure that we want to render this fragment.
             if render_engine.control.contains(Display3DControl::BLENDING_ENABLE) {
                 target[x_idx as usize] = Self::blend_buffer_colour(
                     frag_colour, target[x_idx as usize],
-                    polygon.attrs.mode() == FRAG_MODE_SHADOW
+                    mode == PolygonMode::Shadow
                 );
-            } else if frag_colour.alpha > 0 {
+            } else {
                 target[x_idx as usize] = frag_colour;
             }
+            self.depth_buffer[x_idx as usize] = depth;
+            self.attr_buffer[x_idx as usize].trans_id = id;
+            self.attr_buffer[x_idx as usize].fog = self.attr_buffer[x_idx as usize].fog && polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
         }
     }
 }
@@ -334,16 +338,16 @@ impl Software3DRenderer {
     }
 
     /// Lookup texture colour.
-    fn lookup_tex_colour(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
+    fn lookup_tex_colour(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> Option<ColourAlpha> {
         match tex_attrs.format() {
-            1 => Self::lookup_a3i5_tex(tex_coords, tex_attrs, palette, vram),
-            2 => Self::lookup_2bpp_tex(tex_coords, tex_attrs, palette, vram),
-            3 => Self::lookup_4bpp_tex(tex_coords, tex_attrs, palette, vram),
-            4 => Self::lookup_8bpp_tex(tex_coords, tex_attrs, palette, vram),
-            5 => Self::lookup_4x4_tex(tex_coords, tex_attrs, palette, vram),
-            6 => Self::lookup_a5i3_tex(tex_coords, tex_attrs, palette, vram),
-            7 => Self::lookup_dir_tex(tex_coords, tex_attrs, vram),
-            _ => ColourAlpha::transparent(),
+            1 => Some(Self::lookup_a3i5_tex(tex_coords, tex_attrs, palette, vram)),
+            2 => Some(Self::lookup_2bpp_tex(tex_coords, tex_attrs, palette, vram)),
+            3 => Some(Self::lookup_4bpp_tex(tex_coords, tex_attrs, palette, vram)),
+            4 => Some(Self::lookup_8bpp_tex(tex_coords, tex_attrs, palette, vram)),
+            5 => Some(Self::lookup_4x4_tex(tex_coords, tex_attrs, palette, vram)),
+            6 => Some(Self::lookup_a5i3_tex(tex_coords, tex_attrs, palette, vram)),
+            7 => Some(Self::lookup_dir_tex(tex_coords, tex_attrs, vram)),
+            _ => None,
         }
     }
 
@@ -602,9 +606,22 @@ impl Software3DRenderer {
     }
 
     /// Use the polygon's specified blending mode to blend the fragment's colour.
-    fn blend_fragment_colour(render_engine: &RenderingEngine, polygon: &Polygon, vtx_colour: ColourAlpha, tex_colour: ColourAlpha) -> ColourAlpha {
-        match polygon.attrs.mode() {
-            FRAG_MODE_MODULATION => {
+    /// 
+    /// Use the vertex colour and texture colour as sources.
+    fn blend_fragment_colour(render_engine: &RenderingEngine, mode: PolygonMode, vtx_colour: ColourAlpha) -> ColourAlpha {
+        match mode {
+            PolygonMode::Modulation | PolygonMode::Decal => vtx_colour,
+            PolygonMode::ToonHighlight => panic!("toonh"),
+            PolygonMode::Shadow => vtx_colour,
+        }
+    }
+
+    /// Use the polygon's specified blending mode to blend the fragment's colour.
+    /// 
+    /// Use the vertex colour and texture colour as sources.
+    fn blend_frag_tex_colour(render_engine: &RenderingEngine, mode: PolygonMode, vtx_colour: ColourAlpha, tex_colour: ColourAlpha) -> ColourAlpha {
+        match mode {
+            PolygonMode::Modulation => {
                 let r = ((vtx_colour.col.r as u16) + 1) * ((tex_colour.col.r as u16) + 1) - 1;
                 let g = ((vtx_colour.col.g as u16) + 1) * ((tex_colour.col.g as u16) + 1) - 1;
                 let b = ((vtx_colour.col.b as u16) + 1) * ((tex_colour.col.b as u16) + 1) - 1;
@@ -619,8 +636,7 @@ impl Software3DRenderer {
                     alpha: (a >> 5) as u8
                 }
             },
-
-            FRAG_MODE_DECAL => {
+            PolygonMode::Decal => {
                 if tex_colour.alpha == 0 {
                     vtx_colour
                 } else if tex_colour.alpha == 0x1F {
@@ -628,9 +644,9 @@ impl Software3DRenderer {
                 } else {
                     let tex_alpha = tex_colour.alpha as u16;
                     let vtx_alpha = 0x1F - tex_alpha;
-                    let r = ((vtx_colour.col.r as u16) * vtx_alpha).saturating_add((tex_colour.col.r as u16) * tex_alpha);
-                    let g = ((vtx_colour.col.g as u16) * vtx_alpha).saturating_add((tex_colour.col.g as u16) * tex_alpha);
-                    let b = ((vtx_colour.col.b as u16) * vtx_alpha).saturating_add((tex_colour.col.b as u16) * tex_alpha);
+                    let r = ((vtx_colour.col.r as u16) * vtx_alpha) + ((tex_colour.col.r as u16) * tex_alpha);
+                    let g = ((vtx_colour.col.g as u16) * vtx_alpha) + ((tex_colour.col.g as u16) * tex_alpha);
+                    let b = ((vtx_colour.col.b as u16) * vtx_alpha) + ((tex_colour.col.b as u16) * tex_alpha);
                     ColourAlpha {
                         col: Colour {
                             r: (r >> 5) as u8,
@@ -641,8 +657,7 @@ impl Software3DRenderer {
                     }
                 }
             },
-
-            FRAG_MODE_TOON_HIGHLIGHT => {
+            PolygonMode::ToonHighlight => {
                 panic!("highlight/toon");
                 let index = (vtx_colour.col.r >> 3) as usize;
                 let table_colour = render_engine.toon_table[index];
@@ -654,12 +669,7 @@ impl Software3DRenderer {
                     vtx_colour
                 }
             },
-
-            FRAG_MODE_SHADOW => {
-                vtx_colour  // TODO: blend with tex??
-            },
-
-            _ => unreachable!()
+            PolygonMode::Shadow => vtx_colour  // TODO: blend with tex??,
         }
     }
 
