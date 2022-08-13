@@ -718,11 +718,11 @@ impl Software3DRenderer {
                 alpha: if shadow_mode {buffer_colour.alpha} else {frag_colour.alpha}
             }
         } else {
-            let frag_alpha = (frag_colour.alpha + 1) as u16;
-            let buffer_alpha = (31 - frag_colour.alpha) as u16;
-            let r = ((frag_colour.col.r as u16) * frag_alpha) * ((buffer_colour.col.r as u16) * buffer_alpha);
-            let g = ((frag_colour.col.g as u16) * frag_alpha) * ((buffer_colour.col.g as u16) * buffer_alpha);
-            let b = ((frag_colour.col.b as u16) * frag_alpha) * ((buffer_colour.col.b as u16) * buffer_alpha);
+            let frag_alpha = (frag_colour.alpha + 1) as u32;
+            let buffer_alpha = (31 - frag_colour.alpha) as u32;
+            let r = ((frag_colour.col.r as u32) * frag_alpha) + ((buffer_colour.col.r as u32) * buffer_alpha);
+            let g = ((frag_colour.col.g as u32) * frag_alpha) + ((buffer_colour.col.g as u32) * buffer_alpha);
+            let b = ((frag_colour.col.b as u32) * frag_alpha) + ((buffer_colour.col.b as u32) * buffer_alpha);
             let a = if shadow_mode {
                 buffer_colour.alpha
             } else {
