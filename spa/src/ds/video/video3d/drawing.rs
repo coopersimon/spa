@@ -364,7 +364,7 @@ impl Software3DRenderer {
             let mask = width - 1;
             if tex_attrs.contains(TextureAttrs::FLIP_S) {
                 if (unsigned_tex_s & width) == 0 {  // Don't flip
-                unsigned_tex_s & mask
+                    unsigned_tex_s & mask
                 } else {    // flip
                     let s = unsigned_tex_s & mask;
                     mask - s
@@ -386,7 +386,7 @@ impl Software3DRenderer {
             let mask = height - 1;
             if tex_attrs.contains(TextureAttrs::FLIP_T) {
                 if (unsigned_tex_t & height) == 0 {  // Don't flip
-                unsigned_tex_t & mask
+                    unsigned_tex_t & mask
                 } else {    // flip
                     let t = unsigned_tex_t & mask;
                     mask - t
@@ -611,7 +611,24 @@ impl Software3DRenderer {
     fn blend_fragment_colour(render_engine: &RenderingEngine, mode: PolygonMode, vtx_colour: ColourAlpha) -> ColourAlpha {
         match mode {
             PolygonMode::Modulation | PolygonMode::Decal => vtx_colour,
-            PolygonMode::ToonHighlight => panic!("toonh"),
+            PolygonMode::ToonHighlight => {
+                let index = (vtx_colour.col.r >> 3) as usize;
+                let table_colour = render_engine.toon_table[index];
+                if render_engine.control.contains(Display3DControl::HIGHLIGHT_SHADING) {
+                    let r = vtx_colour.col.r.saturating_add(table_colour.r);
+                    let g = vtx_colour.col.g.saturating_add(table_colour.g);
+                    let b = vtx_colour.col.b.saturating_add(table_colour.b);
+                    ColourAlpha {
+                        col: Colour { r, g, b },
+                        alpha: vtx_colour.alpha
+                    }
+                } else {
+                    ColourAlpha {
+                        col: table_colour,
+                        alpha: vtx_colour.alpha
+                    }
+                }
+            },
             PolygonMode::Shadow => vtx_colour,
         }
     }
@@ -658,15 +675,34 @@ impl Software3DRenderer {
                 }
             },
             PolygonMode::ToonHighlight => {
-                panic!("highlight/toon");
                 let index = (vtx_colour.col.r >> 3) as usize;
                 let table_colour = render_engine.toon_table[index];
                 if render_engine.control.contains(Display3DControl::HIGHLIGHT_SHADING) {
-                    // TODO
-                    vtx_colour
+                    let frag_r = ((vtx_colour.col.r as u16) + 1) * ((tex_colour.col.r as u16) + 1) - 1;
+                    let frag_g = ((vtx_colour.col.g as u16) + 1) * ((tex_colour.col.g as u16) + 1) - 1;
+                    let frag_b = ((vtx_colour.col.b as u16) + 1) * ((tex_colour.col.b as u16) + 1) - 1;
+
+                    let r = bytes::u16::hi(frag_r).saturating_add(table_colour.r);
+                    let g = bytes::u16::hi(frag_g).saturating_add(table_colour.g);
+                    let b = bytes::u16::hi(frag_b).saturating_add(table_colour.b);
+                    let a = (vtx_colour.alpha as u16) * (tex_colour.alpha as u16);
+                    ColourAlpha {
+                        col: Colour { r, g, b },
+                        alpha: (a >> 5) as u8
+                    }
                 } else {
-                    // TODO
-                    vtx_colour
+                    let r = ((table_colour.r as u16) + 1) * ((tex_colour.col.r as u16) + 1) - 1;
+                    let g = ((table_colour.g as u16) + 1) * ((tex_colour.col.g as u16) + 1) - 1;
+                    let b = ((table_colour.b as u16) + 1) * ((tex_colour.col.b as u16) + 1) - 1;
+                    let a = (vtx_colour.alpha as u16) * (tex_colour.alpha as u16);
+                    ColourAlpha {
+                        col: Colour {
+                            r: bytes::u16::hi(r),
+                            g: bytes::u16::hi(g),
+                            b: bytes::u16::hi(b)
+                        },
+                        alpha: (a >> 5) as u8
+                    }
                 }
             },
             PolygonMode::Shadow => vtx_colour  // TODO: blend with tex??,
