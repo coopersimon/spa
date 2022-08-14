@@ -113,7 +113,7 @@ impl Software3DRenderer {
             }
             let [vtx_a, vtx_b] = b.unwrap();
 
-            let x_diff = N::ONE.checked_div(vtx_b.screen_p.x - vtx_a.screen_p.x).unwrap_or(N::ZERO);
+            let x_diff = I40F24::ONE.checked_div((vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>()).unwrap_or(I40F24::ZERO).to_fixed::<N>();
 
             // TODO: wireframe
             for x_idx in vtx_a.screen_p.x.to_num::<i16>()..=vtx_b.screen_p.x.to_num::<i16>() {
@@ -178,7 +178,7 @@ impl Software3DRenderer {
         
         let [vtx_a, vtx_b] = Self::find_intersect_points(render_engine, polygon, y).unwrap();
 
-        let x_diff = N::ONE.checked_div(vtx_b.screen_p.x - vtx_a.screen_p.x).unwrap_or(N::ZERO);
+        let x_diff = I40F24::ONE.checked_div((vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>()).unwrap_or(I40F24::ZERO).to_fixed::<N>();
 
         for x_idx in vtx_a.screen_p.x.to_num::<i16>()..=vtx_b.screen_p.x.to_num::<i16>() {
             let id = polygon.attrs.id();
