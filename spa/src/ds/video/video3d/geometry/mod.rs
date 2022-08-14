@@ -142,8 +142,9 @@ impl GeometryEngine {
         let tex_cycles = if self.texture_attrs.transform_mode() == 2 {
             let s = self.tex_coords.s.to_fixed::<N>();
             let t = self.tex_coords.t.to_fixed::<N>();
-            let s0 = v.x() * self.matrices.tex_matrix().elements[0] + v.y() * self.matrices.tex_matrix().elements[4] + v.z() * self.matrices.tex_matrix().elements[8] + s;
-            let t0 = v.x() * self.matrices.tex_matrix().elements[1] + v.y() * self.matrices.tex_matrix().elements[5] + v.z() * self.matrices.tex_matrix().elements[9] + t;
+            let m = &self.matrices.tex_matrix();
+            let s0 = v.x() * m.elements[0] + v.y() * m.elements[4] + v.z() * m.elements[8] + s;
+            let t0 = v.x() * m.elements[1] + v.y() * m.elements[5] + v.z() * m.elements[9] + t;
             self.trans_tex_coords.s = s0.to_fixed();
             self.trans_tex_coords.t = t0.to_fixed();
             2
@@ -212,8 +213,9 @@ impl GeometryEngine {
             1 => {
                 let s = self.tex_coords.s.to_fixed::<N>();
                 let t = self.tex_coords.t.to_fixed::<N>();
-                let s0 = s * self.matrices.tex_matrix().elements[0] + t * self.matrices.tex_matrix().elements[4] + self.matrices.tex_matrix().elements[8] + self.matrices.tex_matrix().elements[12];
-                let t0 = s * self.matrices.tex_matrix().elements[1] + t * self.matrices.tex_matrix().elements[5] + self.matrices.tex_matrix().elements[9] + self.matrices.tex_matrix().elements[13];
+                let m = &self.matrices.tex_matrix();
+                let s0 = s * m.elements[0] + t * m.elements[4] + (m.elements[8] / 16) + (m.elements[12] / 16);
+                let t0 = s * m.elements[1] + t * m.elements[5] + (m.elements[9] / 16) + (m.elements[13] / 16);
                 self.trans_tex_coords.s = s0.to_fixed();
                 self.trans_tex_coords.t = t0.to_fixed();
                 2
@@ -427,8 +429,9 @@ impl GeometryEngine {
         if self.texture_attrs.transform_mode() == 3 {
             let s = self.tex_coords.s.to_fixed::<N>();
             let t = self.tex_coords.t.to_fixed::<N>();
-            let s0 = vertex.x() * self.matrices.tex_matrix().elements[0] + vertex.y() * self.matrices.tex_matrix().elements[4] + vertex.z() * self.matrices.tex_matrix().elements[8] + s;
-            let t0 = vertex.x() * self.matrices.tex_matrix().elements[1] + vertex.y() * self.matrices.tex_matrix().elements[5] + vertex.z() * self.matrices.tex_matrix().elements[9] + t;
+            let m = &self.matrices.tex_matrix();
+            let s0 = vertex.x() * m.elements[0] + vertex.y() * m.elements[4] + vertex.z() * m.elements[8] + s;
+            let t0 = vertex.x() * m.elements[1] + vertex.y() * m.elements[5] + vertex.z() * m.elements[9] + t;
             self.trans_tex_coords.s = s0.to_fixed();
             self.trans_tex_coords.t = t0.to_fixed();
         }
@@ -652,12 +655,12 @@ impl GeometryEngine {
                 let prev_index = self.output_order[(self.stage_size + n - 1) % self.stage_size];
                 let stage_index_prev = (self.staged_index + prev_index) % self.stage_size;
                 let prev_vtx = &self.staged_polygon[stage_index_prev];
-                self.clipping_unit.clip(vertex, prev_vtx, &mut out_clips, &mut in_clips, &mut staged_polygon);
+                self.clipping_unit.clip(true, vertex, prev_vtx, &mut out_clips, &mut in_clips, &mut staged_polygon);
                 
                 let next_index = self.output_order[(n + 1) % self.stage_size];
                 let stage_index_next = (self.staged_index + next_index) % self.stage_size;
                 let next_vtx = &self.staged_polygon[stage_index_next];
-                self.clipping_unit.clip(vertex, next_vtx, &mut out_clips, &mut in_clips, &mut staged_polygon);
+                self.clipping_unit.clip(false, vertex, next_vtx, &mut out_clips, &mut in_clips, &mut staged_polygon);
 
             } else {
                 // TODO: store vtx indexes in separate place

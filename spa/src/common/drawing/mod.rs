@@ -654,8 +654,13 @@ impl SoftwareRenderer {
         use BackgroundTypeData::*;
         match &bg.type_data {
             Render3D(d) => {
-                let scrolled_x = (x as u16).wrapping_add(d.scroll_x);
-                self.line_3d[(scrolled_x & 0xFF) as usize].colour()
+                let scroll_x = u16::sign_extend(d.scroll_x & 0x1FF, 9);
+                let scrolled_x = (x as i16).wrapping_add(scroll_x) as u16;
+                if scrolled_x < 0x100 {
+                    self.line_3d[scrolled_x as usize].colour()
+                } else {
+                    None
+                }
             },
             Tiled(t) => {
                 let scrolled_x = (x as u32).wrapping_add(t.scroll_x as u32);

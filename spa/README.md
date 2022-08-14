@@ -65,7 +65,7 @@ DS:
 
 ### DS Status of selected games:
 - Age of Empires: Age of Kings: Loads main menu, freezes
-- Animal Crossing Wild World: (FLASH): Loads up titles shows menu and gameplay. 3D visuals look ok.
+- Animal Crossing Wild World: (FLASH): Loads up titles shows menu and gameplay. Intro rain + glass looks a bit wrong.
 - Chrono Trigger: Sets up save RAM, then shows intro video. Game loads up and runs ok!
 - Dragon Quest IX: Shows intro cards and video. Magenta screen when game begins.
 - Dragon Quest IV: Black screen - getting stuck in halt loop
@@ -73,14 +73,14 @@ DS:
 - Dragon Quest VI: Black screen
 - Final Fantasy Tactics A2: Loads up and game starts. Flickering (capture issues?). Some broken graphics.
 - Final Fantasy III: Sets up save ram, shows titles, now locks up.
-- Final Fantasy IV: Works well (with some 3d visual issues) up until after first battle in gameplay.
+- Final Fantasy IV: Works well (with some 3d visual issues) up until after first battle in gameplay. Cutscene in castle has broken visuals ontop of 3D (2d issue?)
 - GTA Chinatown Wars: Shows some broken screens on start, then crashes when gameplay starts.
 - Hotel Dusk: Room 215: Shows titles and initial screen with some graphical issues (capture issues?). Needs touchscreen?
 - Kirby Super Star: Initialises save data, then shows some screens with incorrect colour. Is it trying to blend stuff here?
-- Mario Kart DS: (FLASH) Titles + menu work ok, 3D visuals look decent now.
+- Mario Kart DS: (FLASH) Titles + menu work ok, 3D visuals are ok but heavy warping + aggressive clipping near camera (perspective correct textures would help here)
 - Mario and Luigi: Bowser's Inside Story: Blank screen (firmware/save issues)
 - Mario and Luigi: Partners in Time: Loads up mostly ok, menu title 3D is ok, intro has serious graphical issues
-- Mario Party DS: 2D stuff looks ok. 3D visuals, crash when loading minigame (VRAM access failed)
+- Mario Party DS: 2D stuff looks ok. 3D visuals, crash when loading minigame (VRAM ext palette access failed)
 - Metroid Prime Hunters: Initial titles are broken. Shows intro video. Gets to menu then locks up.
 - New Super Mario Bros: Intro + menu is ok, 3D visuals (very broken - missing graphics + blending issues)
 - LoZ Phantom Hourglass: Just white screen now.
@@ -91,7 +91,7 @@ DS:
 - Pokemon Black: Black screen
 - Pokemon HeartGold: 2d elements of game work ok, 3D in intro looks reasonable, 3D in title is quite broken
 - Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.
-- Super Mario 64 DS: Shows an initial nintendo logo, takes a long time to load before showing menus. 3D in intro looks mostly fine but marios eyes are very creepy. Difficult to continue without touchscreen
+- Super Mario 64 DS: Shows an initial nintendo logo, takes a long time to load before showing menus. 3D in intro looks mostly fine but marios eyes are very creepy (texture matrix issue?). Difficult to continue without touchscreen
 - Tony Hawk's Downhill Jam: Shows titles, then black screen
 - Tony Hawk's American Sk8land: Shows titles, menus, then gameplay crashes after matrix overflow
 - The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)
@@ -100,11 +100,12 @@ DS:
 #### NDS TODO
 - Audio
 - 3D Video:
-    - Correct clipping around screen edges
-    - Some depth issues
+    - Clip in 3D space?
+    - Fix some depth issues
     - Rasterising precision improvement
-    - Lighting issues
+    - Lighting issues (?)
     - Post-processing (fog + edge + anti-aliasing)
+    - Perspective correct tex mapping needed
 - 2D main RAM video mode
 - Engine A video capture & blending fixes
 - Touchscreen precision
