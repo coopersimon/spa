@@ -1,9 +1,10 @@
 
-use fixed::types::I23F9;
+use fixed::types::I40F24;
+use fixed::traits::ToFixed;
 use crate::common::colour::Colour;
 use super::{
     super::interpolate::*,
-    super::types::{Polygon, PolygonRAM, Vertex, Coords, TexCoords},
+    super::types::*,
     math::{N, Vector},
 };
 
@@ -20,7 +21,7 @@ pub struct StagedVertex {
     pub screen_p:   Coords,
     pub colour:     Colour,
     pub tex_coords: TexCoords,
-    pub depth:      I23F9,
+    pub depth:      Depth,
 
     pub needs_clip: Option<bool>,
     pub idx:        Option<usize>,
@@ -37,8 +38,8 @@ pub struct ClippingUnit {
 
     viewport_x:         u8,
     viewport_y:         u8,
-    viewport_width:     u8,
-    viewport_height:    u8,
+    viewport_width:     u16,
+    viewport_height:    u16,
 }
 
 impl ClippingUnit {
@@ -57,8 +58,8 @@ impl ClippingUnit {
         let bytes = u32::to_le_bytes(data);
         self.viewport_x = bytes[0];
         self.viewport_y = bytes[1];
-        self.viewport_width = bytes[2] - self.viewport_x;
-        self.viewport_height = bytes[3] - self.viewport_y;
+        self.viewport_width = (bytes[2] - self.viewport_x) as u16;
+        self.viewport_height = (bytes[3] - self.viewport_y) as u16;
     }
     
     pub fn get_screen_coords(&self, x: N, y: N) -> Coords {
@@ -83,14 +84,14 @@ impl ClippingUnit {
     ) {
         
         // TODO: const the below.
-        //let X_MAX = N::ONE - N::from_bits(1);
-        //let Y_MAX = N::ONE - N::from_bits(1);
+        let X_MAX = N::ONE;// - N::from_bits(0b1);
+        let Y_MAX = N::ONE;// - N::from_bits(0b1);
 
         let mut visible_point: Option<Vertex> = None;
 
-        if vtx_a.position.x() < N::ZERO && vtx_b.position.x() > N::ZERO {
+        if vtx_a.position.x() < N::ZERO && vtx_b.position.x() >= N::ZERO {
             // Clip on left plane.
-            let factor_a = -vtx_b.position.x() / (vtx_a.position.x() - vtx_b.position.x());
+            let factor_a = (-vtx_b.position.x().to_fixed::<I40F24>() / (vtx_a.position.x() - vtx_b.position.x()).to_fixed::<I40F24>()).to_fixed::<N>();
             let y = (factor_a * (vtx_a.position.y() - vtx_b.position.y())) + vtx_b.position.y();
             
             let factor_b = N::ONE - factor_a;
@@ -100,7 +101,7 @@ impl ClippingUnit {
                 // Visible
                 if let Some(out_vtx) = std::mem::take(&mut out_clips[ClipPlane::Left as usize]) {
                     let coords = if out_vtx.screen_p.y > vtx.screen_p.y {
-                        self.get_screen_coords(N::ZERO, N::ONE)
+                        self.get_screen_coords(N::ZERO, Y_MAX)
                     } else {
                         self.get_screen_coords(N::ZERO, N::ZERO)
                     };
@@ -113,7 +114,7 @@ impl ClippingUnit {
             } else {
                 if let Some(in_vtx) = std::mem::take(&mut in_clips[ClipPlane::Left as usize]) {
                     let coords = if vtx.screen_p.y > in_vtx.screen_p.y {
-                        self.get_screen_coords(N::ZERO, N::ONE)
+                        self.get_screen_coords(N::ZERO, Y_MAX)
                     } else {
                         self.get_screen_coords(N::ZERO, N::ZERO)
                     };
@@ -123,9 +124,9 @@ impl ClippingUnit {
                     out_clips[ClipPlane::Left as usize] = Some(vtx);
                 }
             }
-        } else if vtx_a.position.x() > N::ONE && vtx_b.position.x() < N::ONE {
+        } else if vtx_a.position.x() > N::ONE && vtx_b.position.x() <= N::ONE {
             // Clip on right plane.
-            let factor_a = (N::ONE - vtx_b.position.x()) / (vtx_a.position.x() - vtx_b.position.x());
+            let factor_a = ((X_MAX - vtx_b.position.x()).to_fixed::<I40F24>() / (vtx_a.position.x() - vtx_b.position.x()).to_fixed::<I40F24>()).to_fixed::<N>();
             let y = (factor_a * (vtx_a.position.y() - vtx_b.position.y())) + vtx_b.position.y();
             
             let factor_b = N::ONE - factor_a;
@@ -136,9 +137,9 @@ impl ClippingUnit {
                 // Visible
                 if let Some(out_vtx) = std::mem::take(&mut out_clips[ClipPlane::Right as usize]) {
                     let coords = if out_vtx.screen_p.y > vtx.screen_p.y {
-                        self.get_screen_coords(N::ONE, N::ONE)
+                        self.get_screen_coords(X_MAX, Y_MAX)
                     } else {
-                        self.get_screen_coords(N::ONE, N::ZERO)
+                        self.get_screen_coords(X_MAX, N::ZERO)
                     };
                     let corner_vtx = Self::interpolate_corner_y(&vtx, &out_vtx, coords);
                     self.add_vertex(staged_polygon, corner_vtx);
@@ -149,9 +150,9 @@ impl ClippingUnit {
             } else {
                 if let Some(in_vtx) = std::mem::take(&mut in_clips[ClipPlane::Right as usize]) {
                     let coords = if vtx.screen_p.y > in_vtx.screen_p.y {
-                        self.get_screen_coords(N::ONE, N::ONE)
+                        self.get_screen_coords(X_MAX, N::ONE)
                     } else {
-                        self.get_screen_coords(N::ONE, N::ZERO)
+                        self.get_screen_coords(X_MAX, N::ZERO)
                     };
                     let corner_vtx = Self::interpolate_corner_y(&vtx, &in_vtx, coords);
                     self.add_vertex(staged_polygon, corner_vtx);
@@ -161,9 +162,9 @@ impl ClippingUnit {
             }
         }
         
-        if vtx_a.position.y() < N::ZERO && vtx_b.position.y() > N::ZERO {
+        if vtx_a.position.y() < N::ZERO && vtx_b.position.y() >= N::ZERO {
             // Clip on top plane.
-            let factor_a = -vtx_b.position.y() / (vtx_a.position.y() - vtx_b.position.y());
+            let factor_a = (-vtx_b.position.y().to_fixed::<I40F24>() / (vtx_a.position.y() - vtx_b.position.y()).to_fixed::<I40F24>()).to_fixed::<N>();
             let x = (factor_a * (vtx_a.position.x() - vtx_b.position.x())) + vtx_b.position.x();
             
             let factor_b = N::ONE - factor_a;
@@ -173,7 +174,7 @@ impl ClippingUnit {
                 // Visible
                 if let Some(out_vtx) = std::mem::take(&mut out_clips[ClipPlane::Top as usize]) {
                     let coords = if out_vtx.screen_p.x > vtx.screen_p.x {
-                        self.get_screen_coords(N::ONE, N::ZERO)
+                        self.get_screen_coords(X_MAX, N::ZERO)
                     } else {
                         self.get_screen_coords(N::ZERO, N::ZERO)
                     };
@@ -186,7 +187,7 @@ impl ClippingUnit {
             } else {
                 if let Some(in_vtx) = std::mem::take(&mut in_clips[ClipPlane::Top as usize]) {
                     let coords = if vtx.screen_p.x > in_vtx.screen_p.x {
-                        self.get_screen_coords(N::ONE, N::ZERO)
+                        self.get_screen_coords(X_MAX, N::ZERO)
                     } else {
                         self.get_screen_coords(N::ZERO, N::ZERO)
                     };
@@ -196,9 +197,9 @@ impl ClippingUnit {
                     out_clips[ClipPlane::Top as usize] = Some(vtx);
                 }
             }
-        } else if vtx_a.position.y() > N::ONE && vtx_b.position.y() < N::ONE {
+        } else if vtx_a.position.y() > N::ONE && vtx_b.position.y() <= N::ONE {
             // Clip on bottom plane.
-            let factor_a = (N::ONE - vtx_b.position.y()) / (vtx_a.position.y() - vtx_b.position.y());
+            let factor_a = ((Y_MAX - vtx_b.position.y()).to_fixed::<I40F24>() / (vtx_a.position.y() - vtx_b.position.y()).to_fixed::<I40F24>()).to_fixed::<N>();
             let x = (factor_a * (vtx_a.position.x() - vtx_b.position.x())) + vtx_b.position.x();
             
             let factor_b = N::ONE - factor_a;
@@ -209,9 +210,9 @@ impl ClippingUnit {
                 // Visible
                 if let Some(out_vtx) = std::mem::take(&mut out_clips[ClipPlane::Bottom as usize]) {
                     let coords = if out_vtx.screen_p.x > vtx.screen_p.x {
-                        self.get_screen_coords(N::ONE, N::ONE)
+                        self.get_screen_coords(X_MAX, Y_MAX)
                     } else {
-                        self.get_screen_coords(N::ZERO, N::ONE)
+                        self.get_screen_coords(N::ZERO, Y_MAX)
                     };
                     let corner_vtx = Self::interpolate_corner_x(&vtx, &out_vtx, coords);
                     self.add_vertex(staged_polygon, corner_vtx);
@@ -222,9 +223,9 @@ impl ClippingUnit {
             } else {
                 if let Some(in_vtx) = std::mem::take(&mut in_clips[ClipPlane::Bottom as usize]) {
                     let coords = if vtx.screen_p.x > in_vtx.screen_p.x {
-                        self.get_screen_coords(N::ONE, N::ONE)
+                        self.get_screen_coords(X_MAX, Y_MAX)
                     } else {
-                        self.get_screen_coords(N::ZERO, N::ONE)
+                        self.get_screen_coords(N::ZERO, Y_MAX)
                     };
                     let corner_vtx = Self::interpolate_corner_x(&vtx, &in_vtx, coords);
                     self.add_vertex(staged_polygon, corner_vtx);
@@ -249,7 +250,7 @@ impl ClippingUnit {
     }
     
     fn interpolate_corner_x(vtx_a: &Vertex, vtx_b: &Vertex, screen_p: Coords) -> Vertex {
-        let factor_a = (screen_p.x - vtx_b.screen_p.x) / (vtx_a.screen_p.x - vtx_b.screen_p.x);
+        let factor_a = ((screen_p.x - vtx_b.screen_p.x).to_fixed::<I40F24>() / (vtx_a.screen_p.x - vtx_b.screen_p.x).to_fixed::<I40F24>()).to_fixed::<N>();
         let factor_b = N::ONE - factor_a;
         Vertex {
             screen_p: screen_p,
@@ -260,7 +261,7 @@ impl ClippingUnit {
     }
     
     fn interpolate_corner_y(vtx_a: &Vertex, vtx_b: &Vertex, screen_p: Coords) -> Vertex {
-        let factor_a = (screen_p.y - vtx_b.screen_p.y) / (vtx_a.screen_p.y - vtx_b.screen_p.y);
+        let factor_a = ((screen_p.y - vtx_b.screen_p.y).to_fixed::<I40F24>() / (vtx_a.screen_p.y - vtx_b.screen_p.y).to_fixed::<I40F24>()).to_fixed::<N>();
         let factor_b = N::ONE - factor_a;
         Vertex {
             screen_p: screen_p,

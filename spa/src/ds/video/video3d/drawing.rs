@@ -2,7 +2,8 @@ use super::{
     render::RenderingEngine,
     types::*, geometry::N, interpolate::*
 };
-use fixed::types::I23F9;
+use fixed::types::I40F24;
+use fixed::traits::ToFixed;
 use crate::{
     ds::video::{memory::Engine3DVRAM, video3d::types::Vertex},
     common::colour::*,
@@ -76,7 +77,7 @@ impl Software3DRenderer {
                 };
 
                 self.attr_buffer[x as usize] = clear_attrs;
-                self.depth_buffer[x as usize] = I23F9::from_bits(((depth & 0x7FFF) as i32) << 9);   // TODO: frac part.
+                self.depth_buffer[x as usize] = Depth::from_bits(((depth & 0x7FFF) as i32) << 9);   // TODO: frac part.
                 target[x as usize].col = Colour::from_555(colour);
                 target[x as usize].alpha = if u16::test_bit(colour, 15) {0x1F} else {0};
             }
@@ -275,7 +276,7 @@ impl Software3DRenderer {
             }
 
             // Weight of point a (normalised between 0-1)
-            let factor_a = (y - vtx_b.screen_p.y).checked_div(vtx_a.screen_p.y - vtx_b.screen_p.y).unwrap_or(N::ONE);   // TODO: one dot polygon?
+            let factor_a = (y - vtx_b.screen_p.y).to_fixed::<I40F24>().checked_div((vtx_a.screen_p.y - vtx_b.screen_p.y).to_fixed::<I40F24>()).unwrap_or(I40F24::ONE).to_fixed::<N>();   // TODO: one dot polygon?
             // X coordinate where the render line intersects the polygon line.
             let intersect_x = factor_a * (vtx_a.screen_p.x - vtx_b.screen_p.x) + vtx_b.screen_p.x;
             let factor_b = N::ONE - factor_a;
