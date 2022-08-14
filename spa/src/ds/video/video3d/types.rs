@@ -192,6 +192,8 @@ pub struct TexCoords {
     pub t: I12F4
 }
 
+pub type Depth = I23F9;
+
 /// A single vertex. 12 bytes.
 /// 
 /// Contains:
@@ -202,7 +204,7 @@ pub struct TexCoords {
 #[derive(Default, Clone)]
 pub struct Vertex {
     pub screen_p:   Coords,
-    pub depth:      I23F9,
+    pub depth:      Depth,
     pub colour:     Colour,
     pub tex_coords: TexCoords,
 }

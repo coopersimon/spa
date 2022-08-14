@@ -1,4 +1,5 @@
 mod types;
+mod interpolate;
 mod geometry;
 mod render;
 mod drawing;
@@ -227,11 +228,11 @@ impl MemInterface32 for Video3D {
 impl Video3D {
     fn swap_buffers(&mut self, data: u32) -> isize {
         std::mem::swap(
-            &mut self.geometry_engine.polygon_ram,
+            &mut self.geometry_engine.clipping_unit.polygon_ram,
             &mut self.rendering_engine.lock().polygon_ram
         );
         let manual_sort = u32::test_bit(data, 1);
-        self.geometry_engine.polygon_ram.clear(manual_sort);
+        self.geometry_engine.clipping_unit.polygon_ram.clear(manual_sort);
         self.geometry_engine.swap_buffers(data);
         392
     }
