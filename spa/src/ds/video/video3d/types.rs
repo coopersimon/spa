@@ -162,7 +162,8 @@ pub struct Polygon {
     pub attrs:          PolygonAttrs,
     pub tex:            TextureAttrs,
     pub palette:        u16,
-    pub vertex_indices: Vec<usize>
+    pub num_vertices:   u8,
+    pub vertex_indices: [u16; 8],
 }
 
 impl Polygon {
@@ -175,6 +176,11 @@ impl Polygon {
         let alpha = self.attrs.alpha();
         let tex_format = self.tex.format();
         (alpha == 0 || alpha == 31) && (tex_format != 1 && tex_format != 6)
+    }
+
+    pub fn add_vertex_index(&mut self, index: u16) {
+        self.vertex_indices[self.num_vertices as usize] = index;
+        self.num_vertices += 1;
     }
 }
 
@@ -250,10 +256,10 @@ impl PolygonRAM {
     /// Insert a vertex.
     /// 
     /// Returns the index to the vertex.
-    pub fn insert_vertex(&mut self, vertex: Vertex) -> usize {
+    pub fn insert_vertex(&mut self, vertex: Vertex) -> u16 {
         let index = self.vertices.len();
         self.vertices.push(vertex);
-        index
+        index as u16
     }
 
     /// Insert a polygon.

@@ -1,3 +1,4 @@
+use fixed::types::I40F24;
 use fixed::traits::ToFixed;
 use super::types::{
     Depth, TexCoords
@@ -9,7 +10,7 @@ use crate::common::colour::Colour;
 
 #[inline]
 pub fn interpolate_depth(depth_a: Depth, depth_b: Depth, factor_a: N, factor_b: N) -> Depth {
-    (depth_a * factor_a.to_fixed::<Depth>()) + (depth_b * factor_b.to_fixed::<Depth>())
+    ((depth_a.to_fixed::<I40F24>() * factor_a.to_fixed::<I40F24>()) + (depth_b.to_fixed::<I40F24>() * factor_b.to_fixed::<I40F24>())).to_fixed::<Depth>()
 }
 
 #[inline]
@@ -26,7 +27,7 @@ pub fn interpolate_vertex_colour(colour_a: Colour, colour_b: Colour, factor_a: N
 
 #[inline]
 pub fn interpolate_tex_coords(tex_coords_a: TexCoords, tex_coords_b: TexCoords, factor_a: N, factor_b: N) -> TexCoords {
-    let s = (tex_coords_a.s.to_fixed::<N>() * factor_a) + (tex_coords_b.s.to_fixed::<N>() * factor_b);
-    let t = (tex_coords_a.t.to_fixed::<N>() * factor_a) + (tex_coords_b.t.to_fixed::<N>() * factor_b);
+    let s = (tex_coords_a.s.to_fixed::<I40F24>() * factor_a.to_fixed::<I40F24>()) + (tex_coords_b.s.to_fixed::<I40F24>() * factor_b.to_fixed::<I40F24>());
+    let t = (tex_coords_a.t.to_fixed::<I40F24>() * factor_a.to_fixed::<I40F24>()) + (tex_coords_b.t.to_fixed::<I40F24>() * factor_b.to_fixed::<I40F24>());
     TexCoords { s: s.to_fixed(), t: t.to_fixed() }
 }

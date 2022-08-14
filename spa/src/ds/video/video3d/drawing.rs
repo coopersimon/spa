@@ -124,11 +124,12 @@ impl Software3DRenderer {
                 let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
 
                 // Evaluate depth
-                if self.depth_buffer[x_idx as usize] <= depth { // TODO: remove fractional part?
-                    // Point is behind buffer value.
-                    if !polygon.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH) || self.depth_buffer[x_idx as usize] < depth {
+                if polygon.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH) {
+                    if self.depth_buffer[x_idx as usize].to_num::<i32>() < depth.to_num::<i32>() {
                         continue;
                     }
+                } else if self.depth_buffer[x_idx as usize] <= depth {
+                    continue;
                 }
 
                 // Interpolate vertex colour
@@ -195,16 +196,20 @@ impl Software3DRenderer {
             let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
 
             // Evaluate depth
-            if self.depth_buffer[x_idx as usize] <= depth { // TODO: remove fractional part?
+            if polygon.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH) {
+                if self.depth_buffer[x_idx as usize].to_num::<i32>() < depth.to_num::<i32>() {
+                    if id == 0 && mode == PolygonMode::Shadow {
+                        // Shadow polygon mask
+                        self.stencil_buffer[x_idx as usize] = true;
+                    }
+                    continue;
+                }
+            } else if self.depth_buffer[x_idx as usize] <= depth {
                 if id == 0 && mode == PolygonMode::Shadow {
                     // Shadow polygon mask
                     self.stencil_buffer[x_idx as usize] = true;
-                    continue;
                 }
-                // Point is behind buffer value.
-                if !polygon.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH) || self.depth_buffer[x_idx as usize] < depth {
-                    continue;
-                }
+                continue;
             }
 
             if mode == PolygonMode::Shadow &&
@@ -258,17 +263,15 @@ impl Software3DRenderer {
     /// 
     /// Returns the two points with interpolated attributes, in order of x position.
     fn find_intersect_points(render_engine: &RenderingEngine, polygon: &Polygon, y: N) -> Option<[Vertex; 2]> {
-        let n_vertices = polygon.vertex_indices.len();
-
         // Find start and end points.
         let mut lines = [None, None];
-        for i in 0..n_vertices {
+        for i in 0..polygon.num_vertices {
             // Find where render line intersects polygon lines.
-            let v_index_a = polygon.vertex_indices[i];
-            let v_index_b = polygon.vertex_indices[(i + 1) % n_vertices];
+            let v_index_a = polygon.vertex_indices[i as usize];
+            let v_index_b = polygon.vertex_indices[((i + 1) % polygon.num_vertices) as usize];
 
-            let vtx_a = &render_engine.polygon_ram.vertices[v_index_a];
-            let vtx_b = &render_engine.polygon_ram.vertices[v_index_b];
+            let vtx_a = &render_engine.polygon_ram.vertices[v_index_a as usize];
+            let vtx_b = &render_engine.polygon_ram.vertices[v_index_b as usize];
 
             if (y > vtx_a.screen_p.y && y > vtx_b.screen_p.y) || (y < vtx_a.screen_p.y && y < vtx_b.screen_p.y) {
                 // This line does not intersect the render line.
