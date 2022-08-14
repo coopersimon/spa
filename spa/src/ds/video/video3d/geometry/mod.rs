@@ -1,17 +1,16 @@
 mod math;
 mod matrix;
 mod lighting;
+mod clip;
 
 pub use math::*;
 use matrix::*;
 use lighting::*;
+use clip::*;
 
-use fixed::{types::{I4F12, I20F12, I23F9, I13F3, I12F4}, traits::ToFixed};
-use crate::{
-    common::colour::Colour,
-    utils::{
-        bits, bits::u32, bytes
-    },
+use fixed::{types::{I4F12, I20F12, I23F9, I13F3, I12F4, I40F24}, traits::ToFixed};
+use crate::utils::{
+    bits, bits::u32, bytes
 };
 use super::types::*;
 
@@ -38,13 +37,7 @@ const QUAD_STRIP_ORDER: [usize; 4] = [0, 1, 3, 2];
 //const QUAD_STRIP_ORDER_B: [usize; 4] = [2, 3, 1, 0];
 
 pub struct GeometryEngine {
-    pub polygon_ram:    Box<PolygonRAM>,
-
-    viewport_x:     u8,
-    viewport_y:     u8,
-    viewport_width: u8,
-    viewport_height:u8,
-
+    pub clipping_unit:  ClippingUnit,
     /// Use W or Z value for depth-buffering.
     w_buffer:       bool,
     /// Test w against this value for 1-dot polygons.
@@ -83,27 +76,10 @@ pub struct GeometryEngine {
     primitive:          Option<Primitive>,
 }
 
-#[derive(Clone, Default)]
-struct StagedVertex {
-    position:   Vector<4>,
-    screen_p:   Coords,
-    colour:     Colour,
-    tex_coords: TexCoords,
-
-    needs_clip: Option<bool>,
-    idx:        Option<usize>,
-}
-
 impl GeometryEngine {
     pub fn new() -> Self {
         Self {
-            polygon_ram:    Box::new(PolygonRAM::new()),
-
-            viewport_x:         0,
-            viewport_y:         0,
-            viewport_width:     0,
-            viewport_height:    0,
-            
+            clipping_unit:  ClippingUnit::new(),
             w_buffer:       false,
             dot_polygon_w:  I13F3::from_bits(0x7FFF),
 
@@ -138,11 +114,7 @@ impl GeometryEngine {
 // GPU commands
 impl GeometryEngine {
     pub fn set_viewport(&mut self, data: u32) -> isize {
-        let bytes = u32::to_le_bytes(data);
-        self.viewport_x = bytes[0];
-        self.viewport_y = bytes[1];
-        self.viewport_width = bytes[2] - self.viewport_x;
-        self.viewport_height = bytes[3] - self.viewport_y;
+        self.clipping_unit.set_viewport(data);
         1
     }
 
@@ -391,9 +363,9 @@ impl GeometryEngine {
             let normal_y = (transformed_vertex.y() + w) / w2;
             let normal_z = (transformed_vertex.z() + w) / w2;
 
-            let outside_x = (normal_x >= N::ONE) || (normal_x < N::ZERO);
-            let outside_y = (normal_y >= N::ONE) || (normal_y < N::ZERO);
-            let outside_z = (normal_z >= N::ONE) || (normal_z < N::ZERO);
+            let outside_x = (normal_x > N::ONE) || (normal_x < N::ZERO);
+            let outside_y = (normal_y > N::ONE) || (normal_y < N::ZERO);
+            let outside_z = (normal_z > N::ONE) || (normal_z < N::ZERO);
 
             fail_test = fail_test && (outside_x && outside_y && outside_z);
         }
@@ -464,19 +436,26 @@ impl GeometryEngine {
         // Transform the vertex.
         // Result is a I12F12.
         let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
-        let w = transformed_vertex.w();
-        let w2 = w * 2;
-        let x = (transformed_vertex.x() + w).checked_div(w2).unwrap_or(N::MAX);
-        let y = N::ONE - (transformed_vertex.y() + w).checked_div(w2).unwrap_or(N::MAX);
-        let z = (transformed_vertex.z() + w).checked_div(w2).unwrap_or(N::MAX);
+        let w = transformed_vertex.w().to_fixed::<I40F24>();
+        let w2 = I40F24::ONE.checked_div(w * 2).unwrap_or(I40F24::MAX);
+        let x = (transformed_vertex.x().to_fixed::<I40F24>() + w) * w2;
+        let y = I40F24::ONE - (transformed_vertex.y().to_fixed::<I40F24>() + w) * w2;
+        let z = (transformed_vertex.z().to_fixed::<I40F24>() + w) * w2;
+
+        let depth = if self.w_buffer {
+            w.to_fixed::<Depth>()
+        } else {
+            z.to_fixed::<Depth>() * 0x7FFF
+        };
         
         self.staged_polygon[self.staged_index] = StagedVertex {
             position: Vector::new([
-                x, y, z, w
+                x.to_fixed::<N>(), y.to_fixed::<N>(), z.to_fixed::<N>(), w.to_fixed::<N>()
             ]),
-            screen_p: self.get_screen_coords(x, y),
-            colour: self.lighting.get_vertex_colour(),
+            screen_p:   self.clipping_unit.get_screen_coords(x.to_fixed::<N>(), y.to_fixed::<N>()),
+            colour:     self.lighting.get_vertex_colour(),
             tex_coords: self.trans_tex_coords.clone(),
+            depth: depth,
 
             needs_clip: None,
             idx:        None
@@ -484,12 +463,6 @@ impl GeometryEngine {
         self.output_vertex();
 
         8
-    }
-
-    fn get_screen_coords(&self, x: N, y: N) -> Coords {
-        let screen_x = N::from_num(self.viewport_x) + (x * N::from_num(self.viewport_width));
-        let screen_y = N::from_num(self.viewport_y) + (y * N::from_num(self.viewport_height));
-        Coords { x: screen_x, y: screen_y }
     }
 
     /// Advance the staging state machine and possibly output a polygon.
@@ -593,47 +566,33 @@ impl GeometryEngine {
         }
     }
     
-    /// Test if current polygon is in view.
-    /// 
     /// If any vertices are outside the view, mark them for clipping.
-    /// If ALL vertices are outside the view, return FALSE.
     fn test_in_view(&mut self) -> bool {
-        let mut all_outside_view = true;
         let mut intersects_far_plane = false;
         
-        let X_MAX = N::ONE - N::from_bits(1);
-        let Y_MAX = N::ONE - N::from_bits(1);
+        //let X_MAX = N::ONE - N::from_bits(1);
+        //let Y_MAX = N::ONE - N::from_bits(1);
         
         for stage_idx in 0..self.stage_size {
             let vertex = &mut self.staged_polygon[stage_idx];
-            let v_outside_view = if let Some(needs_clip) = vertex.needs_clip {
-                needs_clip
-            } else {
+            if vertex.needs_clip.is_none() {
                 // Calc if in view.
                 let needs_clip = vertex.position.x() < I20F12::ZERO ||
-                    vertex.position.x() > X_MAX ||
+                    vertex.position.x() > I20F12::ONE ||
                     vertex.position.y() < I20F12::ZERO ||
-                    vertex.position.y() > Y_MAX/* ||
+                    vertex.position.y() > I20F12::ONE/* ||
                     vertex.position.z() < I20F12::ZERO ||
                     vertex.position.z() >= I20F12::ONE*/;
                 vertex.needs_clip = Some(needs_clip);
-                needs_clip
             };
 
-            all_outside_view = all_outside_view && v_outside_view;
-
             intersects_far_plane = intersects_far_plane || (
-                vertex.position.z() >= I23F9::ONE
+                vertex.position.z() > I23F9::ONE
             );
         }
 
-        let hide = all_outside_view || (
-            // If far plane clip is set to 0, and it touches the far plane,
-            // ignore this polygon.
-            intersects_far_plane// && !self.polygon_attrs.contains(PolygonAttrs::FAR_PLANE_CLIP)
-        );
-
-        !hide
+        // !(intersects_far_plane && !self.polygon_attrs.contains(PolygonAttrs::FAR_PLANE_CLIP))
+        !intersects_far_plane
     }
 
     /// Test one-dot display for the current polygon.
@@ -665,20 +624,23 @@ impl GeometryEngine {
         }
     }
 
-
     /// Clip the vertices, producing 1 or 2 new vertices per clip.
     /// 
     /// It will only output the polygon if some of the vertices are inside the view frustrum.
     fn clip_and_emit_polygon(&mut self) {
-        let mut polygon = Polygon {
-            attrs:      self.polygon_attrs,
-            tex:        self.texture_attrs,
-            palette:    self.tex_palette,
-            vertex_indices: Vec::new(),
+        let mut staged_polygon = StagedPolygon {
+            polygon: Polygon {
+                attrs:      self.polygon_attrs,
+                tex:        self.texture_attrs,
+                palette:    self.tex_palette,
+                vertex_indices: Vec::new(),
+            },
+            max_y: N::ZERO,
+            min_y: N::MAX
         };
         
-        let mut y_max = N::ZERO;
-        let mut y_min = N::MAX;
+        let mut out_clips = [None, None, None, None];
+        let mut in_clips = [None, None, None, None];
 
         for n in 0..self.stage_size {
             let current_index = self.output_order[n];
@@ -690,143 +652,34 @@ impl GeometryEngine {
                 let next_index = self.output_order[(n + 1) % self.stage_size];
                 let stage_index_1 = (self.staged_index + next_index) % self.stage_size;
                 let v1 = &self.staged_polygon[stage_index_1];
-                if !v1.needs_clip.unwrap() {
-                    let clipped_vtx = self.clip_and_interpolate(vertex, v1, self.w_buffer);
-                    y_max = std::cmp::max(y_max, clipped_vtx.screen_p.y);
-                    y_min = std::cmp::min(y_min, clipped_vtx.screen_p.y);
-    
-                    let idx = self.polygon_ram.insert_vertex(clipped_vtx);
-                    polygon.vertex_indices.push(idx);
-                }
+                self.clipping_unit.clip(vertex, v1, &mut out_clips, &mut in_clips, &mut staged_polygon);
 
                 let next_index = self.output_order[(self.stage_size + n - 1) % self.stage_size];
                 let stage_index_2 = (self.staged_index + next_index) % self.stage_size;
                 let v2 = &self.staged_polygon[stage_index_2];
-                if !v2.needs_clip.unwrap() {
-                    let clipped_vtx = self.clip_and_interpolate(vertex, v2, self.w_buffer);
-                    y_max = std::cmp::max(y_max, clipped_vtx.screen_p.y);
-                    y_min = std::cmp::min(y_min, clipped_vtx.screen_p.y);
-    
-                    let idx = self.polygon_ram.insert_vertex(clipped_vtx);
-                    polygon.vertex_indices.push(idx);
-                }
+                self.clipping_unit.clip(vertex, v2, &mut out_clips, &mut in_clips, &mut staged_polygon);
             } else {
                 // TODO: store vtx indexes in separate place
                 let vertex = &mut self.staged_polygon[stage_index];
 
-                y_max = std::cmp::max(y_max, vertex.screen_p.y);
-                y_min = std::cmp::min(y_min, vertex.screen_p.y);
+                staged_polygon.max_y = std::cmp::max(staged_polygon.max_y, vertex.screen_p.y);
+                staged_polygon.min_y = std::cmp::min(staged_polygon.min_y, vertex.screen_p.y);
 
                 if let Some(idx) = vertex.idx {
-                    polygon.vertex_indices.push(idx);
+                    staged_polygon.polygon.vertex_indices.push(idx);
                 } else {
-                    let idx = self.polygon_ram.insert_vertex(Vertex {
-                        screen_p: vertex.screen_p.clone(),
-                        depth: if self.w_buffer {
-                            vertex.position.w().to_fixed::<I23F9>()
-                        } else {
-                            vertex.position.z().to_fixed::<I23F9>() * 0x7FFF
-                        },
+                    let idx = self.clipping_unit.polygon_ram.insert_vertex(Vertex {
+                        screen_p:   vertex.screen_p.clone(),
+                        depth:      vertex.depth,
                         colour:     vertex.colour,
                         tex_coords: vertex.tex_coords.clone()
                     });
                     vertex.idx = Some(idx);
-                    polygon.vertex_indices.push(idx);
+                    staged_polygon.polygon.vertex_indices.push(idx);
                 }
             }
         }
-        
-        self.polygon_ram.insert_polygon(polygon, y_max, y_min);
-    }
 
-    /// Clip point a, based on the line between a and b.
-    fn clip_and_interpolate(&self, vtx_a: &StagedVertex, vtx_b: &StagedVertex, wbuffer: bool) -> Vertex {
-        
-        // TODO: const the below.
-        let X_MAX = N::ONE - N::from_bits(1);
-        let Y_MAX = N::ONE - N::from_bits(1);
-
-        if vtx_a.position.x() < N::ZERO {
-            let factor_a = -vtx_b.position.x() / (vtx_a.position.x()- vtx_b.position.x());
-            let y = (factor_a * (vtx_a.position.y() - vtx_b.position.y())) + vtx_b.position.y();
-            //println!("try clip ({}, {}) => ({}, {}) : ({}, {})", vtx_a.position.x(), vtx_a.position.y(), vtx_b.position.x(), vtx_b.position.y(), N::ZERO, y);
-            if y >= N::ZERO && y < N::ONE {
-                let factor_b = N::ONE - factor_a;
-                return Self::interpolate(vtx_a, vtx_b, wbuffer, factor_a, factor_b, self.get_screen_coords(N::ZERO, y));
-            }
-        } else if vtx_a.position.x() > X_MAX {
-            let factor_a = (X_MAX - vtx_b.position.x()) / (vtx_a.position.x() - vtx_b.position.x());
-            let y = (factor_a * (vtx_a.position.y() - vtx_b.position.y())) + vtx_b.position.y();
-            //println!("try clip ({}, {}) => ({}, {}) : ({}, {})", vtx_a.position.x(), vtx_a.position.y(), vtx_b.position.x(), vtx_b.position.y(), X_MAX, y);
-            if y >= N::ZERO && y < N::ONE {
-                let factor_b = N::ONE - factor_a;
-                return Self::interpolate(vtx_a, vtx_b, wbuffer, factor_a, factor_b, self.get_screen_coords(X_MAX, y));
-            }
-        }
-        
-        if vtx_a.position.y() < N::ZERO {
-            let factor_a = -vtx_b.position.y() / (vtx_a.position.y() - vtx_b.position.y());
-            let x = (factor_a * (vtx_a.position.x() - vtx_b.position.x())) + vtx_b.position.x();
-            //println!("try clip ({}, {}) => ({}, {}) : ({}, {})", vtx_a.position.x(), vtx_a.position.y(), vtx_b.position.x(), vtx_b.position.y(), x, N::ZERO);
-            if x >= N::ZERO && x < N::ONE {
-                let factor_b = N::ONE - factor_a;
-                return Self::interpolate(vtx_a, vtx_b, wbuffer, factor_a, factor_b, self.get_screen_coords(x, N::ZERO));
-            }
-        } else if vtx_a.position.y() > Y_MAX {
-            let factor_a = (Y_MAX - vtx_b.position.y()) / (vtx_a.position.y() - vtx_b.position.y());
-            let x = (factor_a * (vtx_a.position.x() - vtx_b.position.x())) + vtx_b.position.x();
-            //println!("try clip ({}, {}) => ({}, {}) : ({}, {})", vtx_a.position.x(), vtx_a.position.y(), vtx_b.position.x(), vtx_b.position.y(), x, Y_MAX);
-            if x >= N::ZERO && x < N::ONE {
-                let factor_b = N::ONE - factor_a;
-                return Self::interpolate(vtx_a, vtx_b, wbuffer, factor_a, factor_b, self.get_screen_coords(x, Y_MAX));
-            }
-        }
-
-        panic!("cannot find intersection!");
+        self.clipping_unit.polygon_ram.insert_polygon(staged_polygon.polygon, staged_polygon.max_y, staged_polygon.min_y);
     }
-
-    fn interpolate(vtx_a: &StagedVertex, vtx_b: &StagedVertex, wbuffer: bool, factor_a: N, factor_b: N, screen_p: Coords) -> Vertex {
-        let depth_a = if wbuffer {
-            vtx_a.position.w().to_fixed::<I23F9>()
-        } else {
-            vtx_a.position.z().to_fixed::<I23F9>() * 0x7FFF
-        };
-        let depth_b = if wbuffer {
-            vtx_b.position.w().to_fixed::<I23F9>()
-        } else {
-            vtx_b.position.z().to_fixed::<I23F9>() * 0x7FFF
-        };
-        Vertex {
-            screen_p: screen_p,
-            colour: Self::interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b),
-            tex_coords: Self::interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b),
-            depth: Self::interpolate_depth(depth_a, depth_b, factor_a, factor_b),
-        }
-    }
-    
-    // TODO: unify these and in 3d renderer
-    #[inline]
-    fn interpolate_depth(depth_a: I23F9, depth_b: I23F9, factor_a: N, factor_b: N) -> I23F9 {
-        (depth_a * factor_a.to_fixed::<I23F9>()) + (depth_b * factor_b.to_fixed::<I23F9>())
-    }
-
-    #[inline]
-    fn interpolate_vertex_colour(colour_a: Colour, colour_b: Colour, factor_a: N, factor_b: N) -> Colour {
-        let r = (N::from_num(colour_a.r) * factor_a) + (N::from_num(colour_b.r) * factor_b);
-        let g = (N::from_num(colour_a.g) * factor_a) + (N::from_num(colour_b.g) * factor_b);
-        let b = (N::from_num(colour_a.b) * factor_a) + (N::from_num(colour_b.b) * factor_b);
-        Colour {
-            r: r.to_num::<u8>(),
-            g: g.to_num::<u8>(),
-            b: b.to_num::<u8>()
-        }
-    }
-    
-    #[inline]
-    fn interpolate_tex_coords(tex_coords_a: TexCoords, tex_coords_b: TexCoords, factor_a: N, factor_b: N) -> TexCoords {
-        let s = (tex_coords_a.s.to_fixed::<N>() * factor_a) + (tex_coords_b.s.to_fixed::<N>() * factor_b);
-        let t = (tex_coords_a.t.to_fixed::<N>() * factor_a) + (tex_coords_b.t.to_fixed::<N>() * factor_b);
-        TexCoords { s: s.to_fixed(), t: t.to_fixed() }
-    }
-
 }

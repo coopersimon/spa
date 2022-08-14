@@ -1,8 +1,8 @@
 use super::{
     render::RenderingEngine,
-    types::*, geometry::N
+    types::*, geometry::N, interpolate::*
 };
-use fixed::{types::I23F9, traits::ToFixed};
+use fixed::types::I23F9;
 use crate::{
     ds::video::{memory::Engine3DVRAM, video3d::types::Vertex},
     common::colour::*,
@@ -20,7 +20,7 @@ struct Attributes {
 pub struct Software3DRenderer {
     stencil_buffer: Vec<bool>,
     attr_buffer:    Vec<Attributes>,
-    depth_buffer:   Vec<I23F9>,
+    depth_buffer:   Vec<Depth>,
 }
 
 impl Software3DRenderer {
@@ -28,7 +28,7 @@ impl Software3DRenderer {
         Self {
             stencil_buffer: vec![false; 256],
             attr_buffer:    vec![Default::default(); 256],
-            depth_buffer:   vec![I23F9::ZERO; 256],
+            depth_buffer:   vec![Depth::ZERO; 256],
         }
     }
 
@@ -120,7 +120,7 @@ impl Software3DRenderer {
                 let factor_b = (x - vtx_a.screen_p.x) * x_diff;
                 let factor_a = N::ONE - factor_b;
 
-                let depth = Self::interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
+                let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
 
                 // Evaluate depth
                 if self.depth_buffer[x_idx as usize] <= depth { // TODO: remove fractional part?
@@ -132,11 +132,11 @@ impl Software3DRenderer {
 
                 // Interpolate vertex colour
                 let vtx_colour = ColourAlpha {
-                    col: Self::interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b),
+                    col: interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b),
                     alpha: 0x1F
                 };
 
-                let tex_coords = Self::interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
+                let tex_coords = interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
                 let tex_colour = Self::lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
 
                 let frag_colour = if let Some(tex_colour) = tex_colour {
@@ -191,7 +191,7 @@ impl Software3DRenderer {
             let factor_b = (x - vtx_a.screen_p.x) * x_diff;
             let factor_a = N::ONE - factor_b;
 
-            let depth = Self::interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
+            let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
 
             // Evaluate depth
             if self.depth_buffer[x_idx as usize] <= depth { // TODO: remove fractional part?
@@ -215,11 +215,11 @@ impl Software3DRenderer {
 
             // Interpolate vertex colour
             let vtx_colour = ColourAlpha {
-                col: Self::interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b),
+                col: interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b),
                 alpha: polygon.attrs.alpha()
             };
             
-            let tex_coords = Self::interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
+            let tex_coords = interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
             let tex_colour = Self::lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
 
             let frag_colour = if let Some(tex_colour) = tex_colour {
@@ -281,9 +281,9 @@ impl Software3DRenderer {
             let factor_b = N::ONE - factor_a;
 
             // Interpolate attributes
-            let depth = Self::interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
-            let frag_colour = Self::interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b);
-            let tex_coords = Self::interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
+            let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
+            let frag_colour = interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b);
+            let tex_coords = interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
 
             let vertex = Vertex {
                 screen_p:   Coords { x: intersect_x, y: y },
@@ -311,30 +311,6 @@ impl Software3DRenderer {
         } else {
             None
         }
-    }
-
-    #[inline]
-    fn interpolate_depth(depth_a: I23F9, depth_b: I23F9, factor_a: N, factor_b: N) -> I23F9 {
-        (depth_a * factor_a.to_fixed::<I23F9>()) + (depth_b * factor_b.to_fixed::<I23F9>())
-    }
-
-    #[inline]
-    fn interpolate_vertex_colour(colour_a: Colour, colour_b: Colour, factor_a: N, factor_b: N) -> Colour {
-        let r = (N::from_num(colour_a.r) * factor_a) + (N::from_num(colour_b.r) * factor_b);
-        let g = (N::from_num(colour_a.g) * factor_a) + (N::from_num(colour_b.g) * factor_b);
-        let b = (N::from_num(colour_a.b) * factor_a) + (N::from_num(colour_b.b) * factor_b);
-        Colour {
-            r: r.to_num::<u8>(),
-            g: g.to_num::<u8>(),
-            b: b.to_num::<u8>()
-        }
-    }
-    
-    #[inline]
-    fn interpolate_tex_coords(tex_coords_a: TexCoords, tex_coords_b: TexCoords, factor_a: N, factor_b: N) -> TexCoords {
-        let s = (tex_coords_a.s.to_fixed::<N>() * factor_a) + (tex_coords_b.s.to_fixed::<N>() * factor_b);
-        let t = (tex_coords_a.t.to_fixed::<N>() * factor_a) + (tex_coords_b.t.to_fixed::<N>() * factor_b);
-        TexCoords { s: s.to_fixed(), t: t.to_fixed() }
     }
 
     /// Lookup texture colour.
@@ -718,11 +694,11 @@ impl Software3DRenderer {
                 alpha: if shadow_mode {buffer_colour.alpha} else {frag_colour.alpha}
             }
         } else {
-            let frag_alpha = (frag_colour.alpha + 1) as u32;
-            let buffer_alpha = (31 - frag_colour.alpha) as u32;
-            let r = ((frag_colour.col.r as u32) * frag_alpha) + ((buffer_colour.col.r as u32) * buffer_alpha);
-            let g = ((frag_colour.col.g as u32) * frag_alpha) + ((buffer_colour.col.g as u32) * buffer_alpha);
-            let b = ((frag_colour.col.b as u32) * frag_alpha) + ((buffer_colour.col.b as u32) * buffer_alpha);
+            let frag_alpha = (frag_colour.alpha + 1) as u16;
+            let buffer_alpha = (31 - frag_colour.alpha) as u16;
+            let r = ((frag_colour.col.r as u16) * frag_alpha) + ((buffer_colour.col.r as u16) * buffer_alpha);
+            let g = ((frag_colour.col.g as u16) * frag_alpha) + ((buffer_colour.col.g as u16) * buffer_alpha);
+            let b = ((frag_colour.col.b as u16) * frag_alpha) + ((buffer_colour.col.b as u16) * buffer_alpha);
             let a = if shadow_mode {
                 buffer_colour.alpha
             } else {

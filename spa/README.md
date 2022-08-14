@@ -65,31 +65,35 @@ DS:
 
 ### DS Status of selected games:
 - Age of Empires: Age of Kings: Loads main menu, freezes
-- Animal Crossing Wild World: (FLASH): Loads up titles shows menu and gameplay. 3D visuals
+- Animal Crossing Wild World: (FLASH): Loads up titles shows menu and gameplay. 3D visuals look ok.
 - Chrono Trigger: Sets up save RAM, then shows intro video. Game loads up and runs ok!
 - Dragon Quest IX: Shows intro cards and video. Magenta screen when game begins.
 - Dragon Quest IV: Black screen - getting stuck in halt loop
 - Dragon Quest V: Black screen
 - Dragon Quest VI: Black screen
-- Final Fantasy Tactics A2: Shows a screen after loading for a bit, then goes black.
+- Final Fantasy Tactics A2: Loads up and game starts. Flickering (capture issues?). Some broken graphics.
 - Final Fantasy III: Sets up save ram, shows titles, now locks up.
-- Final Fantasy IV: Sets up save ram, shows titles, plays intro video, main menu, 3D visuals
-- Hotel Dusk: Room 215: Shows right/left handed text while flickering.
+- Final Fantasy IV: Works well (with some 3d visual issues) up until after first battle in gameplay.
+- GTA Chinatown Wars: Shows some broken screens on start, then crashes when gameplay starts.
+- Hotel Dusk: Room 215: Shows titles and initial screen with some graphical issues (capture issues?). Needs touchscreen?
 - Kirby Super Star: Initialises save data, then shows some screens with incorrect colour. Is it trying to blend stuff here?
 - Mario Kart DS: (FLASH) Titles + menu work ok, 3D visuals look decent now.
 - Mario and Luigi: Bowser's Inside Story: Blank screen (firmware/save issues)
 - Mario and Luigi: Partners in Time: Loads up mostly ok, menu title 3D is ok, intro has serious graphical issues
-- Mario Party DS: 2D stuff looks ok. 3D visuals.
+- Mario Party DS: 2D stuff looks ok. 3D visuals, crash when loading minigame (VRAM access failed)
 - Metroid Prime Hunters: Initial titles are broken. Shows intro video. Gets to menu then locks up.
-- New Super Mario Bros: Intro + menu is ok, 3D visuals (very broken)
-- Phantom Hourglass: Just white screen now.
+- New Super Mario Bros: Intro + menu is ok, 3D visuals (very broken - missing graphics + blending issues)
+- LoZ Phantom Hourglass: Just white screen now.
+- LoZ Spirit Tracks: White screen.
 - Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. Gameplay starts up ok, with some graphical glitches on lower screen.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
-- Pokemon Diamond: (FLASH) 2d elements of game work ok, 3D in intro looks reasonable, 3D in title has vanished? (since changing how w2 normalises vertex coords)
+- Pokemon Diamond: (FLASH) 2d elements of game work ok, 3D in intro looks reasonable, 3D in title looks ok but texture moves too quickly...
 - Pokemon Black: Black screen
-- Pokemon HeartGold: 2d elements of game work ok, 3D in intro looks reasonable, 3D in title has vanished? (since changing how w2 normalises vertex coords)
+- Pokemon HeartGold: 2d elements of game work ok, 3D in intro looks reasonable, 3D in title is quite broken
 - Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.
-- Super Mario 64 DS: Shows an initial nintendo logo, takes a long time to load before showing menus. 3D is a bit borked.
+- Super Mario 64 DS: Shows an initial nintendo logo, takes a long time to load before showing menus. 3D in intro looks mostly fine but marios eyes are very creepy. Difficult to continue without touchscreen
+- Tony Hawk's Downhill Jam: Shows titles, then black screen
+- Tony Hawk's American Sk8land: Shows titles, menus, then gameplay crashes after matrix overflow
 - The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)
 - Yoshi's Island DS: Shows titles, intro, menu, pre-gameplay video, and gameplay correctly!
 
@@ -99,9 +103,7 @@ DS:
     - Correct clipping around screen edges
     - Some depth issues
     - Rasterising precision improvement
-    - Fix some broken colouring
     - Lighting issues
-    - Toon + highlight shading
     - Post-processing (fog + edge + anti-aliasing)
 - 2D main RAM video mode
 - Engine A video capture & blending fixes
