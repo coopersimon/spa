@@ -587,7 +587,7 @@ impl GeometryEngine {
             };
 
             intersects_far_plane = intersects_far_plane || (
-                vertex.position.z() > I23F9::ONE
+                vertex.position.z() >= I23F9::ONE
             );
         }
 
@@ -649,15 +649,16 @@ impl GeometryEngine {
             if self.staged_polygon[stage_index].needs_clip.unwrap() {
                 let vertex = &self.staged_polygon[stage_index];
 
+                let prev_index = self.output_order[(self.stage_size + n - 1) % self.stage_size];
+                let stage_index_prev = (self.staged_index + prev_index) % self.stage_size;
+                let prev_vtx = &self.staged_polygon[stage_index_prev];
+                self.clipping_unit.clip(vertex, prev_vtx, &mut out_clips, &mut in_clips, &mut staged_polygon);
+                
                 let next_index = self.output_order[(n + 1) % self.stage_size];
-                let stage_index_1 = (self.staged_index + next_index) % self.stage_size;
-                let v1 = &self.staged_polygon[stage_index_1];
-                self.clipping_unit.clip(vertex, v1, &mut out_clips, &mut in_clips, &mut staged_polygon);
+                let stage_index_next = (self.staged_index + next_index) % self.stage_size;
+                let next_vtx = &self.staged_polygon[stage_index_next];
+                self.clipping_unit.clip(vertex, next_vtx, &mut out_clips, &mut in_clips, &mut staged_polygon);
 
-                let next_index = self.output_order[(self.stage_size + n - 1) % self.stage_size];
-                let stage_index_2 = (self.staged_index + next_index) % self.stage_size;
-                let v2 = &self.staged_polygon[stage_index_2];
-                self.clipping_unit.clip(vertex, v2, &mut out_clips, &mut in_clips, &mut staged_polygon);
             } else {
                 // TODO: store vtx indexes in separate place
                 let vertex = &mut self.staged_polygon[stage_index];
@@ -680,6 +681,8 @@ impl GeometryEngine {
             }
         }
 
-        self.clipping_unit.polygon_ram.insert_polygon(staged_polygon.polygon, staged_polygon.max_y, staged_polygon.min_y);
+        if !staged_polygon.polygon.vertex_indices.is_empty() && staged_polygon.polygon.vertex_indices.len() >= 3 {
+            self.clipping_unit.polygon_ram.insert_polygon(staged_polygon.polygon, staged_polygon.max_y, staged_polygon.min_y);
+        }
     }
 }
