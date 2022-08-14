@@ -633,10 +633,11 @@ impl GeometryEngine {
     fn clip_and_emit_polygon(&mut self) {
         let mut staged_polygon = StagedPolygon {
             polygon: Polygon {
-                attrs:      self.polygon_attrs,
-                tex:        self.texture_attrs,
-                palette:    self.tex_palette,
-                vertex_indices: Vec::new(),
+                attrs:          self.polygon_attrs,
+                tex:            self.texture_attrs,
+                palette:        self.tex_palette,
+                num_vertices:   0,
+                vertex_indices: [0; 8],
             },
             max_y: N::ZERO,
             min_y: N::MAX
@@ -670,7 +671,7 @@ impl GeometryEngine {
                 staged_polygon.min_y = std::cmp::min(staged_polygon.min_y, vertex.screen_p.y);
 
                 if let Some(idx) = vertex.idx {
-                    staged_polygon.polygon.vertex_indices.push(idx);
+                    staged_polygon.polygon.add_vertex_index(idx);
                 } else {
                     let idx = self.clipping_unit.polygon_ram.insert_vertex(Vertex {
                         screen_p:   vertex.screen_p.clone(),
@@ -679,7 +680,7 @@ impl GeometryEngine {
                         tex_coords: vertex.tex_coords.clone()
                     });
                     vertex.idx = Some(idx);
-                    staged_polygon.polygon.vertex_indices.push(idx);
+                    staged_polygon.polygon.add_vertex_index(idx);
                 }
             }
         }

@@ -24,7 +24,7 @@ pub struct StagedVertex {
     pub depth:      Depth,
 
     pub needs_clip: Option<bool>,
-    pub idx:        Option<usize>,
+    pub idx:        Option<u16>,
 }
 
 pub struct StagedPolygon {
@@ -75,7 +75,7 @@ impl ClippingUnit {
         staged_polygon.max_y = std::cmp::max(staged_polygon.max_y, vertex.screen_p.y);
         staged_polygon.min_y = std::cmp::min(staged_polygon.min_y, vertex.screen_p.y);
         let idx = self.polygon_ram.insert_vertex(vertex);
-        staged_polygon.polygon.vertex_indices.push(idx);
+        staged_polygon.polygon.add_vertex_index(idx);
     }
     
     /// Clip point a, based on the line between "a" and "b".
