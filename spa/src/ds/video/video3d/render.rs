@@ -113,7 +113,7 @@ impl RenderingEngine {
     pub fn set_fog_table(&mut self, index: usize, data: u32) {
         let bytes = u32::to_le_bytes(data);
         for (byte, table_val) in bytes.iter().zip(self.fog_table.iter_mut().skip(index * 4).take(4)) {
-            *table_val = *byte;
+            *table_val = *byte & 0x7F;
         }
     }
 }
