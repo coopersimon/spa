@@ -41,11 +41,11 @@ impl Software3DRenderer {
         self.draw_trans_polygons(render_engine, vram, target, line);
 
         if render_engine.control.contains(Display3DControl::EDGE_MARKING) {
-            // TODO: Edge marking in buffer
+            //println!("edge");
         }
 
         if render_engine.control.contains(Display3DControl::FOG_ENABLE) {
-            // TODO: Fog in buffer
+            self.draw_fog(render_engine, target);
         }
 
         // Anti-aliasing (after 2d-blend?)
@@ -117,7 +117,7 @@ impl Software3DRenderer {
 
             // TODO: wireframe
             for x_idx in vtx_a.screen_p.x.to_num::<i16>()..=vtx_b.screen_p.x.to_num::<i16>() {
-                let x = N::from_num(x_idx);
+                let x = N::from_num(x_idx) + N::from_num(0.5);
                 let factor_b = (x - vtx_a.screen_p.x) * x_diff;
                 let factor_a = N::ONE - factor_b;
 
@@ -184,7 +184,7 @@ impl Software3DRenderer {
                 continue;
             }
 
-            let x = N::from_num(x_idx);
+            let x = N::from_num(x_idx) + N::from_num(0.5);
             let factor_b = (x - vtx_a.screen_p.x) * x_diff;
             let factor_a = N::ONE - factor_b;
 
@@ -219,9 +219,9 @@ impl Software3DRenderer {
             } else {
                 Self::blend_fragment_colour(render_engine, mode, vtx_colour)
             };
-            if render_engine.control.contains(Display3DControl::ALPHA_TEST_ENABLE) && frag_colour.alpha < render_engine.alpha_test {
+            if frag_colour.alpha == 0 {
                 continue;
-            } else if frag_colour.alpha == 0 {
+            } else if render_engine.control.contains(Display3DControl::ALPHA_TEST_ENABLE) && frag_colour.alpha < render_engine.alpha_test {
                 continue;
             } else if frag_colour.alpha != 0x1F && self.attr_buffer[x_idx as usize].trans_id == id {
                 continue;
@@ -237,8 +237,72 @@ impl Software3DRenderer {
                 target[x_idx as usize] = frag_colour;
             }
             self.depth_buffer[x_idx as usize] = depth;
-            self.attr_buffer[x_idx as usize].trans_id = id;
-            self.attr_buffer[x_idx as usize].fog = self.attr_buffer[x_idx as usize].fog && polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
+            if frag_colour.alpha != 0x1F {
+                self.attr_buffer[x_idx as usize].trans_id = id;
+                self.attr_buffer[x_idx as usize].fog = self.attr_buffer[x_idx as usize].fog && polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
+            } else {
+                self.attr_buffer[x_idx as usize].opaque_id = id;
+                self.attr_buffer[x_idx as usize].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
+            }
+        }
+    }
+
+    fn draw_fog(&mut self, render_engine: &RenderingEngine, target: &mut [ColourAlpha]) {
+        let fog_shift = (render_engine.control & Display3DControl::FOG_SHIFT).bits() >> 8;
+        let fog_interval = 0x400 >> fog_shift;
+        let fog_min = render_engine.fog_offset + fog_interval;
+        let fog_max = render_engine.fog_offset + (fog_interval << 5);
+        let fog_diff = Depth::from_num(fog_interval);
+        for x in 0..=255 {
+            if !self.attr_buffer[x].fog {
+                continue;
+            }
+
+            // Upper 15 bits of depth.
+            let depth = (self.depth_buffer[x].to_num::<i32>() & 0x7FFF) as u16;
+            let fog_density = if depth < fog_min {
+                render_engine.fog_table[0]
+            } else if depth >= fog_max  {
+                render_engine.fog_table[31]
+            } else {
+                // Interpolate fog.
+                // TODO: what precision?
+                let fog_index = (Depth::from_num(depth) - Depth::from_num(fog_min)) / fog_diff;
+                let a = render_engine.fog_table[fog_index.to_num::<usize>()];
+                let b = render_engine.fog_table[fog_index.ceil().to_num::<usize>()];
+                let frac = fog_index.frac();
+                let density = Depth::from_num(a) * (Depth::ONE - frac) + Depth::from_num(b) * frac;
+                density.to_num::<u8>()
+            } as u16;
+
+            if render_engine.control.contains(Display3DControl::FOG_MODE) {
+                if fog_density == 127 {
+                    target[x].alpha = render_engine.fog_alpha;
+                } else {
+                    let buffer_density = 128 - fog_density;
+                    let alpha = (target[x].alpha as u16) * buffer_density + (render_engine.fog_alpha as u16) * fog_density;
+                    target[x].alpha = (alpha >> 7) as u8;
+                }
+            } else {
+                if fog_density == 127 {
+                    target[x].col = render_engine.fog_colour;
+                    target[x].alpha = render_engine.fog_alpha;
+                } else {
+                    let buffer_density = 128 - fog_density;
+                    let r = (target[x].col.r as u16) * buffer_density + (render_engine.fog_colour.r as u16) * fog_density;
+                    let g = (target[x].col.g as u16) * buffer_density + (render_engine.fog_colour.g as u16) * fog_density;
+                    let b = (target[x].col.b as u16) * buffer_density + (render_engine.fog_colour.b as u16) * fog_density;
+                    let alpha = (target[x].alpha as u16) * buffer_density + (render_engine.fog_alpha as u16) * fog_density;
+                    target[x] = ColourAlpha {
+                        col: Colour {
+                            r: (r >> 7) as u8,
+                            g: (g >> 7) as u8,
+                            b: (b >> 7) as u8
+                        },
+                        alpha: (alpha >> 7) as u8
+                    }
+                }
+            }
         }
     }
 }
