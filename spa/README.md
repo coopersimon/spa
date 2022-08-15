@@ -85,13 +85,14 @@ DS:
 - New Super Mario Bros: Intro + menu is ok, 3D visuals (very broken - missing graphics + blending issues)
 - LoZ Phantom Hourglass: Just white screen now.
 - LoZ Spirit Tracks: White screen.
+- Nintendogs (Labrador): Intro is mostly OK, top screen flickering (capture issues). Crashes trying to access WRAM (?)
 - Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. Gameplay starts up ok, with some graphical glitches on lower screen.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
 - Pokemon Diamond: (FLASH) 2d elements of game work ok, 3D in intro looks good, 3D in title looks good
 - Pokemon Black: Black screen
 - Pokemon HeartGold: 2d elements of game work ok, 3D in intro good, 3D in title is quite broken
-- Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.
-- Super Mario 64 DS: Shows an initial nintendo logo, takes a long time to load before showing menus. 3D in intro looks mostly fine but marios eyes are very creepy (texture matrix issue?). Difficult to continue without touchscreen
+- Pokemon Ranger: Crashes due to trying to emit polygon without a primitive type (???)
+- Super Mario 64 DS: Loads up ok, star in intro looks wrong (specular lighting/texture issues). 3D in menu looks good. Actual game has polygons flying everywhere in front of scene + perspective issues
 - Tony Hawk's Downhill Jam: Shows titles, then black screen
 - Tony Hawk's American Sk8land: Shows titles, menus, then gameplay crashes after matrix overflow
 - The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)
@@ -103,7 +104,7 @@ DS:
     - Clip in 3D space?
     - Rasterising precision improvement
     - Lighting issues (?)
-    - Post-processing (fog + edge + anti-aliasing)
+    - Post-processing (edge + anti-aliasing)
     - Perspective correct tex mapping needed
 - 2D main RAM video mode
 - Engine A video capture & blending fixes
