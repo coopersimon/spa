@@ -178,6 +178,10 @@ impl Polygon {
         (alpha == 0 || alpha == 31) && (tex_format != 1 && tex_format != 6)
     }
 
+    pub fn render_eq_depth(&self) -> bool {
+        self.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH)
+    }
+
     pub fn add_vertex_index(&mut self, index: u16) {
         self.vertex_indices[self.num_vertices as usize] = index;
         self.num_vertices += 1;

@@ -8,7 +8,7 @@ use matrix::*;
 use lighting::*;
 use clip::*;
 
-use fixed::{types::{I4F12, I20F12, I23F9, I13F3, I12F4, I40F24}, traits::ToFixed};
+use fixed::{types::{I4F12, I20F12, I23F9, I12F4, I40F24}, traits::ToFixed};
 use crate::utils::{
     bits, bits::u32, bytes
 };
@@ -34,14 +34,13 @@ const TRI_STRIP_ORDER_B: [usize; 3] = [1, 0, 2];
 
 const QUAD_ORDER: [usize; 4] = [0, 1, 2, 3];
 const QUAD_STRIP_ORDER: [usize; 4] = [0, 1, 3, 2];
-//const QUAD_STRIP_ORDER_B: [usize; 4] = [2, 3, 1, 0];
 
 pub struct GeometryEngine {
     pub clipping_unit:  ClippingUnit,
     /// Use W or Z value for depth-buffering.
     w_buffer:       bool,
     /// Test w against this value for 1-dot polygons.
-    dot_polygon_w:  I13F3,
+    dot_polygon_w:  Depth,
 
     pub matrices:   Box<MatrixUnit>,
     lighting:       Box<LightingUnit>,
@@ -81,7 +80,7 @@ impl GeometryEngine {
         Self {
             clipping_unit:  ClippingUnit::new(),
             w_buffer:       false,
-            dot_polygon_w:  I13F3::from_bits(0x7FFF),
+            dot_polygon_w:  Depth::from_bits(0x7FFF << 6),
 
             matrices:       Box::new(MatrixUnit::new()),
             lighting:       Box::new(LightingUnit::new()),
@@ -106,8 +105,8 @@ impl GeometryEngine {
     }
 
     pub fn set_dot_polygon_depth(&mut self, data: u16) {
-        let bits = (data & 0x7FFF) as i16;
-        self.dot_polygon_w = I13F3::from_bits(bits);
+        let bits = (data & 0x7FFF) as i32;
+        self.dot_polygon_w = Depth::from_bits(bits << 6);
     }
 }
 
@@ -448,7 +447,7 @@ impl GeometryEngine {
         let depth = if self.w_buffer {
             w.to_fixed::<Depth>()
         } else {
-            z.to_fixed::<Depth>() * 0x7FFF
+            (z * 0x7FFF).to_fixed::<Depth>()
         };
         
         self.staged_polygon[self.staged_index] = StagedVertex {

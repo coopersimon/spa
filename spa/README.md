@@ -87,9 +87,9 @@ DS:
 - LoZ Spirit Tracks: White screen.
 - Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. Gameplay starts up ok, with some graphical glitches on lower screen.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
-- Pokemon Diamond: (FLASH) 2d elements of game work ok, 3D in intro looks good except for depth flickering, 3D in title looks good
+- Pokemon Diamond: (FLASH) 2d elements of game work ok, 3D in intro looks good, 3D in title looks good
 - Pokemon Black: Black screen
-- Pokemon HeartGold: 2d elements of game work ok, 3D in intro good except for depth flickering, 3D in title is quite broken
+- Pokemon HeartGold: 2d elements of game work ok, 3D in intro good, 3D in title is quite broken
 - Pokemon Ranger: Slow start but does boot ok and shows menu. Seems to require touchscreen afterwards.
 - Super Mario 64 DS: Shows an initial nintendo logo, takes a long time to load before showing menus. 3D in intro looks mostly fine but marios eyes are very creepy (texture matrix issue?). Difficult to continue without touchscreen
 - Tony Hawk's Downhill Jam: Shows titles, then black screen
@@ -101,7 +101,6 @@ DS:
 - Audio
 - 3D Video:
     - Clip in 3D space?
-    - Fix some depth issues
     - Rasterising precision improvement
     - Lighting issues (?)
     - Post-processing (fog + edge + anti-aliasing)
