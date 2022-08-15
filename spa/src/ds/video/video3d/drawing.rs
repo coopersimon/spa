@@ -123,12 +123,7 @@ impl Software3DRenderer {
 
                 let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
 
-                // Evaluate depth
-                if polygon.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH) {
-                    if self.depth_buffer[x_idx as usize].to_num::<i32>() < depth.to_num::<i32>() {
-                        continue;
-                    }
-                } else if self.depth_buffer[x_idx as usize] <= depth {
+                if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[x_idx as usize], depth) {
                     continue;
                 }
 
@@ -195,16 +190,7 @@ impl Software3DRenderer {
 
             let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
 
-            // Evaluate depth
-            if polygon.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH) {
-                if self.depth_buffer[x_idx as usize].to_num::<i32>() < depth.to_num::<i32>() {
-                    if id == 0 && mode == PolygonMode::Shadow {
-                        // Shadow polygon mask
-                        self.stencil_buffer[x_idx as usize] = true;
-                    }
-                    continue;
-                }
-            } else if self.depth_buffer[x_idx as usize] <= depth {
+            if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[x_idx as usize], depth) {
                 if id == 0 && mode == PolygonMode::Shadow {
                     // Shadow polygon mask
                     self.stencil_buffer[x_idx as usize] = true;
@@ -314,6 +300,15 @@ impl Software3DRenderer {
             }
         } else {
             None
+        }
+    }
+
+    /// Returns true if the fragment passes the depth test.
+    fn test_depth(render_eq: bool, buffer_depth: Depth, frag_depth: Depth) -> bool {
+        if render_eq {
+            (buffer_depth - Depth::ONE) >= frag_depth || (buffer_depth + Depth::ONE) >= frag_depth
+        } else {
+            buffer_depth > frag_depth
         }
     }
 
