@@ -83,8 +83,8 @@ dependencies = [
 
 [[package]]
 name = "arm"
-version = "0.4.0"
-source = "git+https://github.com/coopersimon/e-arm#5c688fec670d9279c6e285578e1b2713c1e23326"
+version = "0.5.0"
+source = "git+https://github.com/coopersimon/e-arm#870a7d5f467d9d11ac1cce7234c7f4deb9a61032"
 dependencies = [
  "bitflags",
  "dynasmrt",
@@ -1076,9 +1076,9 @@ checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
 
 [[package]]
 name = "iana-time-zone"
-version = "0.1.44"
+version = "0.1.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "808cf7d67cf4a22adc5be66e75ebdf769b3f2ea032041437a7061f97a63dad4b"
+checksum = "ef5528d9c2817db4e10cc78f8d4c8228906e5854f389ff6b076cee3572a09d35"
 dependencies = [
  "android_system_properties",
  "core-foundation-sys 0.8.3",
@@ -1645,9 +1645,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.13.0"
+version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18a6dbe30758c9f83eb00cbea4ac95966305f5a7772f3f42ebfc7fc7eddbd8e1"
+checksum = "074864da206b4973b84eb91683020dbefd6a8c3f0f38e054d93954e891935e4e"
 
 [[package]]
 name = "owned_ttf_parser"

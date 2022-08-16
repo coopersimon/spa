@@ -106,9 +106,9 @@ DS:
     - Lighting issues (?)
     - Post-processing (edge + anti-aliasing)
     - Perspective correct tex mapping needed
+    - Blending with 2D components (use buffer alpha value)
 - 2D main RAM video mode
 - Engine A video capture & blending fixes
-- Touchscreen precision
 - Microphone
 - Save RAM
 - Booting via BIOS
