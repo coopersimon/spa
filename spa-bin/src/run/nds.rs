@@ -235,6 +235,7 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
     let mut lower_buffer = vec![0_u8; screen_tex_size];
     let mut screen_buffer = Vec::new();
 
+    let mut clicked = false;
     let mut coords = None;
     
     event_loop.run(move |event, _, control_flow| {
@@ -352,6 +353,9 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
                     } else {
                         coords = None;
                     }
+                    if clicked {
+                        nds.touchscreen_pressed(coords);
+                    }
                 },
                 WindowEvent::MouseInput {
                     state,
@@ -359,8 +363,14 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
                     ..
                 } => {
                     match state {
-                        ElementState::Pressed => nds.touchscreen_pressed(coords),
-                        ElementState::Released => nds.touchscreen_pressed(None),
+                        ElementState::Pressed => {
+                            nds.touchscreen_pressed(coords);
+                            clicked = true;
+                        },
+                        ElementState::Released => {
+                            nds.touchscreen_pressed(None);
+                            clicked = false;
+                        },
                     }
                 },
                 WindowEvent::KeyboardInput {

@@ -51,11 +51,13 @@ impl Touchscreen {
     /// Write values from touchscreen input.
     /// X and Y should be 0.0 - 1.0
     pub fn write_tsc_values(&mut self, coords: Option<(f64, f64)>) {
-        const X_DIFF: f64 = (0xED0 - 0x100) as f64;
-        const Y_DIFF: f64 = (0xF20 - 0x0B0) as f64;
+        //const X_DIFF: f64 = (0xED0 - 0x100) as f64;
+        //const Y_DIFF: f64 = (0xF20 - 0x0B0) as f64;
         if let Some((x, y)) = coords {
-            self.x = (x * X_DIFF) as u16;
-            self.y = (y * Y_DIFF) as u16;
+            //self.x = ((x * X_DIFF) as u16) + 0x100;
+            //self.y = ((y * Y_DIFF) as u16) + 0x0B0;
+            self.x = (x * (0xFF0 as f64)) as u16;
+            self.y = (y * (0xBF0 as f64)) as u16;
         } else {
             self.x = X_RELEASED;
             self.y = Y_RELEASED;
@@ -73,23 +75,23 @@ impl Touchscreen {
             match self.channel {
                 Idle => 0,
                 Temp0 => 0,
-                TouchscreenY(hi) => if hi {
-                    let out = (self.y >> 5) as u8;
+                TouchscreenY(lo) => if lo {
+                    let out = (self.y << 3) as u8;
                     self.channel = TouchscreenY(false);
                     out
                 } else {
-                    let out = (self.y << 3) as u8;
+                    let out = (self.y >> 5) as u8;
                     out
                 },
                 Battery => 0,
                 TouchscreenZ1 => 0,
                 TouchscreenZ2 => 0,
-                TouchscreenX(hi) => if hi {
-                    let out = (self.x >> 5) as u8;
-                    self.channel = TouchscreenY(false);
+                TouchscreenX(lo) => if lo {
+                    let out = (self.x << 3) as u8;
+                    self.channel = TouchscreenX(false);
                     out
                 } else {
-                    let out = (self.x << 3) as u8;
+                    let out = (self.x >> 5) as u8;
                     out
                 },
                 AUX => 0,
