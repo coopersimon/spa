@@ -41,7 +41,7 @@ impl Software3DRenderer {
         self.draw_trans_polygons(render_engine, vram, target, line);
 
         if render_engine.control.contains(Display3DControl::EDGE_MARKING) {
-            //println!("edge");
+            self.mark_edges(render_engine, target);
         }
 
         if render_engine.control.contains(Display3DControl::FOG_ENABLE) {
@@ -236,11 +236,15 @@ impl Software3DRenderer {
             } else {
                 target[x_idx as usize] = frag_colour;
             }
-            self.depth_buffer[x_idx as usize] = depth;
+
             if frag_colour.alpha != 0x1F {
+                if polygon.attrs.contains(PolygonAttrs::ALPHA_DEPTH) {
+                    self.depth_buffer[x_idx as usize] = depth;
+                }
                 self.attr_buffer[x_idx as usize].trans_id = id;
                 self.attr_buffer[x_idx as usize].fog = self.attr_buffer[x_idx as usize].fog && polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
             } else {
+                self.depth_buffer[x_idx as usize] = depth;
                 self.attr_buffer[x_idx as usize].opaque_id = id;
                 self.attr_buffer[x_idx as usize].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
             }
@@ -304,6 +308,10 @@ impl Software3DRenderer {
                 }
             }
         }
+    }
+
+    fn mark_edges(&mut self, render_engine: &RenderingEngine, target: &mut [ColourAlpha]) {
+        // TODO
     }
 }
 

@@ -4,6 +4,7 @@ use fixed::types::I24F8;
 use crate::utils::bits::u8;
 
 /// Colour special effect
+#[derive(PartialEq)]
 pub enum ColourEffect {
     None,
     AlphaBlend,

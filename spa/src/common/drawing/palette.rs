@@ -7,7 +7,7 @@ use crate::common::colour::Colour;
 pub struct ObjectPixel {
     pub colour:     ColType,
     pub priority:   u8,
-    pub obj_type:   ObjType,
+    pub obj_type:   BlendType,
 }
 
 /// A variable colour.
@@ -21,15 +21,17 @@ pub enum ColType {
     Direct(u16)
 }
 
-/// Type of object for blending.
+/// Type of pixel for blending.
 #[derive(Clone, Copy)]
-pub enum ObjType {
-    /// Not an object, or not for blending.
+pub enum BlendType {
+    /// Maybe for blending. Used for 2D BGs, normal Objects, and backdrop.
     None,
-    /// For blending.
+    /// Object used for alpha blending.
     SemiTransparent,
     /// NDS bitmap object, with alpha coefficient.
-    Bitmap(u16)
+    Bitmap(u16),
+    /// NDS 3D pixel, with alpha coefficient.
+    BG3D(u16)
 }
 
 /// The current palette of colours.

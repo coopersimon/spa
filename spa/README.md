@@ -72,10 +72,10 @@ DS:
 - Dragon Quest IV: Black screen - getting stuck in halt loop
 - Dragon Quest V: Black screen
 - Dragon Quest VI: Black screen
-- Final Fantasy Tactics A2: Loads up and game starts. Flickering (capture issues?). Some broken graphics.
+- Final Fantasy Tactics A2: Loads up and game starts. Flickering (capture issues?). Some broken graphics. Freezes when gameplay begins (?)
 - Final Fantasy III: Sets up save ram, shows titles, now locks up.
 - Final Fantasy IV: Works well (with some 3d visual issues) up until after first battle in gameplay. Cutscene in castle has broken visuals ontop of 3D (2d issue?)
-- Final Fantasy: 4 Heroes of Light: Game starts kind of OK, 3D works but 2D has visibility issues (blending issues with 3d layer). Actual gameplay has black screen.
+- Final Fantasy: 4 Heroes of Light: Game starts OK, 2D has visibility issues in menu. 3D is pretty good but has some precision issues.
 - GTA Chinatown Wars: Titles & menu looks OK, intro 3D is broken
 - Hotel Dusk: Room 215: Mostly OK, some flickering and missing graphics (capture issues?)
 - Inazuma Eleven: Seems to work OK.
@@ -85,7 +85,7 @@ DS:
 - Mario and Luigi: Partners in Time: Loads up mostly ok, menu title 3D is ok, intro has serious graphical issues
 - Mario Party DS: 2D stuff looks ok. 3D visuals, crash when loading minigame (VRAM ext palette access failed) + now broken trying to write 0xCC into RTC
 - Metroid Prime Hunters: Initial titles are broken. Shows intro video. Gets to menu then locks up.
-- New Super Mario Bros: Intro + menu is ok, 3D visuals (very broken - missing graphics + blending issues)
+- New Super Mario Bros: Intro + menu is ok, top background layer is not visible, precision issues with graphics
 - LoZ Phantom Hourglass: Just white screen now.
 - LoZ Spirit Tracks: White screen.
 - LEGO Lord of the Rings: Initial title, save RAM op B
@@ -97,7 +97,7 @@ DS:
 - Pokemon Diamond: (FLASH) 2d elements of game work ok, 3D in intro looks good, 3D in title looks good
 - Pokemon Black: Black screen
 - Pokemon HeartGold: 2d elements of game work ok, 3D in intro good, 3D in title is quite broken
-- Pokemon Ranger: Mostly OK, blending issues with 3D combining with 2D.
+- Pokemon Ranger: Mostly OK, 2D components are rendered as 3D and there are some precision issues.
 - Shin Megami Tensei: Strange Journey: Black screen
 - Super Mario 64 DS: Loads up ok, star in intro looks wrong (specular lighting/texture issues). 3D in menu looks good. Actual game has polygons flying everywhere in front of scene + perspective issues
 - Super Scribblenauts: Mostly OK, blending issues with 3D combining with 2D.

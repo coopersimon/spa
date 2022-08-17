@@ -312,11 +312,11 @@ impl SoftwareRenderer {
                     obj_window[x as usize] = true;
                 } else {
                     let obj_type = if bitmap {
-                        ObjType::Bitmap((object.palette_bank() + 1) as u16)
+                        BlendType::Bitmap((object.palette_bank() + 1) as u16)
                     } else if semi_transparent {
-                        ObjType::SemiTransparent
+                        BlendType::SemiTransparent
                     } else {
-                        ObjType::None
+                        BlendType::None
                     };
                     target[x as usize] = Some(ObjectPixel{
                         colour, priority, obj_type
@@ -330,7 +330,8 @@ impl SoftwareRenderer {
     /// The x and y values provided should be scrolled & mosaiced already (i.e., background values and not screen values).
     /// 
     /// If None is returned, the pixel is transparent.
-    fn tile_bg_pixel(&self, bg: &TiledBackgroundData, vram: &impl VRAM2D, bg_x: u32, bg_y: u32) -> Option<Colour> {
+    fn tile_bg_pixel(&self, bg: &TiledBackgroundData, vram: &impl VRAM2D, bg_x: u32, bg_y: u32) -> BGPixel {
+        use BGPixel::*;
         let (x, y) = match bg.layout {
             BackgroundMapLayout::Small => (bg_x % 256, bg_y % 256),
             BackgroundMapLayout::Wide => (bg_x % 512, bg_y % 256),
@@ -387,12 +388,12 @@ impl SoftwareRenderer {
             if bg.use_8bpp {
                 if let Some(slot) = bg.ext_palette {
                     let palette_offset = (attrs.palette_num() as u16) * 256;
-                    Some(self.palette_cache.get_ext_bg(slot, palette_offset + (texel as u16)))
+                    _2D(self.palette_cache.get_ext_bg(slot, palette_offset + (texel as u16)))
                 } else {
-                    Some(self.palette_cache.get_bg(texel))
+                    _2D(self.palette_cache.get_bg(texel))
                 }
             } else {
-                Some(self.palette_cache.get_bg((attrs.palette_num() * 16) + texel))
+                _2D(self.palette_cache.get_bg((attrs.palette_num() * 16) + texel))
             }
         }
     }
@@ -400,8 +401,9 @@ impl SoftwareRenderer {
     /// Get the palette number of a background pixel.
     /// The x and y values provided should be mosaiced already.
     /// 
-    /// If 0 is returned, the pixel is transparent.
-    fn affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &impl VRAM2D, screen_x: u8, _screen_y: u8) -> Option<Colour> {
+    /// If None is returned, the pixel is transparent.
+    fn affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &impl VRAM2D, screen_x: u8, _screen_y: u8) -> BGPixel {
+        use BGPixel::*;
         // Transform from screen space to BG space.
         // Displacement points x0 and y0 are incremented by matrix points B and D respectively
         // after each scanline, simulating (B * y_i) + x_0 and (D * y_i) + x_0
@@ -447,7 +449,7 @@ impl SoftwareRenderer {
         if texel == 0 {
             None
         } else {
-            Some(self.palette_cache.get_bg(texel))
+            _2D(self.palette_cache.get_bg(texel))
         }
     }
 
@@ -455,7 +457,8 @@ impl SoftwareRenderer {
     /// The x and y values provided should be mosaiced already.
     /// 
     /// If None is returned, the pixel is transparent.
-    fn tile_affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &impl VRAM2D, screen_x: u8, _screen_y: u8) -> Option<Colour> {
+    fn tile_affine_bg_pixel(&self, bg: &AffineBackgroundData, vram: &impl VRAM2D, screen_x: u8, _screen_y: u8) -> BGPixel {
+        use BGPixel::*;
         // Transform from screen space to BG space.
         // Displacement points x0 and y0 are incremented by matrix points B and D respectively
         // after each scanline, simulating (B * y_i) + x_0 and (D * y_i) + x_0
@@ -508,15 +511,16 @@ impl SoftwareRenderer {
         } else {
             if let Some(slot) = bg.ext_palette {
                 let palette_offset = (attrs.palette_num() as u16) * 256;
-                Some(self.palette_cache.get_ext_bg(slot, palette_offset + (texel as u16)))
+                _2D(self.palette_cache.get_ext_bg(slot, palette_offset + (texel as u16)))
             } else {
-                Some(self.palette_cache.get_bg(texel))
+                _2D(self.palette_cache.get_bg(texel))
             }
         }
     }
 
     /// Draw a bitmap pixel.
-    fn bitmap_bg_pixel(&self, bg: &BitmapBackgroundData, vram: &impl VRAM2D, bg_x: u32, bg_y: u32) -> Option<Colour> {
+    fn bitmap_bg_pixel(&self, bg: &BitmapBackgroundData, vram: &impl VRAM2D, bg_x: u32, bg_y: u32) -> BGPixel {
+        use BGPixel::*;
         if bg.small {
             let bitmap_x = bg_x.wrapping_sub(SMALL_BITMAP_LEFT);
             let bitmap_y = bg_y.wrapping_sub(SMALL_BITMAP_TOP);
@@ -524,22 +528,23 @@ impl SoftwareRenderer {
                 return None;
             }
             let colour = vram.bg_bitmap_texel_15bpp(bg.data_addr, bitmap_x, bitmap_y, SMALL_BITMAP_WIDTH);
-            Some(Colour::from_555(colour))
+            _2D(Colour::from_555(colour))
         } else if bg.use_15bpp {
             let colour = vram.bg_bitmap_texel_15bpp(0, bg_x, bg_y, LARGE_BITMAP_WIDTH);
-            Some(Colour::from_555(colour))
+            _2D(Colour::from_555(colour))
         } else {
             let texel = vram.bg_bitmap_texel_8bpp(bg.data_addr, bg_x, bg_y, LARGE_BITMAP_WIDTH);
             if texel == 0 {
                 None
             } else {
-                Some(self.palette_cache.get_bg(texel))
+                _2D(self.palette_cache.get_bg(texel))
             }
         }
     }
 
     /// Draw an affine bitmap pixel (NDS only).
-    fn bitmap_affine_bg_pixel(&self, bg: &BitmapAffineBackgroundData, vram: &impl VRAM2D, screen_x: u8, _screen_y: u8) -> Option<Colour> {
+    fn bitmap_affine_bg_pixel(&self, bg: &BitmapAffineBackgroundData, vram: &impl VRAM2D, screen_x: u8, _screen_y: u8) -> BGPixel {
+        use BGPixel::*;
         // Transform from screen space to BG space.
         // Displacement points x0 and y0 are incremented by matrix points B and D respectively
         // after each scanline, simulating (B * y_i) + x_0 and (D * y_i) + x_0
@@ -574,14 +579,14 @@ impl SoftwareRenderer {
             if !u16::test_bit(colour, 15) {
                 None
             } else {
-                Some(Colour::from_555(colour))
+                _2D(Colour::from_555(colour))
             }
         } else {
             let texel = vram.bg_bitmap_texel_8bpp(bg.data_addr, bg_x, bg_y, bg.size.0);
             if texel == 0 {
                 None
             } else {
-                Some(self.palette_cache.get_bg(texel))
+                _2D(self.palette_cache.get_bg(texel))
             }
         }
     }
@@ -617,22 +622,32 @@ impl SoftwareRenderer {
             }
             for bg in bg_data {
                 if bg.priority == priority {
-                    if let Some(col) = self.bg_pixel(mem, bg, obj_window, x, y) {
-                        if colour_window() {
-                            match self.colour_effect(&mem.registers, bg.blend_mask, col, target_1, ObjType::None) {
+                    match self.bg_pixel(mem, bg, obj_window, x, y) {
+                        BGPixel::_2D(col) => if colour_window() {
+                            match self.colour_effect(&mem.registers, bg.blend_mask, col, target_1, BlendType::None) {
                                 Blended::Colour(c) => return c,
                                 Blended::AlphaTarget1(a) => target_1 = Some(a),
                             }
                         } else {
                             return col;
-                        }
+                        },
+                        BGPixel::_3D(col) => if colour_window() {
+                            let alpha = ((col.alpha >> 1) + 1) as u16;
+                            match self.colour_effect(&mem.registers, bg.blend_mask, col.col, target_1, BlendType::BG3D(alpha)) {
+                                Blended::Colour(c) => return c,
+                                Blended::AlphaTarget1(a) => target_1 = Some(a),
+                            }
+                        } else {
+                            return col.col;
+                        },
+                        BGPixel::None => ()
                     }
                 }
             }
         }
         let col = self.palette_cache.get_backdrop();
         if colour_window() {
-            match self.colour_effect(&mem.registers, mem.registers.backdrop_blend_mask(), col, target_1, ObjType::None) {
+            match self.colour_effect(&mem.registers, mem.registers.backdrop_blend_mask(), col, target_1, BlendType::None) {
                 Blended::Colour(c) => c,
                 Blended::AlphaTarget1(a) => a.colour,
             }
@@ -642,7 +657,8 @@ impl SoftwareRenderer {
     }
 
     /// Find a pixel value for a particular background.
-    fn bg_pixel<V: VRAM2D>(&self, mem: &VideoMemory<V>, bg: &BackgroundData, obj_window: bool, x: u8, y: u8) -> Option<Colour> {
+    fn bg_pixel<V: VRAM2D>(&self, mem: &VideoMemory<V>, bg: &BackgroundData, obj_window: bool, x: u8, y: u8) -> BGPixel {
+        use BGPixel::*;
         if !self.window_pixel(&mem.registers, bg.window_mask, obj_window, x, y) {
             return None;
         }
@@ -657,7 +673,11 @@ impl SoftwareRenderer {
                 let scroll_x = u16::sign_extend(d.scroll_x & 0x1FF, 9);
                 let scrolled_x = (x as i16).wrapping_add(scroll_x) as u16;
                 if scrolled_x < 0x100 {
-                    self.line_3d[scrolled_x as usize].colour()
+                    if self.line_3d[scrolled_x as usize].alpha == 0 {
+                        None
+                    } else {
+                        _3D(self.line_3d[scrolled_x as usize])
+                    }
                 } else {
                     None
                 }
@@ -698,21 +718,26 @@ impl SoftwareRenderer {
     }
 
     /// Apply colour effects.
-    fn colour_effect(&self, regs: &VideoRegisters, mask: BlendMask, colour: Colour, target_1: Option<BlendTarget1>, obj_type: ObjType) -> Blended {
+    fn colour_effect(&self, regs: &VideoRegisters, mask: BlendMask, colour: Colour, target_1: Option<BlendTarget1>, blend_type: BlendType) -> Blended {
         use Blended::*;
         if let Some(target_1) = target_1 {
             if mask.contains(BlendMask::LAYER_2) {
-                Colour(Self::apply_alpha_blend(target_1.alpha, regs.get_alpha_coeff_b(), target_1.colour, colour))
+                Colour(Self::apply_alpha_blend(target_1.alpha_1, target_1.alpha_2, target_1.colour, colour))
             } else {
                 Colour(target_1.colour)
             }
         } else {
-            match obj_type {
-                ObjType::SemiTransparent => AlphaTarget1(BlendTarget1 {colour, alpha: regs.get_alpha_coeff_a()}),
-                ObjType::Bitmap(alpha)  => AlphaTarget1(BlendTarget1 {colour, alpha}),
-                ObjType::None           => match regs.colour_effect() {
+            match blend_type {
+                BlendType::SemiTransparent  => AlphaTarget1(BlendTarget1 {colour, alpha_1: regs.get_alpha_coeff_a(), alpha_2: regs.get_alpha_coeff_b()}),
+                BlendType::Bitmap(alpha)    => AlphaTarget1(BlendTarget1 {colour, alpha_1: alpha, alpha_2: 0x10 - alpha}),
+                BlendType::BG3D(alpha) if regs.colour_effect() == ColourEffect::AlphaBlend => if mask.contains(BlendMask::LAYER_1) {
+                    AlphaTarget1(BlendTarget1 {colour, alpha_1: alpha, alpha_2: 0xF - alpha})
+                } else {
+                    Colour(colour)
+                },
+                _ => match regs.colour_effect() {
                     ColourEffect::AlphaBlend => if mask.contains(BlendMask::LAYER_1) {
-                        AlphaTarget1(BlendTarget1 {colour, alpha: regs.get_alpha_coeff_a()})
+                        AlphaTarget1(BlendTarget1 {colour, alpha_1: regs.get_alpha_coeff_a(), alpha_2: regs.get_alpha_coeff_b()})
                     } else {
                         Colour(colour)
                     },
@@ -733,13 +758,24 @@ impl SoftwareRenderer {
     }
 }
 
+enum BGPixel {
+    /// Transparent.
+    None,
+    /// 2D background pixel.
+    _2D(Colour),
+    /// 3D background pixel with alpha (NDS only).
+    _3D(ColourAlpha)
+}
+
 /// The components of alpha blend "target 1".
 /// (The top layer of a blend.)
 struct BlendTarget1 {
     /// The colour to blend.
     colour: Colour,
     /// Alpha of this colour.
-    alpha:  u16,
+    alpha_1: u16,
+    /// Alpha of target 2 to blend with.
+    alpha_2: u16,
 }
 
 enum Blended {
@@ -811,6 +847,8 @@ impl SoftwareRenderer {
 
 // Blends
 impl SoftwareRenderer {
+    /// Blend colour 1 and 2 together based on the alpha values provided.
+    /// EVA and EVB should be from 0-16.
     pub fn apply_alpha_blend(eva: u16, evb: u16, target_1: Colour, target_2: Colour) -> Colour {
         let r_mid = (target_1.r as u16) * eva + (target_2.r as u16) * evb;
         let g_mid = (target_1.g as u16) * eva + (target_2.g as u16) * evb;
