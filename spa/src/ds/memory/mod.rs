@@ -186,19 +186,28 @@ impl<R: Renderer> DS9MemoryBus<R> {
         for (n, byte) in header.as_slice().iter().enumerate() {
             self.main_ram.write_byte((0x3F_FE00 + n) as u32, *byte);
         }
+        
+        //println!("autostart: {:X}", self.main_ram.read_byte(0x3F_FE1F));
+        self.main_ram.write_byte(0x3F_FE1F, 4);
 
         self.card.fast_boot();
 
         // Write additional data into RAM.
         self.main_ram.write_word(0x3F_F800, 0x1FC2);
+        self.main_ram.write_word(0x3F_F804, 0x1FC2);
+        self.main_ram.write_word(0x3F_F880, 7); // NDS9-7 msg
+        self.main_ram.write_word(0x3F_F884, 6); // NDS7 status
+        self.main_ram.write_word(0x3F_F890, 0xB0002A22); // Boot flags
         self.main_ram.write_word(0x3F_FC00, 0x1FC2);
+        self.main_ram.write_word(0x3F_FC04, 0x1FC2);
+        self.main_ram.write_word(0x3F_FC40, 1); // Boot flag
 
         // Write user settings into RAM.
         // Birthday:
         self.main_ram.write_byte(0x3F_FC83, 0x1);
         self.main_ram.write_byte(0x3F_FC84, 0x1);
         // Language:
-        self.main_ram.write_halfword(0x3F_FCE4, 0xEE_41);
+        self.main_ram.write_halfword(0x3F_FCE4, 0xEC_41);
         // Touchscreen calibration:
         self.main_ram.write_halfword(0x3F_FCD8, 0);   // ADC.X1
         self.main_ram.write_halfword(0x3F_FCDA, 0);   // ADC.Y1
@@ -437,7 +446,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => (
                 self.main_ram.read_byte(addr & 0x3F_FFFF),
-                if cycle.is_non_seq() {18} else {2}
+                if cycle.is_non_seq() {4} else {2}
             ),
             0x0300_0000..=0x03FF_FFFF => (
                 self.shared_wram.read_byte(addr),
@@ -469,7 +478,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_byte(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {18} else {2}
+                if cycle.is_non_seq() {4} else {2}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared RAM
                 self.shared_wram.write_byte(addr, data);
@@ -518,7 +527,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {18} else {2}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {4} else {2}),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -546,7 +555,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_halfword(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {18} else {2}
+                if cycle.is_non_seq() {4} else {2}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_halfword(addr, data);
@@ -596,7 +605,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {20} else {4}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {6} else {4}),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -624,7 +633,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_word(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {20} else {4}
+                if cycle.is_non_seq() {6} else {4}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_word(addr, data);
