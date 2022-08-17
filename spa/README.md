@@ -66,7 +66,7 @@ DS:
 ### DS Status of selected games:
 - Age of Empires: Age of Kings: Loads main menu, freezes
 - Animal Crossing Wild World: (FLASH): Loads up titles shows menu and gameplay. Intro rain + glass looks a bit wrong.
-- Brain Training (Brain Age): Tries to write invalid value (0xCC) to RTC.
+- Brain Training (Brain Age): Save RAM issues
 - Chrono Trigger: Sets up save RAM, then shows intro video. Game loads up and runs ok!
 - Dragon Quest IX: Shows intro cards and video. Shows broken screen and freezes.
 - Dragon Quest IV: Black screen - getting stuck in halt loop
@@ -83,14 +83,14 @@ DS:
 - Mario Kart DS: (FLASH) Titles + menu work ok, 3D visuals are ok but heavy warping + aggressive clipping near camera (perspective correct textures would help here)
 - Mario and Luigi: Bowser's Inside Story: Blank screen (firmware/save issues)
 - Mario and Luigi: Partners in Time: Loads up mostly ok, menu title 3D is ok, intro has serious graphical issues
-- Mario Party DS: 2D stuff looks ok. 3D visuals, crash when loading minigame (VRAM ext palette access failed) + now broken trying to write 0xCC into RTC
+- Mario Party DS: Mostly OK. Some precision issues with 3D.
 - Metroid Prime Hunters: Initial titles are broken. Shows intro video. Gets to menu then locks up.
 - New Super Mario Bros: Intro + menu is ok, top background layer is not visible, precision issues with graphics
 - LoZ Phantom Hourglass: Just white screen now.
 - LoZ Spirit Tracks: White screen.
 - LEGO Lord of the Rings: Initial title, save RAM op B
 - LEGO Star Wars II: Save RAM issues
-- Mario Slam Basketball (Hoops 3-on-3): Tries to write invalid value (0xCC) to RTC.
+- Mario Slam Basketball (Hoops 3-on-3): Mostly OK.
 - Nintendogs (Labrador): Intro is mostly OK, top screen flickering (capture issues) + clipping errors. Gameplay begins, crashes due to full GPU command fifo.
 - Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. Gameplay starts up ok, with some graphical glitches on lower screen.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.

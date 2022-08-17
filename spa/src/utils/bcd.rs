@@ -10,7 +10,7 @@ impl Bcd8 {
     pub fn from_binary(value: u8) -> Self {
         if value > 99 {
             // TODO: probably shouldn't panic.
-            panic!("value is too large: {} ({:X})", value, value)
+            panic!("value is too large: {} (0x{:X})", value, value)
         } else {
             let tens = value / 10;
             let units = value % 10;
@@ -22,7 +22,7 @@ impl Bcd8 {
     /// BCD value must have each nybble be in the range 0-9.
     pub fn from_bcd(bcd_value: u8) -> Self {
         if bcd_value > 0x99 {
-            panic!("too large...");
+            panic!("trying to convert too large a value to BCD: 0x{:X}", bcd_value);
         }
         Self(bcd_value)
     }
