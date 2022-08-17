@@ -151,7 +151,7 @@ impl DSVideoMemory {
         let prev_mem = self.swap_mem(to_slot, mem);
         if prev_mem.is_some() {
             // There was already something in the slot.
-            let old = self.lookup_at_slot(to_slot).unwrap();
+            let old = self.lookup_at_slot(to_slot, region).unwrap();
             self.lcdc_vram.lock().lcdc[old] = prev_mem;
             self.mem_control[old].slot = Slot::LCDC(old.try_into().unwrap());
             //println!("writeback {:?} | => {:?}", old, self.mem_control[old].slot);
@@ -481,8 +481,10 @@ impl DSVideoMemory {
     }
 
     /// Find which VRAM region is at slot
-    fn lookup_at_slot(&mut self, slot: Slot) -> Option<usize> {
-        for (n, region) in self.mem_control.iter().enumerate() {
+    fn lookup_at_slot(&mut self, slot: Slot, except: VRAMRegion) -> Option<usize> {
+        for (n, region) in self.mem_control.iter().enumerate()
+            .filter(|(n, _)| *n != (except as usize))
+        {
             if region.slot == slot {
                 return Some(n);
             }

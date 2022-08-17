@@ -40,14 +40,6 @@ impl<const S: usize> Vector<S> {
         self.elements[3]
     }
 
-    pub fn add(&self, other: &Self) -> Self {
-        let mut out = Self::default();
-        for (sum, out) in self.elements.iter().zip(&other.elements).map(|(a, b)| a + b).zip(&mut out.elements) {
-            *out = sum;
-        }
-        out
-    }
-
     pub fn dot_product(&self, other: &Self) -> N {
         self.elements.iter().zip(&other.elements).fold(N::ZERO, |acc, (a, b)| acc + (a * b))
         //self.elements[0] * other.elements[0] + self.elements[1] * other.elements[1] + self.elements[2] * other.elements[2]

@@ -470,6 +470,10 @@ impl GeometryEngine {
     /// Advance the staging state machine and possibly output a polygon.
     fn output_vertex(&mut self) {
         use Primitive::*;
+
+        if self.primitive.is_none() {
+            return;
+        }
         
         self.staged_index = (self.staged_index + 1) % self.stage_size;
 

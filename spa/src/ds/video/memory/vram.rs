@@ -285,12 +285,14 @@ impl VRAM2D for EngineAVRAM {
                 if self.ext_bg_palette_2.is_some() {
                     self.ext_bg_palette_2.as_ref().map(|v| &v.ref_mem()[0..0x2000])
                 } else {
-                    self.ext_bg_palette_0.as_ref().map(|v| &v.ref_mem()[0x4000..0x6000])
+                    self.ext_bg_palette_0.as_ref()
+                        .filter(|v| v.len() > 0x4000).map(|v| &v.ref_mem()[0x4000..0x6000])
                 },
                 if self.ext_bg_palette_2.is_some() {
                     self.ext_bg_palette_2.as_ref().map(|v| &v.ref_mem()[0x2000..0x4000])
                 } else {
-                    self.ext_bg_palette_0.as_ref().map(|v| &v.ref_mem()[0x6000..0x8000])
+                    self.ext_bg_palette_0.as_ref()
+                        .filter(|v| v.len() > 0x4000).map(|v| &v.ref_mem()[0x6000..0x8000])
                 }
             ]
         } else {
