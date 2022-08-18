@@ -597,20 +597,20 @@ impl SoftwareRenderer {
 
     fn eval_pixel<V: VRAM2D>(&self, mem: &VideoMemory<V>, obj_pixel: Option<ObjectPixel>, obj_window: bool, bg_data: &[BackgroundData], x: u8, y: u8) -> Colour {
         let colour_window = || {
-            self.window_pixel(&mem.registers, mem.registers.colour_window_mask(), obj_window, x, y)
+            Self::window_pixel(&mem.registers, mem.registers.colour_window_mask(), obj_window, x, y)
         };
         let mut target_1: Option<BlendTarget1> = None;
         for priority in 0..4 {
             if let Some(obj) = obj_pixel {
                 if obj.priority == priority {
-                    if self.window_pixel(&mem.registers, mem.registers.obj_window_mask(), obj_window, x, y) {
+                    if Self::window_pixel(&mem.registers, mem.registers.obj_window_mask(), obj_window, x, y) {
                         let col = match obj.colour {
                             ColType::Palette(c) => self.palette_cache.get_obj(c),
                             ColType::Extended(c) => self.palette_cache.get_ext_obj(c),
                             ColType::Direct(c) => Colour::from_555(c),
                         };
                         if colour_window() {
-                            match self.colour_effect(&mem.registers, mem.registers.obj_blend_mask(), col, target_1, obj.obj_type) {
+                            match Self::colour_effect(&mem.registers, mem.registers.obj_blend_mask(), col, target_1, obj.obj_type) {
                                 Blended::Colour(c) => return c,
                                 Blended::AlphaTarget1(a) => target_1 = Some(a),
                             }
@@ -624,7 +624,7 @@ impl SoftwareRenderer {
                 if bg.priority == priority {
                     match self.bg_pixel(mem, bg, obj_window, x, y) {
                         BGPixel::_2D(col) => if colour_window() {
-                            match self.colour_effect(&mem.registers, bg.blend_mask, col, target_1, BlendType::None) {
+                            match Self::colour_effect(&mem.registers, bg.blend_mask, col, target_1, BlendType::None) {
                                 Blended::Colour(c) => return c,
                                 Blended::AlphaTarget1(a) => target_1 = Some(a),
                             }
@@ -633,7 +633,7 @@ impl SoftwareRenderer {
                         },
                         BGPixel::_3D(col) => if colour_window() {
                             let alpha = ((col.alpha >> 1) + 1) as u16;
-                            match self.colour_effect(&mem.registers, bg.blend_mask, col.col, target_1, BlendType::BG3D(alpha)) {
+                            match Self::colour_effect(&mem.registers, bg.blend_mask, col.col, target_1, BlendType::BG3D(alpha)) {
                                 Blended::Colour(c) => return c,
                                 Blended::AlphaTarget1(a) => target_1 = Some(a),
                             }
@@ -647,7 +647,7 @@ impl SoftwareRenderer {
         }
         let col = self.palette_cache.get_backdrop();
         if colour_window() {
-            match self.colour_effect(&mem.registers, mem.registers.backdrop_blend_mask(), col, target_1, BlendType::None) {
+            match Self::colour_effect(&mem.registers, mem.registers.backdrop_blend_mask(), col, target_1, BlendType::None) {
                 Blended::Colour(c) => c,
                 Blended::AlphaTarget1(a) => a.colour,
             }
@@ -659,7 +659,7 @@ impl SoftwareRenderer {
     /// Find a pixel value for a particular background.
     fn bg_pixel<V: VRAM2D>(&self, mem: &VideoMemory<V>, bg: &BackgroundData, obj_window: bool, x: u8, y: u8) -> BGPixel {
         use BGPixel::*;
-        if !self.window_pixel(&mem.registers, bg.window_mask, obj_window, x, y) {
+        if !Self::window_pixel(&mem.registers, bg.window_mask, obj_window, x, y) {
             return None;
         }
         let (x, y) = if bg.mosaic {
@@ -695,7 +695,7 @@ impl SoftwareRenderer {
     }
 
     /// Check if a background pixel should appear through windows.
-    fn window_pixel(&self, regs: &VideoRegisters, mask: WindowMask, obj_window: bool, x: u8, y: u8) -> bool {
+    fn window_pixel(regs: &VideoRegisters, mask: WindowMask, obj_window: bool, x: u8, y: u8) -> bool {
         if !regs.windows_enabled() {
             return true;
         }
@@ -718,7 +718,7 @@ impl SoftwareRenderer {
     }
 
     /// Apply colour effects.
-    fn colour_effect(&self, regs: &VideoRegisters, mask: BlendMask, colour: Colour, target_1: Option<BlendTarget1>, blend_type: BlendType) -> Blended {
+    fn colour_effect(regs: &VideoRegisters, mask: BlendMask, colour: Colour, target_1: Option<BlendTarget1>, blend_type: BlendType) -> Blended {
         use Blended::*;
         if let Some(target_1) = target_1 {
             if mask.contains(BlendMask::LAYER_2) {
@@ -731,7 +731,7 @@ impl SoftwareRenderer {
                 BlendType::SemiTransparent  => AlphaTarget1(BlendTarget1 {colour, alpha_1: regs.get_alpha_coeff_a(), alpha_2: regs.get_alpha_coeff_b()}),
                 BlendType::Bitmap(alpha)    => AlphaTarget1(BlendTarget1 {colour, alpha_1: alpha, alpha_2: 0x10 - alpha}),
                 BlendType::BG3D(alpha) if regs.colour_effect() == ColourEffect::AlphaBlend => if mask.contains(BlendMask::LAYER_1) {
-                    AlphaTarget1(BlendTarget1 {colour, alpha_1: alpha, alpha_2: 0xF - alpha})
+                    AlphaTarget1(BlendTarget1 {colour, alpha_1: alpha, alpha_2: 0x10 - alpha})
                 } else {
                     Colour(colour)
                 },

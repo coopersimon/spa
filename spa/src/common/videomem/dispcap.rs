@@ -13,10 +13,10 @@ bitflags! {
 
 impl DisplayCaptureLo {
     fn eva(self) -> u16 {
-        (self & DisplayCaptureLo::EVA).bits()
+        u16::min((self & DisplayCaptureLo::EVA).bits(), 0x10)
     }
     fn evb(self) -> u16 {
-        (self & DisplayCaptureLo::EVB).bits() >> 8
+        u16::min((self & DisplayCaptureLo::EVB).bits() >> 8, 0x10)
     }
 }
 

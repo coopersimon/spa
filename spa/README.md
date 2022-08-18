@@ -85,7 +85,7 @@ DS:
 - Mario and Luigi: Partners in Time: Loads up mostly ok, menu title 3D is ok, intro has serious graphical issues
 - Mario Party DS: Mostly OK. Some precision issues with 3D.
 - Metroid Prime Hunters: Initial titles are broken. Shows intro video. Gets to menu then locks up.
-- New Super Mario Bros: Intro + menu is ok, 3D blending issues with background again. precision issues with 3D graphics
+- New Super Mario Bros: Mostly OK. precision issues with 3D graphics
 - LoZ Phantom Hourglass: Just white screen now.
 - LoZ Spirit Tracks: White screen.
 - LEGO Lord of the Rings: Initial title, save RAM op B
@@ -100,7 +100,7 @@ DS:
 - Pokemon Ranger: Mostly OK, 2D components are rendered as 3D and there are some precision issues.
 - Shin Megami Tensei: Strange Journey: Black screen
 - Super Mario 64 DS: Loads up ok, star in intro looks wrong (specular lighting/texture issues). 3D in menu looks good. Actual game has polygons flying everywhere in front of scene + perspective issues
-- Super Scribblenauts: Mostly OK, blending issues with 3D combining with 2D.
+- Super Scribblenauts: Mostly OK.
 - Tony Hawk's Downhill Jam: Shows titles, then black screen
 - Tony Hawk's American Sk8land: Shows titles, menus, then gameplay crashes after matrix overflow
 - The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)
