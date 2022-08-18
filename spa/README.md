@@ -74,24 +74,24 @@ DS:
 - Dragon Quest VI: Black screen
 - Final Fantasy Tactics A2: Loads up and game starts. Flickering (capture issues?). Some broken graphics. Freezes when gameplay begins (?)
 - Final Fantasy III: Sets up save ram, shows titles, now locks up.
-- Final Fantasy IV: Works well (with some 3d visual issues) up until after first battle in gameplay. Cutscene in castle has broken visuals ontop of 3D (2d issue?)
+- Final Fantasy IV: Mostly OK.
 - Final Fantasy: 4 Heroes of Light: Game starts OK, 2D has visibility issues in menu. 3D is pretty good but has some precision issues.
 - GTA Chinatown Wars: Titles & menu looks OK, intro 3D is broken
 - Hotel Dusk: Room 215: Mostly OK, some flickering and missing graphics (capture issues?)
 - Inazuma Eleven: Seems to work OK.
 - Kirby Super Star: Seems to work OK.
 - Mario Kart DS: (FLASH) Titles + menu work ok, 3D visuals are ok but heavy warping + aggressive clipping near camera (perspective correct textures would help here)
-- Mario and Luigi: Bowser's Inside Story: Blank screen (firmware/save issues)
+- Mario and Luigi: Bowser's Inside Story: Blank screen
 - Mario and Luigi: Partners in Time: Loads up mostly ok, menu title 3D is ok, intro has serious graphical issues
 - Mario Party DS: Mostly OK. Some precision issues with 3D.
 - Metroid Prime Hunters: Initial titles are broken. Shows intro video. Gets to menu then locks up.
-- New Super Mario Bros: Intro + menu is ok, top background layer is not visible, precision issues with graphics
+- New Super Mario Bros: Intro + menu is ok, 3D blending issues with background again. precision issues with 3D graphics
 - LoZ Phantom Hourglass: Just white screen now.
 - LoZ Spirit Tracks: White screen.
 - LEGO Lord of the Rings: Initial title, save RAM op B
 - LEGO Star Wars II: Save RAM issues
 - Mario Slam Basketball (Hoops 3-on-3): Mostly OK.
-- Nintendogs (Labrador): Intro is mostly OK, top screen flickering (capture issues) + clipping errors. Gameplay begins, crashes due to full GPU command fifo.
+- Nintendogs (Labrador): Intro is mostly OK with clipping errors. Gameplay begins, crashes due to full GPU command fifo.
 - Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. Gameplay starts up ok, with some graphical glitches on lower screen.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
 - Pokemon Diamond: (FLASH) 2d elements of game work ok, 3D in intro looks good, 3D in title looks good

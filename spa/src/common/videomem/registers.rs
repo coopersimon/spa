@@ -309,6 +309,10 @@ impl VideoRegisters {
         self.bg3_internal_x = I24F8::from_bits(self.bg3_ref_x as i32);
         self.bg3_internal_y = I24F8::from_bits(self.bg3_ref_y as i32);
     }
+
+    pub fn clear_display_capture(&mut self) {
+        self.disp_capture_hi.remove(DisplayCaptureHi::ENABLE);
+    }
 }
 
 // Render-side interface.
@@ -947,7 +951,11 @@ impl VideoRegisters {
     }
 
     // DS Display capture
-    pub fn display_capture_mode(&self) -> Option<DispCapMode> {
+    pub fn display_capture_enabled(&self) -> bool {
+        self.disp_capture_hi.contains(DisplayCaptureHi::ENABLE)
+    }
+
+    pub fn display_capture_mode(&self) -> DispCapMode {
         self.disp_capture_hi.mode(self.disp_capture_lo)
     }
 
@@ -956,20 +964,20 @@ impl VideoRegisters {
         (self.disp_capture_hi & DisplayCaptureHi::VRAM_DEST).bits()
     }
 
-    /// Offset for reading VRAM for capture for NDS (in pixels).
-    pub fn vram_capture_read_offset(&self) -> usize {
+    /// Offset for reading VRAM for capture for NDS (in bytes).
+    pub fn vram_capture_read_offset(&self) -> u32 {
         let select = (self.disp_capture_hi & DisplayCaptureHi::READ_OFFSET).bits() >> 10;
-        (select as usize) * 0x4000
+        (select as u32) * 0x8000
     }
 
-    /// Offset for writing VRAM from capture for NDS (in pixels).
-    pub fn vram_capture_write_offset(&self) -> usize {
+    /// Offset for writing VRAM from capture for NDS (in bytes).
+    pub fn vram_capture_write_offset(&self) -> u32 {
         let select = (self.disp_capture_hi & DisplayCaptureHi::WRITE_OFFSET).bits() >> 2;
-        (select as usize) * 0x4000
+        (select as u32) * 0x8000
     }
 
     /// Size of captured image to write to VRAM.
-    pub fn vram_capture_write_size(&self) -> (usize, usize) {
+    pub fn vram_capture_write_size(&self) -> (u32, u32) {
         let select = (self.disp_capture_hi & DisplayCaptureHi::WRITE_SIZE).bits() >> 4;
         match select {
             0b00 => (128, 128),

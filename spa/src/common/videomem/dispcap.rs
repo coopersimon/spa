@@ -16,7 +16,7 @@ impl DisplayCaptureLo {
         (self & DisplayCaptureLo::EVA).bits()
     }
     fn evb(self) -> u16 {
-        (self & DisplayCaptureLo::EVB).bits()
+        (self & DisplayCaptureLo::EVB).bits() >> 8
     }
 }
 
@@ -35,20 +35,16 @@ bitflags! {
 }
 
 impl DisplayCaptureHi {
-    pub fn mode(self, disp_capture_lo: DisplayCaptureLo) -> Option<DispCapMode> {
-        if self.contains(DisplayCaptureHi::ENABLE) {
-            Some(match (self & DisplayCaptureHi::MODE).bits() >> 13 {
-                0b00 => DispCapMode::A(self.source_a()),
-                0b01 => DispCapMode::B(self.source_b()),
-                _ =>    DispCapMode::Blend {
-                    src_a: self.source_a(),
-                    src_b: self.source_b(),
-                    eva: disp_capture_lo.eva(),
-                    evb: disp_capture_lo.evb()
-                }
-            })
-        } else {
-            None
+    pub fn mode(self, disp_capture_lo: DisplayCaptureLo) -> DispCapMode {
+        match (self & DisplayCaptureHi::MODE).bits() >> 13 {
+            0b00 => DispCapMode::A(self.source_a()),
+            0b01 => DispCapMode::B(self.source_b()),
+            _ =>    DispCapMode::Blend {
+                src_a: self.source_a(),
+                src_b: self.source_b(),
+                eva: disp_capture_lo.eva(),
+                evb: disp_capture_lo.evb()
+            }
         }
     }
     fn source_a(&self) -> DispCapSourceA {

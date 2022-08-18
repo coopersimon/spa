@@ -219,18 +219,15 @@ impl RealTimeClock {
             _ => Ready,
         };
         self.transfer = 8;
-        //println!("done");
     }
 }
 
 impl MemInterface8 for RealTimeClock {
     fn read_byte(&mut self, _addr: u32) -> u8 {
-        //println!("try read");
         let can_read = std::mem::take(&mut self.read);
         if !can_read || self.state == RTCState::Idle {
             return 0;
         }
-        //println!("read");
         let data = self.read_data();
         // Extract lowest bit.
         self.transfer -= 1;
@@ -243,7 +240,6 @@ impl MemInterface8 for RealTimeClock {
     }
 
     fn write_byte(&mut self, _addr: u32, data: u8) {
-        //println!("write {:X}", data);
         use RTCState::*;
 
         match self.state {

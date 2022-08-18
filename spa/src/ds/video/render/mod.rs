@@ -6,10 +6,10 @@ use crate::common::colour::Colour;
 use crate::common::drawing::{
     SoftwareRenderer, RendererMode
 };
-use crate::common::videomem::{DispCapSourceB, DispCapMode, DispCapSourceA, VideoRegisters, VideoMemory};
+use crate::common::videomem::{DispCapSourceB, DispCapMode, DispCapSourceA, VideoRegisters};
 use super::memory::ARM9VRAM;
 use super::{
-    memory::{RendererVRAM, EngineAVRAM, EngineBVRAM, GraphicsPowerControl},
+    memory::{RendererVRAM, GraphicsPowerControl},
     video3d::Software3DRenderer,
     constants::*
 };
@@ -42,8 +42,27 @@ pub struct ProceduralRendererThread {
 
     upper:      RenderTarget,
     lower:      RenderTarget,
+    vram:       RendererVRAM,
 
-    vram:   RendererVRAM
+    /// Indicates whether this frame should be captured.
+    capture:    bool,
+    /// Internal line cache. Used for capturing engine A video.
+    line_cache: Vec<Colour>,
+    /// Metadata used for writing captured video data.
+    write_data: Option<CaptureWriteData>,
+
+    /// Line cache for engine A blending and engine B.
+    line_cache_b:   Vec<Colour>,
+}
+
+struct CaptureWriteData {
+    /// Offset in bytes
+    offset: u32,
+    /// Width of capture in pixels
+    size:   u32,
+    /// Which VRAM block to capture to.
+    /// 0-3 corresponds to A-D.
+    block:  u16,
 }
 
 impl Renderer for ProceduralRenderer {
@@ -58,7 +77,12 @@ impl Renderer for ProceduralRenderer {
                 engine_b:   SoftwareRenderer::new(RendererMode::NDSB),
                 engine_3d:  Software3DRenderer::new(),
 
-                upper, lower, vram
+                upper, lower, vram,
+
+                capture:    false,
+                line_cache: vec![Colour::black(); H_RES],
+                write_data: None,
+                line_cache_b: vec![Colour::black(); H_RES],
             };
 
             reply_tx.send(()).unwrap();
@@ -68,6 +92,9 @@ impl Renderer for ProceduralRenderer {
                     data.start_frame();
                 }
                 data.render_line(line);
+                if line == V_MAX {
+                    data.finish_frame();
+                }
                 reply_tx.send(()).unwrap();
             }
         });
@@ -96,13 +123,24 @@ impl Renderer for ProceduralRenderer {
 impl ProceduralRendererThread {
 
     fn start_frame(&mut self) {
-        self.vram.engine_a_mem.lock().registers.reset_v_count();
+        {
+            let mut engine_a_mem = self.vram.engine_a_mem.lock();
+            engine_a_mem.registers.reset_v_count();
+            if engine_a_mem.registers.display_capture_enabled() {
+                self.capture = true;
+            }
+        }
         self.vram.engine_b_mem.lock().registers.reset_v_count();
     }
 
+    fn finish_frame(&mut self) {
+        if self.capture {
+            self.vram.engine_a_mem.lock().registers.clear_display_capture();
+            self.capture = false;
+        }
+    }
+
     fn render_line(&mut self, line: u16) {
-        let start_offset = (line as usize) * (H_RES * 4);
-        let end_offset = start_offset + (H_RES * 4);
         let power_cnt = self.vram.read_power_cnt();
 
         if power_cnt.contains(GraphicsPowerControl::RENDER_3D) {
@@ -113,40 +151,35 @@ impl ProceduralRendererThread {
         }
 
         if power_cnt.contains(GraphicsPowerControl::ENABLE_A) {
-            let mut target = if power_cnt.contains(GraphicsPowerControl::DISPLAY_SWAP) {
-                self.upper.lock()
-            } else {
-                self.lower.lock()
-            };
-
-            let mut engine_a_mem = self.vram.engine_a_mem.lock();
-
-            self.engine_a.setup_caches(&mut engine_a_mem);    
-            self.engine_a_line(&mut engine_a_mem, &mut target[start_offset..end_offset], line as u8);
+            self.engine_a_line(line as u8, power_cnt.contains(GraphicsPowerControl::DISPLAY_SWAP));
         }
 
         if power_cnt.contains(GraphicsPowerControl::ENABLE_B) {
-            let mut target = if power_cnt.contains(GraphicsPowerControl::DISPLAY_SWAP) {
-                self.lower.lock()
-            } else {
-                self.upper.lock()
-            };
+            self.engine_b_line(line as u8, power_cnt.contains(GraphicsPowerControl::DISPLAY_SWAP));
+        }
 
-            let mut engine_b_mem = self.vram.engine_b_mem.lock();
-
-            self.engine_b.setup_caches(&mut engine_b_mem);
-            self.engine_b_line(&mut engine_b_mem, &mut target[start_offset..end_offset], line as u8);
+        if let Some(write_data) = std::mem::take(&mut self.write_data) {
+            let mut lcdc = self.vram.lcdc_vram.lock();
+            Self::write_to_vram(&mut lcdc, write_data.block, &self.line_cache[0..(write_data.size as usize)], write_data.offset);
         }
     }
 
-    /// Draw a full line for NDS A engine. Also applies master brightness
-    /// 
-    /// Also is responsible for video capture output.
-    fn engine_a_line(&self, engine_a_mem: &mut VideoMemory<EngineAVRAM>, target: &mut [u8], line: u8) {
+    /// Draw a full line for NDS A engine. Also applies master brightness.
+    fn engine_a_line(&mut self, line: u8, display_swap: bool) {
+        let start_offset = (line as usize) * (H_RES * 4);
+        let end_offset = start_offset + (H_RES * 4);
+
+        let mut screen = if display_swap {
+            self.upper.lock()
+        } else {
+            self.lower.lock()
+        };
+        let target = &mut screen[start_offset..end_offset];
+
+        let mut engine_a_mem = self.vram.engine_a_mem.lock();
+        self.engine_a.setup_caches(&mut engine_a_mem);  
         
         let mut drawn = false;
-        // TODO: avoid alloc every time
-        let mut line_cache = vec![Colour::black(); H_RES];
 
         if engine_a_mem.registers.in_fblank() {
             for p in target {
@@ -156,8 +189,8 @@ impl ProceduralRendererThread {
             match engine_a_mem.registers.display_mode() {
                 0 => self.engine_a.draw_blank_line(target),
                 1 => {
-                    self.engine_a.draw(&engine_a_mem, &mut line_cache, line);
-                    for (colour, out) in line_cache.iter().zip(target.chunks_exact_mut(4)) {
+                    self.engine_a.draw(&engine_a_mem, &mut self.line_cache, line);
+                    for (colour, out) in self.line_cache.iter().zip(target.chunks_exact_mut(4)) {
                         let colour = engine_a_mem.registers.apply_brightness(*colour);
                         out[0] = colour.r;
                         out[1] = colour.g;
@@ -167,9 +200,9 @@ impl ProceduralRendererThread {
                 },
                 2 => {
                     let lcdc = self.vram.lcdc_vram.lock();
-                    let read_offset = (line as usize) * H_RES;
-                    self.draw_from_vram(&lcdc, &engine_a_mem.registers, &mut line_cache, read_offset);
-                    for (colour, out) in line_cache.iter().zip(target.chunks_exact_mut(4)) {
+                    let read_offset = (line as u32) * (H_RES as u32) * 2;
+                    Self::draw_from_vram(&lcdc, &engine_a_mem.registers, &mut self.line_cache, read_offset);
+                    for (colour, out) in self.line_cache.iter().zip(target.chunks_exact_mut(4)) {
                         let colour = engine_a_mem.registers.apply_brightness(*colour);
                         out[0] = colour.r;
                         out[1] = colour.g;
@@ -181,70 +214,82 @@ impl ProceduralRendererThread {
             }
         }
 
-        if let Some(disp_cap_mode) = engine_a_mem.registers.display_capture_mode() {
+        if self.capture {
             let write_size = engine_a_mem.registers.vram_capture_write_size();
-            if (line as usize) >= write_size.1 {
+            if (line as u32) >= write_size.1 {
                 // Outside of writing bounds.
                 return;
             }
 
-            match disp_cap_mode {
+            match engine_a_mem.registers.display_capture_mode() {
                 DispCapMode::A(src_a) => match src_a {
                     DispCapSourceA::Engine => {
                         if !drawn {
-                            self.engine_a.draw(&engine_a_mem, &mut line_cache, line);
+                            self.engine_a.draw(&engine_a_mem, &mut self.line_cache, line);
                         }
                     },
-                    DispCapSourceA::_3D => for (a, b) in line_cache.iter_mut().zip(&self.engine_a.line_3d) {
+                    DispCapSourceA::_3D => for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.line_3d) {
                         *a = b.col;
                     }
                 },
                 DispCapMode::B(src_b) => match src_b {
                     DispCapSourceB::VRAM => {
                         let lcdc = self.vram.lcdc_vram.lock();
-                        let read_offset = engine_a_mem.registers.vram_capture_read_offset() + (line as usize) * H_RES;
-                        self.draw_from_vram(&lcdc, &engine_a_mem.registers, &mut line_cache, read_offset);
+                        let read_offset = engine_a_mem.registers.vram_capture_read_offset() + (line as u32) * (H_RES as u32) * 2;
+                        Self::draw_from_vram(&lcdc, &engine_a_mem.registers, &mut self.line_cache, read_offset);
                     },
                     DispCapSourceB::MainRAM => panic!("main mem capture not implemented yet!"),
                 },
                 DispCapMode::Blend{src_a, src_b, eva, evb} => {
-                    let mut line_cache_b = vec![Colour::black(); 256];
                     match src_a {
                         DispCapSourceA::Engine => {
                             if !drawn {
-                                self.engine_a.draw(&engine_a_mem, &mut line_cache, line);
+                                self.engine_a.draw(&engine_a_mem, &mut self.line_cache, line);
                             }
                         },
-                        DispCapSourceA::_3D => for (a, b) in line_cache.iter_mut().zip(&self.engine_a.line_3d) {
+                        DispCapSourceA::_3D => for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.line_3d) {
                             *a = b.col;
                         }
                     }
                     match src_b {
                         DispCapSourceB::VRAM => {
                             let lcdc = self.vram.lcdc_vram.lock();
-                            let read_offset = engine_a_mem.registers.vram_capture_read_offset() + (line as usize) * H_RES;
-                            self.draw_from_vram(&lcdc, &engine_a_mem.registers, &mut line_cache_b, read_offset);
+                            let read_offset = engine_a_mem.registers.vram_capture_read_offset() + (line as u32) * (H_RES as u32) * 2;
+                            Self::draw_from_vram(&lcdc, &engine_a_mem.registers, &mut self.line_cache_b, read_offset);
                         },
                         DispCapSourceB::MainRAM => panic!("main mem capture not implemented yet!"),
                     }
                     // Blend.
-                    for (a, b) in line_cache.iter_mut().zip(&line_cache_b) {
+                    for (a, b) in self.line_cache.iter_mut().zip(&self.line_cache_b) {
                         *a = SoftwareRenderer::apply_alpha_blend(eva, evb, *a, *b);
                     }
                 }
             }
 
-            // TODO: fix writing here.
-            let mut lcdc = self.vram.lcdc_vram.lock();
-            let write_offset = engine_a_mem.registers.vram_capture_write_offset() + (line as usize) * write_size.0;
-            self.write_to_vram(&mut lcdc, &engine_a_mem.registers, &line_cache[0..write_size.0], write_offset);
+            self.write_data = Some(CaptureWriteData {
+                offset: engine_a_mem.registers.vram_capture_write_offset() + (line as u32) * write_size.0 * 2,
+                size:   write_size.0,
+                block:  engine_a_mem.registers.write_vram_block()
+            });
         }
 
         engine_a_mem.registers.inc_v_count();
     }
 
     /// Draw a full line for NDS B engine. Also applies master brightness.
-    fn engine_b_line(&self, engine_b_mem: &mut VideoMemory<EngineBVRAM>, target: &mut [u8], line: u8) {
+    fn engine_b_line(&mut self, line: u8, display_swap: bool) {
+        let start_offset = (line as usize) * (H_RES * 4);
+        let end_offset = start_offset + (H_RES * 4);
+
+        let mut screen = if display_swap {
+            self.lower.lock()
+        } else {
+            self.upper.lock()
+        };
+        let target = &mut screen[start_offset..end_offset];
+
+        let mut engine_b_mem = self.vram.engine_b_mem.lock();
+        self.engine_b.setup_caches(&mut engine_b_mem);
         
         if engine_b_mem.registers.in_fblank() {
             self.engine_b.draw_blank_line(target);
@@ -252,9 +297,8 @@ impl ProceduralRendererThread {
             match engine_b_mem.registers.display_mode() {
                 0 => self.draw_empty_line(target),
                 1 => {
-                    let mut line_cache = vec![Colour::black(); 256];
-                    self.engine_b.draw(&engine_b_mem, &mut line_cache, line as u8);
-                    for (colour, out) in line_cache.iter().zip(target.chunks_exact_mut(4)) {
+                    self.engine_b.draw(&engine_b_mem, &mut self.line_cache_b, line as u8);
+                    for (colour, out) in self.line_cache_b.iter().zip(target.chunks_exact_mut(4)) {
                         let colour = engine_b_mem.registers.apply_brightness(*colour);
                         out[0] = colour.r;
                         out[1] = colour.g;
@@ -277,27 +321,28 @@ impl ProceduralRendererThread {
 
     /// Draw bitmap from VRAM.
     /// 
-    /// Read offset is in pixels (16-bit chunks)
-    fn draw_from_vram(&self, mem: &ARM9VRAM, registers: &VideoRegisters, target: &mut [Colour], read_offset: usize) {
+    /// Read offset is in bytes.
+    fn draw_from_vram(mem: &ARM9VRAM, registers: &VideoRegisters, target: &mut [Colour], read_offset: u32) {
         if let Some(vram) = mem.ref_region(registers.read_vram_block()) {
-            let vram_bytes = vram.ref_mem().chunks_exact(2).skip(read_offset);
-            for (out, data) in target.iter_mut().zip(vram_bytes) {
-                let raw_colour = u16::from_le_bytes(data.try_into().unwrap());
-                *out = Colour::from_555(raw_colour);
+            for (n, out) in target.iter_mut().enumerate() {
+                let sub_addr = (n as u32) << 1;
+                let addr = (read_offset + sub_addr) & 0x1_FFFF;
+                let data = vram.read_halfword(addr);
+                *out = Colour::from_555(data);
             }
         }
     }
 
     /// Write capture to VRAM.
     /// 
-    /// Read offset is in pixels (16-bit chunks)
-    fn write_to_vram(&self, mem: &mut ARM9VRAM, registers: &VideoRegisters, source: &[Colour], write_offset: usize) {
-        if let Some(vram) = mem.mut_region(registers.write_vram_block()) {
-            let vram_bytes = vram.mut_mem().chunks_exact_mut(2).skip(write_offset);
-            for (colour, data) in source.iter().zip(vram_bytes) {
-                let raw_colour = colour.to_555().to_le_bytes();
-                data[0] = raw_colour[0];
-                data[1] = raw_colour[1] | 0x80; // TODO: alpha channel
+    /// Write offset is in bytes.
+    fn write_to_vram(mem: &mut ARM9VRAM, write_block: u16, source: &[Colour], write_offset: u32) {
+        if let Some(vram) = mem.mut_region(write_block) {
+            for (n, colour) in source.iter().enumerate() {
+                let sub_addr = (n as u32) << 1;
+                let addr = (write_offset + sub_addr) & 0x1_FFFF;
+                let raw_colour = colour.to_555() | 0x8000;
+                vram.write_halfword(addr, raw_colour);
             }
         }
     }
