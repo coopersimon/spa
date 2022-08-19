@@ -57,17 +57,18 @@ impl LightingUnit {
                 continue;
             }
             let diffuse = N::max(N::ZERO, -normal.dot_product(&light.direction));
-            let diffuse_weight = diffuse.to_num::<i32>() as u8;
+            let diffuse_weight = (diffuse.to_bits() >> 4) as u8;
             let diffuse_colour = light.colour.mul(&self.diffuse_colour).weight(diffuse_weight);
 
             let ambient_colour = light.colour.mul(&self.ambient_colour);
 
             let specular_angle_cos = N::max(N::ZERO, normal.dot_product(&light.half_angle));
+            let specular_angle_bits = specular_angle_cos.to_bits() >> 4;
             let specular_weight = if self.enable_table {
-                let table_idx = (specular_angle_cos.to_num::<i32>() % 128) as usize;
-                self.specular_table[table_idx]
+                let table_idx = specular_angle_bits >> 1;
+                self.specular_table[table_idx as usize]
             } else {
-                specular_angle_cos.to_num::<i32>() as u8
+                specular_angle_bits as u8
             };
             let specular_colour = light.colour.mul(&self.specular_colour).weight(specular_weight);
 

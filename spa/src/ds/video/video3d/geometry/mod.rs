@@ -132,24 +132,24 @@ impl GeometryEngine {
         let x_bits = (data & 0x3FF) as u16;
         let y_bits = ((data >> 10) & 0x3FF) as u16;
         let z_bits = ((data >> 20) & 0x3FF) as u16;
-        let v = Vector::new([
+        let normal = Vector::new([
             N::from_bits(bits::u16::sign_extend(x_bits << 3, 13).into()),
             N::from_bits(bits::u16::sign_extend(y_bits << 3, 13).into()),
             N::from_bits(bits::u16::sign_extend(z_bits << 3, 13).into()),
         ]);
-        let normal = self.matrices.dir_matrix().mul_vector_3(&v);
         let tex_cycles = if self.texture_attrs.transform_mode() == 2 {
             let s = self.tex_coords.s.to_fixed::<N>();
             let t = self.tex_coords.t.to_fixed::<N>();
             let m = &self.matrices.tex_matrix();
-            let s0 = v.x() * m.elements[0] + v.y() * m.elements[4] + v.z() * m.elements[8] + s;
-            let t0 = v.x() * m.elements[1] + v.y() * m.elements[5] + v.z() * m.elements[9] + t;
+            let s0 = normal.x() * m.elements[0] + normal.y() * m.elements[4] + normal.z() * m.elements[8] + s;
+            let t0 = normal.x() * m.elements[1] + normal.y() * m.elements[5] + normal.z() * m.elements[9] + t;
             self.trans_tex_coords.s = s0.to_fixed();
             self.trans_tex_coords.t = t0.to_fixed();
             2
         } else {
             0
         };
+        let normal = self.matrices.dir_matrix().mul_vector_3(&normal);
         // Calculate colour.
         self.lighting.set_normal(normal) + tex_cycles
     }

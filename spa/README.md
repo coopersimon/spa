@@ -65,9 +65,9 @@ DS:
 
 ### DS Status of selected games:
 - Age of Empires: Age of Kings: Loads main menu, freezes
-- Animal Crossing Wild World: (FLASH): Loads up titles shows menu and gameplay. Intro rain + glass looks a bit wrong.
-- Brain Training (Brain Age): Save RAM issues
-- Chrono Trigger: Sets up save RAM, then shows intro video. Game loads up and runs ok!
+- Animal Crossing Wild World: Loads up titles shows menu and gameplay. Intro rain + glass looks a bit wrong.
+- Brain Training (Brain Age): Seems to run OK.
+- Chrono Trigger: Mostly OK.
 - Dragon Quest IX: Shows intro cards and video. Shows broken screen and freezes.
 - Dragon Quest IV: Black screen - getting stuck in halt loop
 - Dragon Quest V: Black screen
@@ -80,7 +80,7 @@ DS:
 - Hotel Dusk: Room 215: Mostly OK, some flickering and missing graphics (capture issues?)
 - Inazuma Eleven: Seems to work OK.
 - Kirby Super Star: Seems to work OK.
-- Mario Kart DS: (FLASH) Titles + menu work ok, 3D visuals are ok but heavy warping + aggressive clipping near camera (perspective correct textures would help here)
+- Mario Kart DS: Titles + menu work ok, 3D visuals are ok but heavy warping + aggressive clipping near camera (perspective correct textures would help here)
 - Mario and Luigi: Bowser's Inside Story: Blank screen
 - Mario and Luigi: Partners in Time: Loads up mostly ok, menu title 3D is ok, intro has serious graphical issues
 - Mario Party DS: Mostly OK. Some precision issues with 3D.
@@ -88,13 +88,13 @@ DS:
 - New Super Mario Bros: Mostly OK. precision issues with 3D graphics
 - LoZ Phantom Hourglass: Just white screen now.
 - LoZ Spirit Tracks: White screen.
-- LEGO Lord of the Rings: Initial title, save RAM op B
-- LEGO Star Wars II: Save RAM issues
+- LEGO Lord of the Rings: Loads up OK, some visibility issues in menus (2D issues?)
+- LEGO Star Wars II: Mostly OK, some near-plane clipping issues throughout, some graphics have missing pixels on 3D screen
 - Mario Slam Basketball (Hoops 3-on-3): Mostly OK.
 - Nintendogs (Labrador): Intro is mostly OK with clipping errors. Gameplay begins, crashes due to full GPU command fifo.
 - Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. Gameplay starts up ok, with some graphical glitches on lower screen.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
-- Pokemon Diamond: (FLASH) 2d elements of game work ok, 3D in intro looks good, 3D in title looks good
+- Pokemon Diamond: 2d elements of game work ok, 3D in intro looks good, 3D in title looks good
 - Pokemon Black: Black screen
 - Pokemon HeartGold: 2d elements of game work ok, 3D in intro good, 3D in title is quite broken
 - Pokemon Ranger: Mostly OK, 2D components are rendered as 3D and there are some precision issues.
@@ -104,20 +104,21 @@ DS:
 - Tony Hawk's Downhill Jam: Shows titles, then black screen
 - Tony Hawk's American Sk8land: Shows titles, menus, then gameplay crashes after matrix overflow
 - The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)
-- Yoshi's Island DS: Shows titles, intro, menu, pre-gameplay video, and gameplay correctly!
+- Yoshi's Island DS: Mostly OK.
 
 #### NDS TODO
 - Audio
+- Microphone
 - 3D Video:
     - Clip in 3D space?
     - Rasterising precision improvement
     - Lighting issues (?)
     - Post-processing (edge + anti-aliasing)
     - Perspective correct tex mapping needed
-    - Blending with 2D components (use buffer alpha value)
+    - More precise tex mapping needed
 - 2D main RAM video mode
 - Engine A video capture & blending fixes
-- Microphone
-- Save RAM
+- WiFi
+- Local network
 - Booting via BIOS
 - Performance
