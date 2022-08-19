@@ -97,6 +97,11 @@ impl DSCardIO {
     pub fn clock(&mut self, cycles: usize) {
         //self.card.lock().clock(cycles);
     }
+    
+    /// To be called by only the ARM7 processor.
+    pub fn flush_save(&mut self) {
+        self.card.lock().flush_save();
+    }
 
     pub fn get_interrupt(&self) -> Interrupts {
         if self.interrupt.swap(false, Ordering::Acquire) {
@@ -195,13 +200,15 @@ impl DSCard {
         let id_code = u32::from_le_bytes([buffer[0xC], buffer[0xD], buffer[0xE], buffer[0xF]]);
         let key1_level2 = dscrypto::key1::init(id_code, &key1, 2, 2);
 
+        let spi = SPI::new(None);
+
         Ok(Self {
             rom_file:   rom_file,
             rom_buffer: buffer,
             buffer_tag: 0,
 
             spi_control:    GamecardControl::default(),
-            spi:            SPI::new(),
+            spi:            spi,
             rom_control_lo: RomControlLo::default(),
             rom_control_hi: RomControlHi::default(),
 
@@ -239,6 +246,10 @@ impl DSCard {
                 //self.trigger_interrupt();
             }
         }
+    }
+
+    fn flush_save(&mut self) {
+        self.spi.flush();
     }
 
     fn load_data(&mut self, from_addr: u32, into_buffer: &mut [u8]) {
@@ -370,6 +381,31 @@ impl MemInterface16 for DSCard {
             _ => unreachable!(),
         }
     }
+
+    /*fn read_word(&mut self, addr: u32) -> u32 {
+        match addr {
+            0x0400_01A4 => bytes::u32::make(self.rom_control_hi.bits(), self.rom_control_lo.bits()),
+            0x0410_0010 => {    // Data out
+                u32::from_le_bytes([
+                    self.get_data_out(),
+                    self.get_data_out(),
+                    self.get_data_out(),
+                    self.get_data_out()
+                ])
+            },
+            _ => panic!("read word from card @ {:X}", addr)
+        }
+    }
+
+    fn write_word(&mut self, addr: u32, data: u32) {
+        match addr {
+            0x0400_01A4 => {
+                self.write_rom_control_lo(bytes::u32::lo(data));
+                self.write_rom_control_hi(bytes::u32::hi(data))
+            },
+            _ => panic!("write word to card @ {:X}", addr)
+        }
+    }*/
 }
 
 /// How the input commands are encrypted.

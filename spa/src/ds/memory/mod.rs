@@ -815,6 +815,7 @@ impl DS7MemoryBus {
                 if self.video.v_blank_enabled() {
                     vblank = Interrupts::V_BLANK;
                 }
+                self.card.flush_save();
             }
             self.barrier.wait();
         }
