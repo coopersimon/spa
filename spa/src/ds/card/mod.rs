@@ -11,7 +11,7 @@ use std::{
         SeekFrom
     },
     fs::File,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         Arc, atomic::{AtomicBool, Ordering}
     }
@@ -75,8 +75,8 @@ pub struct DSCardIO {
 }
 
 impl DSCardIO {
-    pub fn new(rom_path: &Path, key1: Vec<u32>) -> Result<(Self, Self)> {
-        let card = DSCard::new(rom_path, key1)?;
+    pub fn new(rom_path: &Path, save_path: Option<PathBuf>, key1: Vec<u32>) -> Result<(Self, Self)> {
+        let card = DSCard::new(rom_path, save_path, key1)?;
         let interrupt_7 = card.interrupt_7.clone();
         let interrupt_9 = card.interrupt_9.clone();
         let dma_ready_7 = card.dma_ready_7.clone();
@@ -189,7 +189,7 @@ struct DSCard {
 }
 
 impl DSCard {
-    fn new(rom_path: &Path, key1: Vec<u32>) -> Result<Self> {
+    fn new(rom_path: &Path, save_path: Option<PathBuf>, key1: Vec<u32>) -> Result<Self> {
         let mut rom_file = File::open(rom_path)?;
         let mut buffer = vec![0; ROM_BUFFER_SIZE as usize];
 
@@ -200,15 +200,13 @@ impl DSCard {
         let id_code = u32::from_le_bytes([buffer[0xC], buffer[0xD], buffer[0xE], buffer[0xF]]);
         let key1_level2 = dscrypto::key1::init(id_code, &key1, 2, 2);
 
-        let spi = SPI::new(None);
-
         Ok(Self {
             rom_file:   rom_file,
             rom_buffer: buffer,
             buffer_tag: 0,
 
             spi_control:    GamecardControl::default(),
-            spi:            spi,
+            spi:            SPI::new(save_path),
             rom_control_lo: RomControlLo::default(),
             rom_control_hi: RomControlHi::default(),
 

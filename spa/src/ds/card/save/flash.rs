@@ -37,6 +37,7 @@ impl Flash {
     }
     
     pub fn new_from_file(file: SaveFile) -> Self {
+        println!("found file: FLASH");
         Self {
             file,
 

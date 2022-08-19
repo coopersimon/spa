@@ -105,7 +105,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
 
         let (ex_mem_control, ex_mem_status) = ExMemControl::new();
         let key1 = (0..0x412).map(|n| arm7_bios.read_word(0x30 + (n*4))).collect::<Vec<_>>();
-        let (card_9, card_7) = DSCardIO::new(&config.rom_path, key1).unwrap();
+        let (card_9, card_7) = DSCardIO::new(&config.rom_path, config.save_path.clone(), key1).unwrap();
 
         let barrier = Arc::new(Barrier::new(2));
         let (input_send, input_recv) = bounded(1);

@@ -41,6 +41,7 @@ impl SmallEEPROM {
     }
     
     pub fn new_from_file(file: SaveFile) -> Self {
+        println!("found file: EEPROM 9-bit");
         Self {
             file,
 
@@ -138,6 +139,7 @@ impl MediumEEPROM {
     }
     
     pub fn new_from_file(file: SaveFile) -> Self {
+        println!("found file: EEPROM 16-bit");
         Self {
             file,
 
@@ -242,6 +244,7 @@ impl LargeEEPROM {
     }
     
     pub fn new_from_file(file: SaveFile) -> Self {
+        println!("found file: EEPROM 24-bit");
         Self {
             file,
 
