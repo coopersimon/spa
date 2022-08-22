@@ -292,7 +292,16 @@ impl <R: Renderer> DS9MemoryBus<R> {
     fn do_dma(&mut self) {
         // TODO: keep executing if inside cache?
         let mut last_active = 4;
+        let mut cycles = 0;
         loop {
+
+            if cycles > 8 {
+                if self.do_clock(cycles) {
+                    self.frame_end();
+                }
+                cycles = 0;
+            }
+
             if let Some(c) = self.dma.get_active() {
                 // Check if DMA channel has changed since last transfer.
                 let access = if last_active != c {
@@ -305,7 +314,7 @@ impl <R: Renderer> DS9MemoryBus<R> {
                     arm::MemCycleType::S
                 };
                 // Transfer one piece of data.
-                let cycles = match self.dma.channels[c].next_addrs() {
+                cycles += match self.dma.channels[c].next_addrs() {
                     DMAAddress::Addr {
                         source, dest
                     } => if self.dma.channels[c].transfer_32bit_word() {
@@ -334,9 +343,6 @@ impl <R: Renderer> DS9MemoryBus<R> {
                         cycles
                     }
                 };
-                if self.do_clock(cycles) {
-                    self.frame_end();
-                }
             } else {
                 break;
             }
@@ -397,8 +403,6 @@ impl <R: Renderer> DS9MemoryBus<R> {
 
     /// Called when vblank occurs. Halts emulation until the next frame.
     fn frame_end(&mut self) {
-        //self.game_pak.flush_save();
-
         let input = self.frame_sender.sync_frame();
         self.joypad.set_all_buttons(input.buttons);
         self.input_send.send(input).unwrap();
@@ -409,30 +413,36 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
+        // Check if CPU is halted.
+        if self.halt {
+            loop {
+                if self.do_clock(8) {
+                    self.frame_end();
+                }
+                self.do_dma();
+                if self.check_irq() {
+                    self.halt = false;
+                    break;
+                }
+            }
+        } else {
+            if self.dma.get_active().is_some() {
+                self.do_dma();
+            }
+        }
+
         self.inner_counter += cycles;
-        if self.inner_counter < 4 {
+        if self.inner_counter < 16 {
+            if self.check_irq() {
+                return Some(arm::ExternalException::IRQ);
+            }
             return None;
         }
 
         if self.do_clock(self.inner_counter) {
             self.frame_end();
         }
-        self.do_dma();
         self.inner_counter = 0;
-
-        // Check if CPU is halted.
-        if self.halt {
-            loop {
-                if self.do_clock(4) {
-                    self.frame_end();
-                }
-                self.do_dma();
-                if self.check_irq() {
-                    self.halt = false;
-                    return Some(arm::ExternalException::IRQ);
-                }
-            }
-        }
 
         if self.check_irq() {
             self.halt = false;
@@ -446,7 +456,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => (
                 self.main_ram.read_byte(addr & 0x3F_FFFF),
-                if cycle.is_non_seq() {4} else {2}
+                2
             ),
             0x0300_0000..=0x03FF_FFFF => (
                 self.shared_wram.read_byte(addr),
@@ -478,7 +488,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_byte(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {4} else {2}
+                2
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared RAM
                 self.shared_wram.write_byte(addr, data);
@@ -527,7 +537,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {4} else {2}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), 2),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -555,7 +565,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_halfword(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {4} else {2}
+                2
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_halfword(addr, data);
@@ -605,7 +615,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {6} else {4}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), 3),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -633,7 +643,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_word(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {6} else {4}
+                3
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_word(addr, data);
@@ -866,14 +876,15 @@ impl Mem32 for DS7MemoryBus {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
-        self.inner_counter += cycles;
-        if self.inner_counter < 4 {
+        /*self.inner_counter += cycles;
+        if self.inner_counter < 1 {
             return None;
-        }
+        }*/
 
-        self.do_clock(self.inner_counter);
+        //self.do_clock(self.inner_counter);
+        self.do_clock(cycles);
         self.do_dma();
-        self.inner_counter = 0;
+        //self.inner_counter = 0;
 
         // Check if CPU is halted.
         if self.power_control.halt {
