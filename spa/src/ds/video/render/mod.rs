@@ -1,5 +1,5 @@
 
-use crossbeam_channel::{bounded, Sender, Receiver};
+use crossbeam_channel::{bounded, Sender};
 use parking_lot::Mutex;
 use std::sync::Arc;
 use crate::common::colour::Colour;
@@ -20,6 +20,8 @@ pub type RenderTarget = Arc<Mutex<Box<[u8]>>>;
 pub trait Renderer {
     fn new(upper: RenderTarget, lower: RenderTarget, vram: RendererVRAM) -> Self;
 
+    /// Render 3D content.
+    fn render_3d(&mut self);
     /// Render a single line.
     fn render_line(&mut self, line: u16);
     /// Start rendering the frame.
@@ -30,9 +32,14 @@ pub trait Renderer {
     fn render_size() -> (usize, usize);
 }
 
+enum RenderCommand {
+    Normal(u16),
+    _3D,
+}
+
 pub struct ProceduralRenderer {
-    command_tx: Sender<u16>,
-    reply_rx: Receiver<()>
+    command_tx: Sender<RenderCommand>,
+    //reply_rx: Receiver<()>
 }
 
 pub struct ProceduralRendererThread {
@@ -69,7 +76,7 @@ impl Renderer for ProceduralRenderer {
     fn new(upper: RenderTarget, lower: RenderTarget, vram: RendererVRAM) -> Self {
 
         let (command_tx, command_rx) = bounded(1);
-        let (reply_tx, reply_rx) = bounded(1);
+        //let (reply_tx, reply_rx) = bounded(1);
         std::thread::spawn(move || {
 
             let mut data = ProceduralRendererThread {
@@ -85,26 +92,36 @@ impl Renderer for ProceduralRenderer {
                 line_cache_b: vec![Colour::black(); H_RES],
             };
 
-            reply_tx.send(()).unwrap();
+            //reply_tx.send(()).unwrap();
 
-            while let Ok(line) = command_rx.recv() {
-                if line == 0 {
-                    data.start_frame();
+            while let Ok(cmd) = command_rx.recv() {
+                match cmd {
+                    RenderCommand::Normal(line) => {
+                        if line == 0 {
+                            data.start_frame();
+                        }
+                        data.render_line(line);
+                        if line == V_MAX {
+                            data.finish_frame();
+                        }
+                    }
+                    RenderCommand::_3D => data.render_3d()
                 }
-                data.render_line(line);
-                if line == V_MAX {
-                    data.finish_frame();
-                }
-                reply_tx.send(()).unwrap();
+                
+                //reply_tx.send(()).unwrap();
             }
         });
 
-        Self { command_tx, reply_rx }
+        Self { command_tx }
+    }
+
+    fn render_3d(&mut self) {
+        self.command_tx.send(RenderCommand::_3D).unwrap();
     }
 
     fn render_line(&mut self, line: u16) {
-        self.reply_rx.recv().unwrap();
-        self.command_tx.send(line).unwrap();
+        //self.reply_rx.recv().unwrap();
+        self.command_tx.send(RenderCommand::Normal(line)).unwrap();
     }
 
     fn start_frame(&mut self) {
@@ -140,15 +157,19 @@ impl ProceduralRendererThread {
         }
     }
 
-    fn render_line(&mut self, line: u16) {
+    fn render_3d(&mut self) {
         let power_cnt = self.vram.read_power_cnt();
 
         if power_cnt.contains(GraphicsPowerControl::RENDER_3D) {
             let engine_3d_vram = self.vram.engine_3d_vram.lock();
             let render_engine = self.vram.render_engine.lock();
 
-            self.engine_3d.draw(&render_engine, &engine_3d_vram, &mut self.engine_a.line_3d, line as u8);
+            self.engine_3d.draw(&render_engine, &engine_3d_vram, &mut self.engine_a.frame_3d);
         }
+    }
+
+    fn render_line(&mut self, line: u16) {
+        let power_cnt = self.vram.read_power_cnt();
 
         if power_cnt.contains(GraphicsPowerControl::ENABLE_A) {
             self.engine_a_line(line as u8, power_cnt.contains(GraphicsPowerControl::DISPLAY_SWAP));
@@ -228,8 +249,12 @@ impl ProceduralRendererThread {
                             self.engine_a.draw(&engine_a_mem, &mut self.line_cache, line);
                         }
                     },
-                    DispCapSourceA::_3D => for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.line_3d) {
-                        *a = b.col;
+                    DispCapSourceA::_3D => {
+                        let start = (line as usize) * H_RES;
+                        let end = start + H_RES;
+                        for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.frame_3d[start..=end]) {
+                            *a = b.col;
+                        }
                     }
                 },
                 DispCapMode::B(src_b) => match src_b {
@@ -247,8 +272,12 @@ impl ProceduralRendererThread {
                                 self.engine_a.draw(&engine_a_mem, &mut self.line_cache, line);
                             }
                         },
-                        DispCapSourceA::_3D => for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.line_3d) {
-                            *a = b.col;
+                        DispCapSourceA::_3D => {
+                            let start = (line as usize) * H_RES;
+                            let end = start + H_RES;
+                            for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.frame_3d[start..=end]) {
+                                *a = b.col;
+                            }
                         }
                     }
                     match src_b {
@@ -367,6 +396,8 @@ impl Renderer for DebugTileRenderer {
             upper, lower, vram
         }
     }
+    
+    fn render_3d(&mut self) {}
 
     fn render_line(&mut self, line: u16) {
         if line == 0 {

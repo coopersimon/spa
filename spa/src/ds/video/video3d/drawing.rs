@@ -27,18 +27,18 @@ pub struct Software3DRenderer {
 impl Software3DRenderer {
     pub fn new() -> Self {
         Self {
-            stencil_buffer: vec![false; 256],
-            attr_buffer:    vec![Default::default(); 256],
-            depth_buffer:   vec![Depth::ZERO; 256],
+            stencil_buffer: vec![false; 256 * 192],
+            attr_buffer:    vec![Default::default(); 256 * 192],
+            depth_buffer:   vec![Depth::ZERO; 256 * 192],
         }
     }
 
-    pub fn draw(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], line: u8) {
-        self.clear_buffers(render_engine, vram, target, line);
+    pub fn draw(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha]) {
+        self.clear_buffers(render_engine, vram, target);
 
-        self.draw_opaque_polygons(render_engine, vram, target, line);
+        self.draw_opaque_polygons(render_engine, vram, target);
 
-        self.draw_trans_polygons(render_engine, vram, target, line);
+        self.draw_trans_polygons(render_engine, vram, target);
 
         if render_engine.control.contains(Display3DControl::EDGE_MARKING) {
             self.mark_edges(render_engine, target);
@@ -55,36 +55,41 @@ impl Software3DRenderer {
 
 impl Software3DRenderer {
     /// Fill the drawing buffers with clear values or clear image.
-    fn clear_buffers(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], line: u8) {
+    fn clear_buffers(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha]) {
         self.stencil_buffer.fill(false);
 
         if render_engine.control.contains(Display3DControl::CLEAR_IMAGE) {
             let clear_colour_image = vram.tex_2.as_ref().expect("using clear colour image without mapped vram");
             let clear_depth_image = vram.tex_3.as_ref().expect("using clear depth image without mapped vram");
 
-            let image_y = line.wrapping_add(render_engine.clear_image_y);
-            let image_y_addr = (image_y as u32) * 256 * 2;
+            for y in 0..=192_u8 {
+                let y_idx_base = (y as usize) * 256;
 
-            for x in 0..=255_u8 {
-                let image_x = x.wrapping_add(render_engine.clear_image_x);
-                let addr = image_y_addr + (image_x as u32) * 2;
-                let colour = clear_colour_image.read_halfword(addr);
-                let depth = clear_depth_image.read_halfword(addr);
-                let clear_attrs = Attributes {
-                    opaque_id:  render_engine.clear_poly_id,
-                    trans_id:   render_engine.clear_poly_id,
-                    fog:        u16::test_bit(depth, 15),
-                };
-
-                self.attr_buffer[x as usize] = clear_attrs;
-                self.depth_buffer[x as usize] = Depth::from_bits(((depth & 0x7FFF) as i32) << 9);   // TODO: frac part.
-                target[x as usize].col = Colour::from_555(colour);
-                target[x as usize].alpha = if u16::test_bit(colour, 15) {0x1F} else {0};
+                let image_y = y.wrapping_add(render_engine.clear_image_y);
+                let image_y_addr = (image_y as u32) * 256 * 2;
+    
+                for x in 0..=255_u8 {
+                    let image_x = x.wrapping_add(render_engine.clear_image_x);
+                    let addr = image_y_addr + (image_x as u32) * 2;
+                    let colour = clear_colour_image.read_halfword(addr);
+                    let depth = clear_depth_image.read_halfword(addr);
+                    let clear_attrs = Attributes {
+                        opaque_id:  render_engine.clear_poly_id,
+                        trans_id:   0,
+                        fog:        u16::test_bit(depth, 15),
+                    };
+    
+                    let idx = y_idx_base + (x as usize);
+                    self.attr_buffer[idx] = clear_attrs;
+                    self.depth_buffer[idx] = Depth::from_bits(((depth & 0x7FFF) as i32) << 9);   // TODO: frac part.
+                    target[idx].col = Colour::from_555(colour);
+                    target[idx].alpha = if u16::test_bit(colour, 15) {0x1F} else {0};
+                }
             }
         } else {
             let clear_attrs = Attributes {
                 opaque_id:  render_engine.clear_poly_id,
-                trans_id:   render_engine.clear_poly_id,
+                trans_id:   0,
                 fog:        render_engine.fog_enabled,
             };
             self.attr_buffer.fill(clear_attrs);
@@ -93,19 +98,85 @@ impl Software3DRenderer {
         }
     }
     
-    fn draw_opaque_polygons(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], line: u8) {
-        let y = N::from_num(line);
+    fn draw_opaque_polygons(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha]) {
+        for p in render_engine.polygon_ram.opaque_polygons.iter() {
 
-        for p in render_engine.polygon_ram.opaque_polygons.iter()
-            //.skip_while(|el| el.y_max < line || el.y_min > line)
-            //.take_while(|el| el.y_max >= line && el.y_min <= line)
-        {
-            if p.y_max < y || p.y_min > y {
-                continue;
-            }
             let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
             let mode = polygon.attrs.mode();
             
+            for y_idx in p.y_min.to_num::<u8>()..=p.y_max.to_num::<u8>() {
+
+                let y = N::from_num(y_idx);
+                let y_idx_base = (y_idx as usize) * 256;
+
+                let b = Self::find_intersect_points(render_engine, polygon, y);
+                if b.is_none() {
+                    // TODO: why _can_ this return none?
+                    continue;
+                }
+                let [vtx_a, vtx_b] = b.unwrap();
+
+                let x_diff = (vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
+
+                // TODO: wireframe
+                for x_idx in vtx_a.screen_p.x.to_num::<i16>()..=vtx_b.screen_p.x.to_num::<i16>() {
+                    let x = N::from_num(x_idx);// + N::from_num(0.5);
+                    let factor_b = ((x - vtx_a.screen_p.x).to_fixed::<I40F24>() * x_diff).to_fixed::<N>();
+                    let factor_a = N::ONE - factor_b;
+
+                    let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
+
+                    let idx = y_idx_base + (x_idx as usize);
+                    if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[idx], depth) {
+                        continue;
+                    }
+
+                    // Interpolate vertex colour
+                    let vtx_colour = ColourAlpha {
+                        col: interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b),
+                        alpha: 0x1F
+                    };
+
+                    let tex_coords = interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
+                    let tex_colour = Self::lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
+
+                    let frag_colour = if let Some(tex_colour) = tex_colour {
+                        Self::blend_frag_tex_colour(render_engine, mode, vtx_colour, tex_colour)
+                    } else {
+                        Self::blend_fragment_colour(render_engine, mode, vtx_colour)
+                    };
+                    if frag_colour.alpha > 0 {
+                        target[idx] = frag_colour;
+                        self.depth_buffer[idx] = depth;
+                        self.attr_buffer[idx].opaque_id = polygon.attrs.id();
+                        self.attr_buffer[idx].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
+                    }
+                }
+
+            }
+            
+        }
+    }
+    
+    fn draw_trans_polygons(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha]) {
+        if render_engine.polygon_ram.use_manual_mode {
+            render_engine.polygon_ram.trans_polygon_manual.iter()
+                .for_each(|p| self.draw_trans_polygon(render_engine, vram, target, p));
+        } else {
+            render_engine.polygon_ram.trans_polygon_auto.iter()
+                .for_each(|p| self.draw_trans_polygon(render_engine, vram, target, p));
+        }
+    }
+
+    fn draw_trans_polygon(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], p: &PolygonOrder) {
+        let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
+        let mode = polygon.attrs.mode();
+        
+        for y_idx in p.y_min.to_num::<u8>()..=p.y_max.to_num::<u8>() {
+
+            let y = N::from_num(y_idx);
+            let y_idx_base = (y_idx as usize) * 256;
+
             let b = Self::find_intersect_points(render_engine, polygon, y);
             if b.is_none() {
                 // TODO: why _can_ this return none?
@@ -113,26 +184,44 @@ impl Software3DRenderer {
             }
             let [vtx_a, vtx_b] = b.unwrap();
 
-            let x_diff = I40F24::ONE.checked_div((vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>()).unwrap_or(I40F24::ZERO).to_fixed::<N>();
+            let x_diff = I40F24::ONE.checked_div((vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>()).unwrap_or(I40F24::ZERO);
 
-            // TODO: wireframe
-            for x_idx in vtx_a.screen_p.x.to_num::<i16>()..=vtx_b.screen_p.x.to_num::<i16>() {
-                let x = N::from_num(x_idx) + N::from_num(0.5);
-                let factor_b = (x - vtx_a.screen_p.x) * x_diff;
+            for x_idx in vtx_a.screen_p.x.floor().to_num::<i16>()..=vtx_b.screen_p.x.ceil().to_num::<i16>() {
+                let id = polygon.attrs.id();
+                let idx = y_idx_base + (x_idx as usize);
+                // TODO: only extract for shadow polygons?
+                let stencil_mask = std::mem::replace(&mut self.stencil_buffer[idx], false);
+                if self.attr_buffer[idx].trans_id == id && polygon.attrs.alpha() != 0x1F {
+                    continue;
+                }
+
+                let x = N::from_num(x_idx);// + N::from_num(0.5);
+                let factor_b = ((x - vtx_a.screen_p.x).to_fixed::<I40F24>() * x_diff).to_fixed::<N>();
                 let factor_a = N::ONE - factor_b;
 
                 let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
 
-                if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[x_idx as usize], depth) {
+                if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[idx], depth) {
+                    if id == 0 && mode == PolygonMode::Shadow {
+                        // Shadow polygon mask
+                        self.stencil_buffer[idx] = true;
+                    }
+                    continue;
+                }
+
+                if mode == PolygonMode::Shadow &&
+                    (!stencil_mask || self.attr_buffer[idx].opaque_id == id) {
+                    // We only want to draw the shadow if it passes depth,
+                    // is masked, and doesn't match the IDs
                     continue;
                 }
 
                 // Interpolate vertex colour
                 let vtx_colour = ColourAlpha {
                     col: interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b),
-                    alpha: 0x1F
+                    alpha: polygon.attrs.alpha()
                 };
-
+                
                 let tex_coords = interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
                 let tex_colour = Self::lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
 
@@ -141,114 +230,38 @@ impl Software3DRenderer {
                 } else {
                     Self::blend_fragment_colour(render_engine, mode, vtx_colour)
                 };
-                if frag_colour.alpha > 0 {
-                    target[x_idx as usize] = frag_colour;
-                    self.depth_buffer[x_idx as usize] = depth;
-                    self.attr_buffer[x_idx as usize].opaque_id = polygon.attrs.id();
-                    self.attr_buffer[x_idx as usize].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
+                if frag_colour.alpha == 0 {
+                    continue;
+                } else if render_engine.control.contains(Display3DControl::ALPHA_TEST_ENABLE) && frag_colour.alpha < render_engine.alpha_test {
+                    continue;
+                } else if frag_colour.alpha != 0x1F && self.attr_buffer[idx].trans_id == id {
+                    continue;
+                }
+
+                // We are sure that we want to render this fragment.
+                if render_engine.control.contains(Display3DControl::BLENDING_ENABLE) {
+                    target[idx] = Self::blend_buffer_colour(
+                        frag_colour, target[idx],
+                        mode == PolygonMode::Shadow
+                    );
+                } else {
+                    target[idx] = frag_colour;
+                }
+
+                if frag_colour.alpha != 0x1F {
+                    if polygon.attrs.contains(PolygonAttrs::ALPHA_DEPTH) {
+                        self.depth_buffer[idx] = depth;
+                    }
+                    self.attr_buffer[idx].trans_id = id;
+                    self.attr_buffer[idx].fog = self.attr_buffer[idx].fog && polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
+                } else {
+                    self.depth_buffer[idx] = depth;
+                    self.attr_buffer[idx].opaque_id = id;
+                    self.attr_buffer[idx].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
                 }
             }
         }
-    }
-    
-    fn draw_trans_polygons(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], line: u8) {
-        let y = N::from_num(line);
-
-        if render_engine.polygon_ram.use_manual_mode {
-            render_engine.polygon_ram.trans_polygon_manual.iter()
-                .for_each(|p| self.draw_trans_polygon(render_engine, vram, target, y, p))
-        } else {
-            render_engine.polygon_ram.trans_polygon_auto.iter()
-                .for_each(|p| self.draw_trans_polygon(render_engine, vram, target, y, p))
-            //.skip_while(|el| el.y_max < line || el.y_min > line)
-            //.take_while(|el| el.y_max >= line && el.y_min <= line)
-        }
-    }
-
-    fn draw_trans_polygon(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], y: N, p: &PolygonOrder) {
-        if p.y_max < y || p.y_min > y {
-            return;
-        }
-        let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
-        let mode = polygon.attrs.mode();
         
-        let [vtx_a, vtx_b] = Self::find_intersect_points(render_engine, polygon, y).unwrap();
-
-        let x_diff = I40F24::ONE.checked_div((vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>()).unwrap_or(I40F24::ZERO).to_fixed::<N>();
-
-        for x_idx in vtx_a.screen_p.x.to_num::<i16>()..=vtx_b.screen_p.x.to_num::<i16>() {
-            let id = polygon.attrs.id();
-            // TODO: only extract for shadow polygons?
-            let stencil_mask = std::mem::replace(&mut self.stencil_buffer[x_idx as usize], false);
-            if self.attr_buffer[x_idx as usize].trans_id == id && polygon.attrs.alpha() != 0x1F {
-                continue;
-            }
-
-            let x = N::from_num(x_idx) + N::from_num(0.5);
-            let factor_b = (x - vtx_a.screen_p.x) * x_diff;
-            let factor_a = N::ONE - factor_b;
-
-            let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
-
-            if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[x_idx as usize], depth) {
-                if id == 0 && mode == PolygonMode::Shadow {
-                    // Shadow polygon mask
-                    self.stencil_buffer[x_idx as usize] = true;
-                }
-                continue;
-            }
-
-            if mode == PolygonMode::Shadow &&
-                (!stencil_mask || self.attr_buffer[x_idx as usize].opaque_id == id) {
-                // We only want to draw the shadow if it passes depth,
-                // is masked, and doesn't match the IDs
-                continue;
-            }
-
-            // Interpolate vertex colour
-            let vtx_colour = ColourAlpha {
-                col: interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b),
-                alpha: polygon.attrs.alpha()
-            };
-            
-            let tex_coords = interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
-            let tex_colour = Self::lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
-
-            let frag_colour = if let Some(tex_colour) = tex_colour {
-                Self::blend_frag_tex_colour(render_engine, mode, vtx_colour, tex_colour)
-            } else {
-                Self::blend_fragment_colour(render_engine, mode, vtx_colour)
-            };
-            if frag_colour.alpha == 0 {
-                continue;
-            } else if render_engine.control.contains(Display3DControl::ALPHA_TEST_ENABLE) && frag_colour.alpha < render_engine.alpha_test {
-                continue;
-            } else if frag_colour.alpha != 0x1F && self.attr_buffer[x_idx as usize].trans_id == id {
-                continue;
-            }
-
-            // We are sure that we want to render this fragment.
-            if render_engine.control.contains(Display3DControl::BLENDING_ENABLE) {
-                target[x_idx as usize] = Self::blend_buffer_colour(
-                    frag_colour, target[x_idx as usize],
-                    mode == PolygonMode::Shadow
-                );
-            } else {
-                target[x_idx as usize] = frag_colour;
-            }
-
-            if frag_colour.alpha != 0x1F {
-                if polygon.attrs.contains(PolygonAttrs::ALPHA_DEPTH) {
-                    self.depth_buffer[x_idx as usize] = depth;
-                }
-                self.attr_buffer[x_idx as usize].trans_id = id;
-                self.attr_buffer[x_idx as usize].fog = self.attr_buffer[x_idx as usize].fog && polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
-            } else {
-                self.depth_buffer[x_idx as usize] = depth;
-                self.attr_buffer[x_idx as usize].opaque_id = id;
-                self.attr_buffer[x_idx as usize].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
-            }
-        }
     }
 
     fn draw_fog(&mut self, render_engine: &RenderingEngine, target: &mut [ColourAlpha]) {
@@ -257,13 +270,13 @@ impl Software3DRenderer {
         let fog_min = render_engine.fog_offset + fog_interval;
         let fog_max = render_engine.fog_offset + (fog_interval << 5);
         let fog_diff = Depth::from_num(fog_interval);
-        for x in 0..=255 {
-            if !self.attr_buffer[x].fog {
+        for idx in 0..(256 * 192) {
+            if !self.attr_buffer[idx].fog {
                 continue;
             }
 
             // Upper 15 bits of depth.
-            let depth = (self.depth_buffer[x].to_num::<i32>() & 0x7FFF) as u16;
+            let depth = (self.depth_buffer[idx].to_num::<i32>() & 0x7FFF) as u16;
             let fog_density = if depth < fog_min {
                 render_engine.fog_table[0]
             } else if depth >= fog_max  {
@@ -281,23 +294,23 @@ impl Software3DRenderer {
 
             if render_engine.control.contains(Display3DControl::FOG_MODE) {
                 if fog_density == 127 {
-                    target[x].alpha = render_engine.fog_alpha;
+                    target[idx].alpha = render_engine.fog_alpha;
                 } else {
                     let buffer_density = 128 - fog_density;
-                    let alpha = (target[x].alpha as u16) * buffer_density + (render_engine.fog_alpha as u16) * fog_density;
-                    target[x].alpha = (alpha >> 7) as u8;
+                    let alpha = (target[idx].alpha as u16) * buffer_density + (render_engine.fog_alpha as u16) * fog_density;
+                    target[idx].alpha = (alpha >> 7) as u8;
                 }
             } else {
                 if fog_density == 127 {
-                    target[x].col = render_engine.fog_colour;
-                    target[x].alpha = render_engine.fog_alpha;
+                    target[idx].col = render_engine.fog_colour;
+                    target[idx].alpha = render_engine.fog_alpha;
                 } else {
                     let buffer_density = 128 - fog_density;
-                    let r = (target[x].col.r as u16) * buffer_density + (render_engine.fog_colour.r as u16) * fog_density;
-                    let g = (target[x].col.g as u16) * buffer_density + (render_engine.fog_colour.g as u16) * fog_density;
-                    let b = (target[x].col.b as u16) * buffer_density + (render_engine.fog_colour.b as u16) * fog_density;
-                    let alpha = (target[x].alpha as u16) * buffer_density + (render_engine.fog_alpha as u16) * fog_density;
-                    target[x] = ColourAlpha {
+                    let r = (target[idx].col.r as u16) * buffer_density + (render_engine.fog_colour.r as u16) * fog_density;
+                    let g = (target[idx].col.g as u16) * buffer_density + (render_engine.fog_colour.g as u16) * fog_density;
+                    let b = (target[idx].col.b as u16) * buffer_density + (render_engine.fog_colour.b as u16) * fog_density;
+                    let alpha = (target[idx].alpha as u16) * buffer_density + (render_engine.fog_alpha as u16) * fog_density;
+                    target[idx] = ColourAlpha {
                         col: Colour {
                             r: (r >> 7) as u8,
                             g: (g >> 7) as u8,
@@ -311,7 +324,7 @@ impl Software3DRenderer {
     }
 
     fn mark_edges(&mut self, render_engine: &RenderingEngine, target: &mut [ColourAlpha]) {
-        // TODO
+
     }
 }
 
@@ -339,7 +352,7 @@ impl Software3DRenderer {
             // Weight of point a (normalised between 0-1)
             let factor_a = (y - vtx_b.screen_p.y).to_fixed::<I40F24>().checked_div((vtx_a.screen_p.y - vtx_b.screen_p.y).to_fixed::<I40F24>()).unwrap_or(I40F24::ONE).to_fixed::<N>();   // TODO: one dot polygon?
             // X coordinate where the render line intersects the polygon line.
-            let intersect_x = factor_a * (vtx_a.screen_p.x - vtx_b.screen_p.x) + vtx_b.screen_p.x;
+            let intersect_x = factor_a.to_fixed::<I40F24>() * (vtx_a.screen_p.x - vtx_b.screen_p.x).to_fixed::<I40F24>() + vtx_b.screen_p.x.to_fixed::<I40F24>();
             let factor_b = N::ONE - factor_a;
 
             // Interpolate attributes
@@ -348,7 +361,7 @@ impl Software3DRenderer {
             let tex_coords = interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
 
             let vertex = Vertex {
-                screen_p:   Coords { x: intersect_x, y: y },
+                screen_p:   Coords { x: intersect_x.to_fixed::<N>(), y: y },
                 depth:      depth,
                 colour:     frag_colour,
                 tex_coords: tex_coords
