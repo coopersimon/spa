@@ -62,7 +62,7 @@ impl Software3DRenderer {
             let clear_colour_image = vram.tex_2.as_ref().expect("using clear colour image without mapped vram");
             let clear_depth_image = vram.tex_3.as_ref().expect("using clear depth image without mapped vram");
 
-            for y in 0..=192_u8 {
+            for y in 0..192_u8 {
                 let y_idx_base = (y as usize) * 256;
 
                 let image_y = y.wrapping_add(render_engine.clear_image_y);
@@ -104,7 +104,7 @@ impl Software3DRenderer {
             let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
             let mode = polygon.attrs.mode();
             
-            for y_idx in p.y_min.to_num::<u8>()..=p.y_max.to_num::<u8>() {
+            for y_idx in p.y_min.to_num::<u8>()..=p.y_max.ceil().to_num::<u8>() {
 
                 let y = N::from_num(y_idx);
                 let y_idx_base = (y_idx as usize) * 256;
@@ -116,10 +116,11 @@ impl Software3DRenderer {
                 }
                 let [vtx_a, vtx_b] = b.unwrap();
 
-                let x_diff = (vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
+                let (min, max) = (vtx_a.screen_p.x.to_num::<i16>(), vtx_b.screen_p.x.ceil().to_num::<i16>());
+                let x_diff = (max - min).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
 
                 // TODO: wireframe
-                for x_idx in vtx_a.screen_p.x.to_num::<i16>()..=vtx_b.screen_p.x.to_num::<i16>() {
+                for x_idx in min..=max {
                     let x = N::from_num(x_idx);// + N::from_num(0.5);
                     let factor_b = ((x - vtx_a.screen_p.x).to_fixed::<I40F24>() * x_diff).to_fixed::<N>();
                     let factor_a = N::ONE - factor_b;
@@ -172,7 +173,7 @@ impl Software3DRenderer {
         let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
         let mode = polygon.attrs.mode();
         
-        for y_idx in p.y_min.to_num::<u8>()..=p.y_max.to_num::<u8>() {
+        for y_idx in p.y_min.to_num::<u8>()..=p.y_max.ceil().to_num::<u8>() {
 
             let y = N::from_num(y_idx);
             let y_idx_base = (y_idx as usize) * 256;
@@ -184,9 +185,10 @@ impl Software3DRenderer {
             }
             let [vtx_a, vtx_b] = b.unwrap();
 
-            let x_diff = I40F24::ONE.checked_div((vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>()).unwrap_or(I40F24::ZERO);
+            let (min, max) = (vtx_a.screen_p.x.to_num::<i16>(), vtx_b.screen_p.x.ceil().to_num::<i16>());
+            let x_diff = (max - min).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
 
-            for x_idx in vtx_a.screen_p.x.floor().to_num::<i16>()..=vtx_b.screen_p.x.ceil().to_num::<i16>() {
+            for x_idx in min..=max {
                 let id = polygon.attrs.id();
                 let idx = y_idx_base + (x_idx as usize);
                 // TODO: only extract for shadow polygons?
