@@ -417,6 +417,8 @@ pub struct Engine3DVRAM {
     pub tex_palette_1:  VRAMSlot,
     pub tex_palette_4:  VRAMSlot,
     pub tex_palette_5:  VRAMSlot,
+
+    pub tex_palette_dirty: bool,
 }
 
 impl Engine3DVRAM {
@@ -436,7 +438,7 @@ impl Engine3DVRAM {
     /// Get the VRAM slot for the palette addr provided.
     /// 
     /// Returns the ram and a mask to use for the address.
-    pub fn lookup_tex_palette<'a>(&'a self, addr: u32) -> Option<(u32, &'a Box<WRAM>)> {
+    /*pub fn lookup_tex_palette<'a>(&'a self, addr: u32) -> Option<(u32, &'a Box<WRAM>)> {
         match addr {
             0x0_4000..=0x0_7FFF => match self.tex_palette_1.as_ref() {
                 None => self.tex_palette_0.as_ref().map(|vram| (vram.mask(), vram)),    // TODO: what if a 16kB VRAM block is mapped to 0, and nothing to 1?
@@ -447,7 +449,7 @@ impl Engine3DVRAM {
             0x0_0000..=0x0_FFFF => self.tex_palette_0.as_ref().map(|vram| (vram.mask(), vram)),
             _ => None
         }
-    }
+    }*/
 
     pub fn get_tex_byte(&self, addr: u32) -> u8 {
         if let Some((mask, tex_ram)) = self.lookup_tex(addr) {
@@ -465,12 +467,42 @@ impl Engine3DVRAM {
         }
     }
     
-    pub fn get_palette_halfword(&self, addr: u32) -> u16 {
+    pub fn ref_tex_palette<'a>(&'a mut self) -> [Option<&'a [u8]>; 6] {
+        if self.tex_palette_dirty {
+            self.tex_palette_dirty = false;
+            [
+                self.tex_palette_0.as_ref().map(|v| &v.ref_mem()[0..0x4000]),
+                match self.tex_palette_1.as_ref() {
+                    Some(vram) => Some(vram.ref_mem()),
+                    None => self.tex_palette_0.as_ref().and_then(|v| if v.mask() > 0x3FFF {
+                        Some(&v.ref_mem()[0x4000..0x8000])
+                    } else {
+                        None
+                    })
+                },
+                self.tex_palette_0.as_ref().and_then(|v| if v.mask() > 0x3FFF {
+                    Some(&v.ref_mem()[0x8000..0xC000])
+                } else {
+                    None
+                }),
+                self.tex_palette_0.as_ref().and_then(|v| if v.mask() > 0x3FFF {
+                    Some(&v.ref_mem()[0xC000..0x10000])
+                } else {
+                    None
+                }),
+                self.tex_palette_4.as_ref().map(|v| v.ref_mem()),
+                self.tex_palette_5.as_ref().map(|v| v.ref_mem())
+            ]
+        } else {
+            [None; 6]
+        }
+    }
+    /*pub fn get_palette_halfword(&self, addr: u32) -> u16 {
         if let Some((mask, palette_ram)) = self.lookup_tex_palette(addr) {
             palette_ram.read_halfword(addr & mask)
         } else {
             0
         }
-    }
+    }*/
 }
 

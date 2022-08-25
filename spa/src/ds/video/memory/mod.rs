@@ -471,10 +471,22 @@ impl DSVideoMemory {
                     Tex2 => std::mem::replace(&mut engine_3d.tex_2, new),
                     Tex3 => std::mem::replace(&mut engine_3d.tex_3, new),
                 
-                    Palette0 => std::mem::replace(&mut engine_3d.tex_palette_0, new),
-                    Palette1 => std::mem::replace(&mut engine_3d.tex_palette_1, new),
-                    Palette4 => std::mem::replace(&mut engine_3d.tex_palette_4, new),
-                    Palette5 => std::mem::replace(&mut engine_3d.tex_palette_5, new),
+                    Palette0 => {
+                        engine_3d.tex_palette_dirty = true;
+                        std::mem::replace(&mut engine_3d.tex_palette_0, new)
+                    },
+                    Palette1 => {
+                        engine_3d.tex_palette_dirty = true;
+                        std::mem::replace(&mut engine_3d.tex_palette_1, new)
+                    },
+                    Palette4 => {
+                        engine_3d.tex_palette_dirty = true;
+                        std::mem::replace(&mut engine_3d.tex_palette_4, new)
+                    },
+                    Palette5 => {
+                        engine_3d.tex_palette_dirty = true;
+                        std::mem::replace(&mut engine_3d.tex_palette_5, new)
+                    },
                 }
             }
         }

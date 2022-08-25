@@ -161,10 +161,12 @@ impl ProceduralRendererThread {
         let power_cnt = self.vram.read_power_cnt();
 
         if power_cnt.contains(GraphicsPowerControl::RENDER_3D) {
-            let engine_3d_vram = self.vram.engine_3d_vram.lock();
+            let mut engine_3d_mem = self.vram.engine_3d_vram.lock();
+            self.engine_3d.setup_caches(&mut engine_3d_mem);  
+
             let render_engine = self.vram.render_engine.lock();
 
-            self.engine_3d.draw(&render_engine, &engine_3d_vram, &mut self.engine_a.frame_3d);
+            self.engine_3d.draw(&render_engine, &engine_3d_mem, &mut self.engine_a.frame_3d);
         }
     }
 

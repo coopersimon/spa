@@ -1,3 +1,5 @@
+mod palette;
+
 use super::{
     render::RenderingEngine,
     types::*, geometry::N, interpolate::*
@@ -10,6 +12,8 @@ use crate::{
     utils::bits::u16, utils::bytes
 };
 
+use palette::TexPaletteCache;
+
 #[derive(Copy, Clone, Default)]
 struct Attributes {
     opaque_id:  u8,
@@ -19,6 +23,7 @@ struct Attributes {
 
 /// Render NDS 3D graphics.
 pub struct Software3DRenderer {
+    palette_cache:  TexPaletteCache,
     stencil_buffer: Vec<bool>,
     attr_buffer:    Vec<Attributes>,
     depth_buffer:   Vec<Depth>,
@@ -27,10 +32,15 @@ pub struct Software3DRenderer {
 impl Software3DRenderer {
     pub fn new() -> Self {
         Self {
+            palette_cache:  TexPaletteCache::new(),
             stencil_buffer: vec![false; 256 * 192],
             attr_buffer:    vec![Default::default(); 256 * 192],
             depth_buffer:   vec![Depth::ZERO; 256 * 192],
         }
+    }
+
+    pub fn setup_caches(&mut self, vram: &mut Engine3DVRAM) {
+        self.palette_cache.update_tex(&vram.ref_tex_palette());
     }
 
     pub fn draw(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha]) {
@@ -139,7 +149,7 @@ impl Software3DRenderer {
                     };
 
                     let tex_coords = interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
-                    let tex_colour = Self::lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
+                    let tex_colour = self.lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
 
                     let frag_colour = if let Some(tex_colour) = tex_colour {
                         Self::blend_frag_tex_colour(render_engine, mode, vtx_colour, tex_colour)
@@ -225,7 +235,7 @@ impl Software3DRenderer {
                 };
                 
                 let tex_coords = interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
-                let tex_colour = Self::lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
+                let tex_colour = self.lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
 
                 let frag_colour = if let Some(tex_colour) = tex_colour {
                     Self::blend_frag_tex_colour(render_engine, mode, vtx_colour, tex_colour)
@@ -400,15 +410,15 @@ impl Software3DRenderer {
     }
 
     /// Lookup texture colour.
-    fn lookup_tex_colour(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> Option<ColourAlpha> {
+    fn lookup_tex_colour(&self, tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> Option<ColourAlpha> {
         match tex_attrs.format() {
-            1 => Some(Self::lookup_a3i5_tex(tex_coords, tex_attrs, palette, vram)),
-            2 => Some(Self::lookup_2bpp_tex(tex_coords, tex_attrs, palette, vram)),
-            3 => Some(Self::lookup_4bpp_tex(tex_coords, tex_attrs, palette, vram)),
-            4 => Some(Self::lookup_8bpp_tex(tex_coords, tex_attrs, palette, vram)),
-            5 => Some(Self::lookup_4x4_tex(tex_coords, tex_attrs, palette, vram)),
-            6 => Some(Self::lookup_a5i3_tex(tex_coords, tex_attrs, palette, vram)),
-            7 => Some(Self::lookup_dir_tex(tex_coords, tex_attrs, vram)),
+            1 => Some(self.lookup_a3i5_tex(tex_coords, tex_attrs, palette, vram)),
+            2 => Some(self.lookup_2bpp_tex(tex_coords, tex_attrs, palette, vram)),
+            3 => Some(self.lookup_4bpp_tex(tex_coords, tex_attrs, palette, vram)),
+            4 => Some(self.lookup_8bpp_tex(tex_coords, tex_attrs, palette, vram)),
+            5 => Some(self.lookup_4x4_tex(tex_coords, tex_attrs, palette, vram)),
+            6 => Some(self.lookup_a5i3_tex(tex_coords, tex_attrs, palette, vram)),
+            7 => Some(self.lookup_dir_tex(tex_coords, tex_attrs, vram)),
             _ => None,
         }
     }
@@ -470,7 +480,7 @@ impl Software3DRenderer {
     }
 
     /// Lookup 2bpp texel colour.
-    fn lookup_2bpp_tex(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
+    fn lookup_2bpp_tex(&self, tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
         let (s, t) = Self::get_tex_coords(tex_coords, tex_attrs);
         let width = tex_attrs.width();
         let pos = (width * t) + s;
@@ -483,15 +493,14 @@ impl Software3DRenderer {
         if (data == 0) && tex_attrs.contains(TextureAttrs::TRANSPARENT_0) {
             ColourAlpha::transparent()
         } else {
-            let palette_offset = (data as u32) << 1;
-            let palette_addr = (palette as u32) << 3;
-            let colour = vram.get_palette_halfword(palette_addr + palette_offset);
-            ColourAlpha {col: Colour::from_555(colour), alpha: 0x1F}
+            let palette_addr = (palette as u32) << 2;
+            let colour = self.palette_cache.get_tex_colour(palette_addr + (data as u32));
+            ColourAlpha {col: colour, alpha: 0x1F}
         }
     }
     
     /// Lookup 4bpp texel colour.
-    fn lookup_4bpp_tex(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
+    fn lookup_4bpp_tex(&self, tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
         let (s, t) = Self::get_tex_coords(tex_coords, tex_attrs);
         let width = tex_attrs.width();
         let pos = (width * t) + s;
@@ -504,15 +513,14 @@ impl Software3DRenderer {
         if (data == 0) && tex_attrs.contains(TextureAttrs::TRANSPARENT_0) {
             ColourAlpha::transparent()
         } else {
-            let palette_offset = (data as u32) << 1;
-            let palette_addr = (palette as u32) << 4;
-            let colour = vram.get_palette_halfword(palette_addr + palette_offset);
-            ColourAlpha {col: Colour::from_555(colour), alpha: 0x1F}
+            let palette_addr = (palette as u32) << 3;
+            let colour = self.palette_cache.get_tex_colour(palette_addr + (data as u32));
+            ColourAlpha {col: colour, alpha: 0x1F}
         }
     }
     
     /// Lookup 8bpp texel colour.
-    fn lookup_8bpp_tex(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
+    fn lookup_8bpp_tex(&self, tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
         let (s, t) = Self::get_tex_coords(tex_coords, tex_attrs);
         let width = tex_attrs.width();
         let pos = (width * t) + s;
@@ -524,15 +532,14 @@ impl Software3DRenderer {
         if (data == 0) && tex_attrs.contains(TextureAttrs::TRANSPARENT_0) {
             ColourAlpha::transparent()
         } else {
-            let palette_offset = (data as u32) << 1;
-            let palette_addr = (palette as u32) << 4;
-            let colour = vram.get_palette_halfword(palette_addr + palette_offset);
-            ColourAlpha {col: Colour::from_555(colour), alpha: 0x1F}
+            let palette_addr = (palette as u32) << 3;
+            let colour = self.palette_cache.get_tex_colour(palette_addr + (data as u32));
+            ColourAlpha {col: colour, alpha: 0x1F}
         }
     }
     
     /// Lookup direct texel colour.
-    fn lookup_dir_tex(tex_coords: TexCoords, tex_attrs: TextureAttrs, vram: &Engine3DVRAM) -> ColourAlpha {
+    fn lookup_dir_tex(&self, tex_coords: TexCoords, tex_attrs: TextureAttrs, vram: &Engine3DVRAM) -> ColourAlpha {
         let (s, t) = Self::get_tex_coords(tex_coords, tex_attrs);
         let width = tex_attrs.width();
         let pos = (width * t) + s;
@@ -543,7 +550,7 @@ impl Software3DRenderer {
         ColourAlpha {col: Colour::from_555(data), alpha: ((data >> 15) as u8) * 0x1F}
     }
 
-    fn lookup_a3i5_tex(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
+    fn lookup_a3i5_tex(&self, tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
         let (s, t) = Self::get_tex_coords(tex_coords, tex_attrs);
         let width = tex_attrs.width();
         let pos = (width * t) + s;
@@ -554,14 +561,13 @@ impl Software3DRenderer {
         let palette_data = data & 0x1F;
         let alpha_data = (data & 0xE0) >> 5;
 
-        let palette_offset = (palette_data as u32) << 1;
-        let palette_addr = (palette as u32) << 4;
-        let colour = vram.get_palette_halfword(palette_addr + palette_offset);
+        let palette_addr = (palette as u32) << 3;
+        let colour = self.palette_cache.get_tex_colour(palette_addr + (palette_data as u32));
         let alpha = (alpha_data << 2) | (alpha_data >> 1);
-        ColourAlpha {col: Colour::from_555(colour), alpha}
+        ColourAlpha {col: colour, alpha}
     }
     
-    fn lookup_a5i3_tex(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
+    fn lookup_a5i3_tex(&self, tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
         let (s, t) = Self::get_tex_coords(tex_coords, tex_attrs);
         let width = tex_attrs.width();
         let pos = (width * t) + s;
@@ -572,13 +578,12 @@ impl Software3DRenderer {
         let palette_data = data & 0x7;
         let alpha_data = (data & 0xF8) >> 3;
 
-        let palette_offset = (palette_data as u32) << 1;
-        let palette_addr = (palette as u32) << 4;
-        let colour = vram.get_palette_halfword(palette_addr + palette_offset);
-        ColourAlpha {col: Colour::from_555(colour), alpha: alpha_data}
+        let palette_addr = (palette as u32) << 3;
+        let colour = self.palette_cache.get_tex_colour(palette_addr + (palette_data as u32));
+        ColourAlpha {col: colour, alpha: alpha_data}
     }
     
-    fn lookup_4x4_tex(tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
+    fn lookup_4x4_tex(&self, tex_coords: TexCoords, tex_attrs: TextureAttrs, palette: u16, vram: &Engine3DVRAM) -> ColourAlpha {
         let (s, t) = Self::get_tex_coords(tex_coords, tex_attrs);
         let block_s = s / 4;
         let block_t = t / 4;
@@ -595,8 +600,8 @@ impl Software3DRenderer {
         let block_palette_addr = 0x2_0000 + (block_palette_upper | (block_addr / 2));
         let block_palette_data = vram.get_tex_halfword(block_palette_addr);
 
-        let base_palette_addr = (palette as u32) << 4;
-        let block_palette_offset = ((block_palette_data & 0x3FFF) as u32) << 2;
+        let base_palette_addr = (palette as u32) << 3;
+        let block_palette_offset = ((block_palette_data & 0x3FFF) as u32) << 1;
         let palette_addr = base_palette_addr + block_palette_offset;
         
         let transparent_3 = !u16::test_bit(block_palette_data, 15);
@@ -604,53 +609,53 @@ impl Software3DRenderer {
             // Interpolation mode.
             match block_data {
                 0 => {
-                    let colour = vram.get_palette_halfword(palette_addr);
-                    ColourAlpha {col: Colour::from_555(colour), alpha: 0x1F}
+                    let colour = self.palette_cache.get_tex_colour(palette_addr);
+                    ColourAlpha {col: colour, alpha: 0x1F}
                 },
                 1 => {
-                    let colour = vram.get_palette_halfword(palette_addr + 2);
-                    ColourAlpha {col: Colour::from_555(colour), alpha: 0x1F}
+                    let colour = self.palette_cache.get_tex_colour(palette_addr + 1);
+                    ColourAlpha {col: colour, alpha: 0x1F}
                 },
                 2 if transparent_3 => {
-                    let col_0 = vram.get_palette_halfword(palette_addr);
-                    let col_1 = vram.get_palette_halfword(palette_addr + 2);
-                    let r = (col_0 & 0x1F) + (col_1 & 0x1F);
-                    let g = ((col_0 >> 5) & 0x1F) + ((col_1 >> 5) & 0x1F);
-                    let b = ((col_0 >> 10) & 0x1F) + ((col_1 >> 10) & 0x1F);
+                    let col_0 = self.palette_cache.get_tex_colour(palette_addr);
+                    let col_1 = self.palette_cache.get_tex_colour(palette_addr + 1);
+                    let r = (col_0.r as u16) + (col_1.r as u16);
+                    let g = (col_0.g as u16) + (col_1.g as u16);
+                    let b = (col_0.b as u16) + (col_1.b as u16);
                     ColourAlpha {
                         col: Colour {
-                            r: ((r << 2) | (r >> 4)) as u8,
-                            g: ((g << 2) | (g >> 4)) as u8,
-                            b: ((b << 2) | (b >> 4)) as u8,
+                            r: (r >> 1) as u8,
+                            g: (g >> 1) as u8,
+                            b: (b >> 1) as u8,
                         }, alpha: 0x1F
                     }
                 },
                 2 => {
-                    let col_0 = vram.get_palette_halfword(palette_addr);
-                    let col_1 = vram.get_palette_halfword(palette_addr + 2);
-                    let r = (col_0 & 0x1F) * 5 + (col_1 & 0x1F) * 3;
-                    let g = ((col_0 >> 5) & 0x1F) * 5 + ((col_1 >> 5) & 0x1F) * 3;
-                    let b = ((col_0 >> 10) & 0x1F) * 5 + ((col_1 >> 10) & 0x1F) * 3;
+                    let col_0 = self.palette_cache.get_tex_colour(palette_addr);
+                    let col_1 = self.palette_cache.get_tex_colour(palette_addr + 1);
+                    let r = (col_0.r as u16) * 5 + (col_1.r as u16) * 3;
+                    let g = (col_0.g as u16) * 5 + (col_1.g as u16) * 3;
+                    let b = (col_0.b as u16) * 5 + (col_1.b as u16) * 3;
                     ColourAlpha {
                         col: Colour {
-                            r: r as u8,
-                            g: g as u8,
-                            b: b as u8,
+                            r: (r >> 3) as u8,
+                            g: (g >> 3) as u8,
+                            b: (b >> 3) as u8,
                         }, alpha: 0x1F
                     }
                 },
                 3 if transparent_3 => ColourAlpha::transparent(),
                 3 => {
-                    let col_0 = vram.get_palette_halfword(palette_addr);
-                    let col_1 = vram.get_palette_halfword(palette_addr + 2);
-                    let r = (col_0 & 0x1F) * 3 + (col_1 & 0x1F) * 5;
-                    let g = ((col_0 >> 5) & 0x1F) * 3 + ((col_1 >> 5) & 0x1F) * 5;
-                    let b = ((col_0 >> 10) & 0x1F) * 3 + ((col_1 >> 10) & 0x1F) * 5;
+                    let col_0 = self.palette_cache.get_tex_colour(palette_addr);
+                    let col_1 = self.palette_cache.get_tex_colour(palette_addr + 1);
+                    let r = (col_0.r as u16) * 3 + (col_1.r as u16) * 5;
+                    let g = (col_0.g as u16) * 3 + (col_1.g as u16) * 5;
+                    let b = (col_0.b as u16) * 3 + (col_1.b as u16) * 5;
                     ColourAlpha {
                         col: Colour {
-                            r: r as u8,
-                            g: g as u8,
-                            b: b as u8,
+                            r: (r >> 3) as u8,
+                            g: (g >> 3) as u8,
+                            b: (b >> 3) as u8,
                         }, alpha: 0x1F
                     }
                 },
@@ -660,9 +665,9 @@ impl Software3DRenderer {
             if block_data == 3 && transparent_3 {
                 ColourAlpha::transparent()
             } else {
-                let palette_offset = (block_data as u32) << 1;
-                let colour = vram.get_palette_halfword(palette_addr + palette_offset);
-                ColourAlpha {col: Colour::from_555(colour), alpha: 0x1F}
+                let palette_offset = block_data as u32;
+                let colour = self.palette_cache.get_tex_colour(palette_addr + palette_offset);
+                ColourAlpha {col: colour, alpha: 0x1F}
             }
         }
     }
