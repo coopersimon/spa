@@ -1,4 +1,4 @@
-mod cache;
+mod internal;
 mod memory;
 mod interrupt;
 mod maths;
@@ -18,7 +18,7 @@ use crossbeam_channel::{Sender, Receiver, unbounded};
 #[cfg(feature = "debug")]
 use crate::common::debug::DebugInterface;
 use crate::common::framecomms::{new_frame_comms, FrameRequester};
-use cache::DS9InternalMem;
+use internal::DS9InternalMem;
 use memory::{
     DS9MemoryBus, DS7MemoryBus
 };

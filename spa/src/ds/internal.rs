@@ -23,6 +23,7 @@ use super::{
 const INSTR_TCM_SIZE: u32 = 32 * 1024;
 const ITCM_MASK: u32 = INSTR_TCM_SIZE - 1;
 const DATA_TCM_SIZE: u32 = 16 * 1024;
+const DTCM_MASK: u32 = u32::MAX - (DATA_TCM_SIZE - 1);
 
 /// ARM9 on-chip memory.
 /// Includes Cache and TCM.
@@ -50,7 +51,6 @@ pub struct DS9InternalMem<R: Renderer> {
     instr_tcm_region:   MemRegion,
 
     data_tcm_start: u32,
-    data_tcm_end:   u32,
 }
 
 impl<R: Renderer> DS9InternalMem<R> {
@@ -76,7 +76,6 @@ impl<R: Renderer> DS9InternalMem<R> {
             instr_tcm_region: MemRegion::default(),
 
             data_tcm_start: 0,
-            data_tcm_end:   0,
         }
     }
 
@@ -117,7 +116,7 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
         match addr {
             0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_byte(addr & ITCM_MASK), 1),
-            _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
+            _ => if addr & DTCM_MASK == self.data_tcm_start {
                 (self.data_tcm.read_byte(addr - self.data_tcm_start), 1)
             } else {
                 // TODO: try data cache
@@ -131,7 +130,7 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
                 self.instr_tcm.write_byte(addr & ITCM_MASK, data);
                 1
             },
-            _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
+            _ => if addr & DTCM_MASK == self.data_tcm_start {
                 self.data_tcm.write_byte(addr - self.data_tcm_start, data);
                 1
             } else {
@@ -144,7 +143,7 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
             0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_halfword(addr & ITCM_MASK), 1),
-            _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
+            _ => if addr & DTCM_MASK == self.data_tcm_start {
                 (self.data_tcm.read_halfword(addr - self.data_tcm_start), 1)
             } else {
                 // TODO: try data cache
@@ -158,7 +157,7 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
                 self.instr_tcm.write_halfword(addr & ITCM_MASK, data);
                 1
             },
-            _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
+            _ => if addr & DTCM_MASK == self.data_tcm_start {
                 self.data_tcm.write_halfword(addr - self.data_tcm_start, data);
                 1
             } else {
@@ -171,7 +170,7 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
             0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_word(addr & ITCM_MASK), 1),
-            _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
+            _ => if addr & DTCM_MASK == self.data_tcm_start {
                 (self.data_tcm.read_word(addr - self.data_tcm_start), 1)
             } else {
                 // TODO: try data cache
@@ -185,7 +184,7 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
                 self.instr_tcm.write_word(addr & ITCM_MASK, data);
                 1
             },
-            _ => if addr >= self.data_tcm_start && addr < self.data_tcm_end {
+            _ => if addr & DTCM_MASK == self.data_tcm_start {
                 self.data_tcm.write_word(addr - self.data_tcm_start, data);
                 1
             } else {
@@ -269,8 +268,7 @@ impl<R: Renderer> DS9InternalMem<R> {
         } else {
             self.data_tcm_region = MemRegion::from_bits_truncate(data);
             self.data_tcm_start = (self.data_tcm_region & MemRegion::BASE_ADDR).bits();
-            self.data_tcm_end = self.data_tcm_start + DATA_TCM_SIZE;
-            //println!("SET data TCM: {:X} => {:X}", self.data_tcm_start, self.data_tcm_end);
+            //println!("SET data TCM: {:X} => {:X}", self.data_tcm_start, self.data_tcm_start + DATA_TCM_SIZE);
         }
     }
 
