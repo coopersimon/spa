@@ -1,4 +1,5 @@
 mod internal;
+mod cache;
 mod memory;
 mod interrupt;
 mod maths;

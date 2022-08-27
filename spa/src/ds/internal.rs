@@ -17,7 +17,8 @@ use crate::{
 };
 use super::{
     memory::DS9MemoryBus,
-    video::Renderer
+    video::Renderer,
+    cache::*
 };
 
 const INSTR_TCM_SIZE: u32 = 32 * 1024;
@@ -32,7 +33,8 @@ pub struct DS9InternalMem<R: Renderer> {
     instr_tcm:  WRAM,
     data_tcm:   WRAM,
 
-    // TODO: cache
+    instr_cache:    Cache,
+    data_cache:     Cache,
 
     mem_bus: DS9MemoryBus<R>,
 
@@ -59,6 +61,9 @@ impl<R: Renderer> DS9InternalMem<R> {
             instr_tcm:  WRAM::new(INSTR_TCM_SIZE as usize),
             data_tcm:   WRAM::new(DATA_TCM_SIZE as usize),
 
+            instr_cache:    Cache::new(64),
+            data_cache:     Cache::new(32),
+        
             mem_bus: mem_bus,
 
             control_reg: CP15Control::PRESET,
@@ -272,7 +277,83 @@ impl<R: Renderer> DS9InternalMem<R> {
         }
     }
 
-    // Cache commands
+    fn cache_command(&mut self, op_reg: usize, data: u32, info: u32) {
+        match (op_reg, info) {
+            (0, 4) => self.wait_for_interrupt(),
+            (5, 0) => self.instr_cache.invalidate_all(),
+            (5, 1) => self.instr_cache.invalidate_line(data),
+            (5, 2) => panic!("inv i S/I"),
+            (5, 4) => panic!("prefetch"),
+            (6, 0) => self.data_cache.invalidate_all(),
+            (6, 1) => self.data_cache.invalidate_line(data),
+            (6, 2) => panic!("inv d S/I"),
+            (7, _) => panic!("unified"),
+            (8, 2) => self.wait_for_interrupt(),
+            (10, 1) => self.clean_line(data),
+            (10, 2) => self.clean_set_line(SetLine::from_bits_truncate(data)),
+            (10, 4) => {},  // TODO: Drain write buffer
+            (13, 1) => self.prefetch_icache_line(data),
+            (14, 1) => self.clean_and_invalidate_line(data),
+            (14, 2) => self.clean_and_invalidate_set_line(SetLine::from_bits_truncate(data)),
+
+            _ => panic!("unknown cache")
+        }
+    }
+}
+
+// Cache commands.
+impl<R: Renderer> DS9InternalMem<R> {
+    /// Write data back to memory if necessary.
+    fn clean_line(&mut self, addr: u32) {
+        if let Some(cache_data) = self.data_cache.clean_line(addr) {
+            for (offset, b) in cache_data.iter().enumerate() {
+                let cycles = self.mem_bus.store_byte(MemCycleType::S, addr + (offset as u32), *b);
+                self.mem_bus.clock(cycles);
+            }
+        }
+    }
+
+    /// Write data back to memory if necessary.
+    fn clean_set_line(&mut self, set_line: SetLine) {
+        if let Some((tag, cache_data)) = self.data_cache.clean_set_line(set_line.set_idx(), set_line.data_index()) {
+            let addr = tag + set_line.data_index();
+            for (offset, b) in cache_data.iter().enumerate() {
+                let cycles = self.mem_bus.store_byte(MemCycleType::S, addr + (offset as u32), *b);
+                self.mem_bus.clock(cycles);
+            }
+        }
+    }
+
+    /// Write data back to memory if necessary, and mark the line as invalid.
+    fn clean_and_invalidate_line(&mut self, addr: u32) {
+        if let Some(cache_data) = self.data_cache.clean_and_invalidate_line(addr) {
+            for (offset, b) in cache_data.iter().enumerate() {
+                let cycles = self.mem_bus.store_byte(MemCycleType::S, addr + (offset as u32), *b);
+                self.mem_bus.clock(cycles);
+            }
+        }
+    }
+
+    /// Write data back to memory if necessary, and mark the line as invalid.
+    fn clean_and_invalidate_set_line(&mut self, set_line: SetLine) {
+        if let Some((tag, cache_data)) = self.data_cache.clean_and_invalidate_set_line(set_line.set_idx(), set_line.data_index()) {
+            let addr = tag + set_line.data_index();
+            for (offset, b) in cache_data.iter().enumerate() {
+                let cycles = self.mem_bus.store_byte(MemCycleType::S, addr + (offset as u32), *b);
+                self.mem_bus.clock(cycles);
+            }
+        }
+    }
+
+    fn prefetch_icache_line(&mut self, addr: u32) {
+        let mut buffer = [0_u8; 32];
+        for (offset, b) in buffer.iter_mut().enumerate() {
+            let (data, cycles) = self.mem_bus.load_byte(MemCycleType::S, addr + (offset as u32));
+            *b = data;
+            self.mem_bus.clock(cycles);
+        }
+        self.instr_cache.fill_line(addr, &buffer);
+    }
 
     fn wait_for_interrupt(&mut self) {
         self.mem_bus.halt = true;
@@ -330,7 +411,7 @@ impl<R: Renderer> CoprocV4 for DS9InternalMem<R> {
             (3, 0) => self.cache_write_buffer_bits = data as u8,
             (5, 0) => self.write_access_permission_bits(data, info),
             (6, _) => self.protection_unit_regions[op_reg] = MemRegion::from_bits_truncate(data),
-            (7, 0) => self.wait_for_interrupt(),
+            (7, _) => self.cache_command(op_reg, data, info),
             (9, 1) => self.write_tcm_settings(data, info),
             (_, _) => {},
         };
