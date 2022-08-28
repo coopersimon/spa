@@ -103,6 +103,7 @@ impl Cache {
             .ref_dirty_data_and_invalidate(buffer)
     }
 
+    /// Fill a line with new data.
     pub fn fill_line(&mut self, addr: u32, data: &[u32]) {
         let index = ((addr & self.index_mask) >> 5) as usize;
         let tag = addr & self.tag_mask;
@@ -113,7 +114,7 @@ impl Cache {
     pub fn clean_and_fill_line(&mut self, addr: u32, data_in: &[u32], data_out: &mut [u32]) -> Option<u32> {
         let index = (addr & self.index_mask) >> 5;
         let tag = addr & self.tag_mask;
-        self.sets[index as usize].clean_and_fill_line(tag, data_in, data_out).map(|addr| addr | (index << 5))
+        self.sets[index as usize].clean_and_fill_line(tag, data_in, data_out).map(|tag| tag | (index << 5))
     }
 }
 
@@ -231,6 +232,7 @@ impl CacheSet {
         }
     }
 
+    /// Set all lines to invalid.
     fn invalidate_all(&mut self) {
         for line in &mut self.lines {
             line.invalidate();
@@ -241,20 +243,19 @@ impl CacheSet {
         self.lines[set as usize].invalidate();
     }
 
+    /// Fill a line with new data.
     fn fill_line(&mut self, tag: u32, data: &[u32]) {
         self.lines[self.replace].fill(tag, data);
         self.replace = (self.replace + 1) & 3;
     }
 
+    /// Fill a line with new data, and fill the data_out buffer with the old data if dirty.
+    /// 
+    /// Returns the tag of the old data if it was dirty.
     fn clean_and_fill_line(&mut self, tag: u32, data_in: &[u32], data_out: &mut [u32]) -> Option<u32> {
-        /*let mut dirty_addr = None;
-        if self.lines[self.replace].dirty {
-            data_out.clone_from_slice(&self.lines[self.replace].data);
-            dirty_addr = Some(self.lines[self.replace].tag);
-        }*/
-        let dirty_addr = self.lines[self.replace].ref_dirty_data(data_out);
+        let dirty_tag = self.lines[self.replace].ref_dirty_data(data_out);
         self.fill_line(tag, data_in);
-        dirty_addr
+        dirty_tag
     }
 }
 
@@ -305,6 +306,7 @@ impl CacheLine {
         }
     }
 
+    /// Mark existing data as invalid, without flushing.
     #[inline]
     fn invalidate(&mut self) {
         self.tag = INVALID;
