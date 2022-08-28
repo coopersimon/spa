@@ -446,7 +446,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => (
                 self.main_ram.read_byte(addr & 0x3F_FFFF),
-                if cycle.is_non_seq() {4} else {2}
+                if cycle.is_non_seq() {18} else {2}  // TODO: 18 for instr
             ),
             0x0300_0000..=0x03FF_FFFF => (
                 self.shared_wram.read_byte(addr),
@@ -464,10 +464,6 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_byte_oam(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
 
             // TODO: GBA slot
-            //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_0(cycle)),
-            //0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_1(cycle)),
-            //0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_2(cycle)),
-            //0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.sram_wait_cycles()),
 
             0xFFFF_0000..=0xFFFF_FFFF => (self.bios.read_byte(addr & 0xFFF), if cycle.is_non_seq() {8} else {2}),
 
@@ -478,7 +474,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_byte(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {4} else {2}
+                if cycle.is_non_seq() {18} else {2}  // TODO: 9 for instr
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared RAM
                 self.shared_wram.write_byte(addr, data);
@@ -513,13 +509,6 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             },
 
             // TODO: GBA slot
-            //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
-            //0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle),
-            //0x0C00_0000..=0x0CFF_FFFF => self.game_pak_control.wait_cycles_2(cycle),
-            //0x0D00_0000..=0x0EFF_FFFF => {
-            //    self.game_pak.write_byte(addr, data);
-            //    self.game_pak_control.sram_wait_cycles()
-            //},
 
             _ => 1 // Unused
         }
@@ -527,7 +516,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {4} else {2}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {18} else {2}),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -540,11 +529,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0600_0000..=0x06FF_FFFF => (self.video.mem.read_halfword_vram(addr), if cycle.is_non_seq() {8} else {2}),
             0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_halfword_oam(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
 
-            // Cart
-            //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_0(cycle)),
-            //0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_1(cycle)),
-            //0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_2(cycle)),
-            //0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.sram_wait_cycles()),
+            // TODO: GBA slot
 
             0xFFFF_0000..=0xFFFF_FFFF => (self.bios.read_halfword(addr & 0xFFF), if cycle.is_non_seq() {8} else {2}),
 
@@ -555,7 +540,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_halfword(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {4} else {2}
+                if cycle.is_non_seq() {18} else {2}  // TODO: 18 for instr
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_halfword(addr, data);
@@ -590,14 +575,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
                 if cycle.is_non_seq() {8} else {2}
             },
 
-            // Cart
-            //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
-            //0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle),
-            //0x0C00_0000..=0x0CFF_FFFF => self.game_pak_control.wait_cycles_2(cycle),
-            //0x0D00_0000..=0x0EFF_FFFF => {
-            //    self.game_pak.write_halfword(addr, data);
-            //    self.game_pak_control.sram_wait_cycles()
-            //},
+            // TODO: GBA slot
 
             _ => 1 // Unused
         }
@@ -605,7 +583,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {6} else {4}),
+            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {20} else {4}),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -618,11 +596,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0600_0000..=0x06FF_FFFF => (self.video.mem.read_word_vram(addr), if cycle.is_non_seq() {10} else {4}),
             0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_word_oam(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
 
-            // Cart
-            //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_0(cycle) << 1),
-            //0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_1(cycle) << 1),
-            //0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_2(cycle) << 1),
-            //0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.sram_wait_cycles() << 1),
+            // TODO: GBA slot
 
             0xFFFF_0000..=0xFFFF_FFFF => (self.bios.read_word(addr & 0xFFF), if cycle.is_non_seq() {8} else {2}),
 
@@ -633,7 +607,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_word(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {6} else {4}
+                if cycle.is_non_seq() {20} else {4}
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_word(addr, data);
@@ -668,14 +642,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
                 if cycle.is_non_seq() {8} else {2}
             },
 
-            // Cart
-            //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle) << 1,
-            //0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle) << 1,
-            //0x0C00_0000..=0x0CFF_FFFF => self.game_pak_control.wait_cycles_2(cycle) << 1,
-            //0x0D00_0000..=0x0EFF_FFFF => {
-            //    self.game_pak.write_word(addr, data);
-            //    self.game_pak_control.sram_wait_cycles() << 1
-            //},
+            // TODO: GBA slot
 
             _ => 1 // Unused
         }
@@ -910,10 +877,6 @@ impl Mem32 for DS7MemoryBus {
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_byte(addr), 1),
 
             // TODO: GBA slot
-            //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_0(cycle)),
-            //0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_1(cycle)),
-            //0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.wait_cycles_2(cycle)),
-            //0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.read_byte(addr), self.game_pak_control.sram_wait_cycles()),
 
             _ => (0, 1) // Unused
         }
@@ -944,13 +907,6 @@ impl Mem32 for DS7MemoryBus {
             },
 
             // TODO: GBA slot
-            //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
-            //0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle),
-            //0x0C00_0000..=0x0CFF_FFFF => self.game_pak_control.wait_cycles_2(cycle),
-            //0x0D00_0000..=0x0EFF_FFFF => {
-            //    self.game_pak.write_byte(addr, data);
-            //    self.game_pak_control.sram_wait_cycles()
-            //},
 
             _ => 1 // Unused
         }
@@ -967,11 +923,7 @@ impl Mem32 for DS7MemoryBus {
 
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_halfword(addr), 1),
 
-            // Cart
-            //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_0(cycle)),
-            //0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_1(cycle)),
-            //0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.wait_cycles_2(cycle)),
-            //0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.read_halfword(addr), self.game_pak_control.sram_wait_cycles()),
+            // TODO: GBA slot
 
             _ => (0, 1) // Unused
         }
@@ -1001,14 +953,7 @@ impl Mem32 for DS7MemoryBus {
                 1
             },
 
-            // Cart
-            //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle),
-            //0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle),
-            //0x0C00_0000..=0x0CFF_FFFF => self.game_pak_control.wait_cycles_2(cycle),
-            //0x0D00_0000..=0x0EFF_FFFF => {
-            //    self.game_pak.write_halfword(addr, data);
-            //    self.game_pak_control.sram_wait_cycles()
-            //},
+            // TODO: GBA slot
 
             _ => 1 // Unused
         }
@@ -1025,11 +970,7 @@ impl Mem32 for DS7MemoryBus {
 
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_word(addr), 2),
 
-            // Cart
-            //0x0800_0000..=0x09FF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_0(cycle) << 1),
-            //0x0A00_0000..=0x0BFF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_1(cycle) << 1),
-            //0x0C00_0000..=0x0DFF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.wait_cycles_2(cycle) << 1),
-            //0x0E00_0000..=0x0EFF_FFFF => (self.game_pak.read_word(addr), self.game_pak_control.sram_wait_cycles() << 1),
+            // TODO: GBA slot
 
             _ => (0, 1) // Unused
         }
@@ -1059,14 +1000,7 @@ impl Mem32 for DS7MemoryBus {
                 2
             },
 
-            // Cart
-            //0x0800_0000..=0x09FF_FFFF => self.game_pak_control.wait_cycles_0(cycle) << 1,
-            //0x0A00_0000..=0x0BFF_FFFF => self.game_pak_control.wait_cycles_1(cycle) << 1,
-            //0x0C00_0000..=0x0CFF_FFFF => self.game_pak_control.wait_cycles_2(cycle) << 1,
-            //0x0D00_0000..=0x0EFF_FFFF => {
-            //    self.game_pak.write_word(addr, data);
-            //    self.game_pak_control.sram_wait_cycles() << 1
-            //},
+            // TODO: GBA slot
 
             _ => 1 // Unused
         }

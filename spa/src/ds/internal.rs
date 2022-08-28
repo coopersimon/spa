@@ -12,7 +12,7 @@ use arm::{
 use bitflags::bitflags;
 
 use crate::{
-    utils::bits::u32,
+    utils::bits::{u8, u32},
     common::wram::WRAM,
 };
 use super::{
@@ -36,6 +36,11 @@ pub struct DS9InternalMem<R: Renderer> {
     instr_cache:    Cache,
     data_cache:     Cache,
 
+    instr_cache_mask:   u32,
+    instr_cache_base:   u32,
+    data_cache_mask:    u32,
+    data_cache_base:    u32,
+
     mem_bus: DS9MemoryBus<R>,
 
     control_reg: CP15Control,
@@ -52,7 +57,7 @@ pub struct DS9InternalMem<R: Renderer> {
     data_tcm_region:    MemRegion,
     instr_tcm_region:   MemRegion,
 
-    data_tcm_start: u32,
+    data_tcm_base: u32,
 }
 
 impl<R: Renderer> DS9InternalMem<R> {
@@ -63,6 +68,11 @@ impl<R: Renderer> DS9InternalMem<R> {
 
             instr_cache:    Cache::new(64),
             data_cache:     Cache::new(32),
+
+            instr_cache_mask:   u32::MAX,
+            instr_cache_base:   0,
+            data_cache_mask:    u32::MAX,
+            data_cache_base:    0,
         
             mem_bus: mem_bus,
 
@@ -80,7 +90,7 @@ impl<R: Renderer> DS9InternalMem<R> {
             data_tcm_region: MemRegion::default(),
             instr_tcm_region: MemRegion::default(),
 
-            data_tcm_start: 0,
+            data_tcm_base: 0,
         }
     }
 
@@ -102,8 +112,16 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
         match addr {
             0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_halfword(addr & ITCM_MASK), 1),
             _ => {
-                // TODO: try instr cache
-                self.mem_bus.fetch_instr_halfword(cycle, addr)
+                if self.instr_cache_mask & addr == self.instr_cache_base {
+                    if let Some(data) = self.instr_cache.read_halfword(addr) {
+                        (data, 1)
+                    } else {
+                        self.fill_i_cache_line(addr);
+                        (self.instr_cache.read_halfword(addr).unwrap(), 1)
+                    }
+                } else {
+                    self.mem_bus.fetch_instr_halfword(cycle, addr)
+                }
             }
         }
     }
@@ -112,8 +130,16 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
         match addr {
             0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_word(addr & ITCM_MASK), 1),
             _ => {
-                // TODO: try instr cache
-                self.mem_bus.fetch_instr_word(cycle, addr)
+                if self.instr_cache_mask & addr == self.instr_cache_base {
+                    if let Some(data) = self.instr_cache.read_word(addr) {
+                        (data, 1)
+                    } else {
+                        self.fill_i_cache_line(addr);
+                        (self.instr_cache.read_word(addr).unwrap(), 1)
+                    }
+                } else {
+                    self.mem_bus.fetch_instr_word(cycle, addr)
+                }
             }
         }
     }
@@ -121,10 +147,16 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
         match addr {
             0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_byte(addr & ITCM_MASK), 1),
-            _ => if addr & DTCM_MASK == self.data_tcm_start {
-                (self.data_tcm.read_byte(addr - self.data_tcm_start), 1)
+            _ => if addr & DTCM_MASK == self.data_tcm_base {
+                (self.data_tcm.read_byte(addr - self.data_tcm_base), 1)
+            } else if self.data_cache_mask & addr == self.data_cache_base {
+                if let Some(data) = self.data_cache.read_byte(addr) {
+                    (data, 1)
+                } else {
+                    self.fill_d_cache_line(addr);
+                    (self.data_cache.read_byte(addr).unwrap(), 1)
+                }
             } else {
-                // TODO: try data cache
                 self.mem_bus.load_byte(cycle, addr)
             }
         }
@@ -135,11 +167,18 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
                 self.instr_tcm.write_byte(addr & ITCM_MASK, data);
                 1
             },
-            _ => if addr & DTCM_MASK == self.data_tcm_start {
-                self.data_tcm.write_byte(addr - self.data_tcm_start, data);
+            _ => if addr & DTCM_MASK == self.data_tcm_base {
+                self.data_tcm.write_byte(addr - self.data_tcm_base, data);
                 1
+            } else if self.data_cache_mask & addr == self.data_cache_base {
+                if self.data_cache.write_byte(addr, data) {
+                    1
+                } else {
+                    self.fill_d_cache_line(addr);
+                    self.data_cache.write_byte(addr, data);
+                    1
+                }
             } else {
-                // TODO: try data cache
                 self.mem_bus.store_byte(cycle, addr, data)
             }
         }
@@ -148,10 +187,16 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
             0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_halfword(addr & ITCM_MASK), 1),
-            _ => if addr & DTCM_MASK == self.data_tcm_start {
-                (self.data_tcm.read_halfword(addr - self.data_tcm_start), 1)
+            _ => if addr & DTCM_MASK == self.data_tcm_base {
+                (self.data_tcm.read_halfword(addr - self.data_tcm_base), 1)
+            } else if self.data_cache_mask & addr == self.data_cache_base {
+                if let Some(data) = self.data_cache.read_halfword(addr) {
+                    (data, 1)
+                } else {
+                    self.fill_d_cache_line(addr);
+                    (self.data_cache.read_halfword(addr).unwrap(), 1)
+                }
             } else {
-                // TODO: try data cache
                 self.mem_bus.load_halfword(cycle, addr)
             }
         }
@@ -162,11 +207,18 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
                 self.instr_tcm.write_halfword(addr & ITCM_MASK, data);
                 1
             },
-            _ => if addr & DTCM_MASK == self.data_tcm_start {
-                self.data_tcm.write_halfword(addr - self.data_tcm_start, data);
+            _ => if addr & DTCM_MASK == self.data_tcm_base {
+                self.data_tcm.write_halfword(addr - self.data_tcm_base, data);
                 1
+            } else if self.data_cache_mask & addr == self.data_cache_base {
+                if self.data_cache.write_halfword(addr, data) {
+                    1
+                } else {
+                    self.fill_d_cache_line(addr);
+                    self.data_cache.write_halfword(addr, data);
+                    1
+                }
             } else {
-                // TODO: try data cache
                 self.mem_bus.store_halfword(cycle, addr, data)
             }
         }
@@ -175,10 +227,16 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
             0x0100_0000..=0x01FF_FFFF => (self.instr_tcm.read_word(addr & ITCM_MASK), 1),
-            _ => if addr & DTCM_MASK == self.data_tcm_start {
-                (self.data_tcm.read_word(addr - self.data_tcm_start), 1)
+            _ => if addr & DTCM_MASK == self.data_tcm_base {
+                (self.data_tcm.read_word(addr - self.data_tcm_base), 1)
+            } else if self.data_cache_mask & addr == self.data_cache_base {
+                if let Some(data) = self.data_cache.read_word(addr) {
+                    (data, 1)
+                } else {
+                    self.fill_d_cache_line(addr);
+                    (self.data_cache.read_word(addr).unwrap(), 1)
+                }
             } else {
-                // TODO: try data cache
                 self.mem_bus.load_word(cycle, addr)
             }
         }
@@ -189,11 +247,18 @@ impl<R: Renderer> Mem32 for DS9InternalMem<R> {
                 self.instr_tcm.write_word(addr & ITCM_MASK, data);
                 1
             },
-            _ => if addr & DTCM_MASK == self.data_tcm_start {
-                self.data_tcm.write_word(addr - self.data_tcm_start, data);
+            _ => if addr & DTCM_MASK == self.data_tcm_base {
+                self.data_tcm.write_word(addr - self.data_tcm_base, data);
                 1
+            } else if self.data_cache_mask & addr == self.data_cache_base {
+                if self.data_cache.write_word(addr, data) {
+                    1
+                } else {
+                    self.fill_d_cache_line(addr);
+                    self.data_cache.write_word(addr, data);
+                    1
+                }
             } else {
-                // TODO: try data cache
                 self.mem_bus.store_word(cycle, addr, data)
             }
         }
@@ -228,6 +293,17 @@ impl<R: Renderer> DS9InternalMem<R> {
     }
     fn write_control_reg(&mut self, data: u32) {
         self.control_reg = CP15Control::from_bits_truncate(data) | CP15Control::PRESET;
+        if self.control_reg.contains(CP15Control::ENDIANNESS) {
+            panic!("Big endian mode unsupported.");
+        }
+        if !self.control_reg.contains(CP15Control::HI_VECTORS) {
+            panic!("Low interrupt vectors unsupported.");
+        }
+        if self.control_reg.contains(CP15Control::PRE_ARM5_RET) {
+            panic!("ARMv4 return mode unsupported.");
+        }
+        // TODO: cache enable?
+        self.set_cache_masks();
     }
 
     fn read_cache_bits(&self, info: u32) -> u32 {
@@ -243,6 +319,7 @@ impl<R: Renderer> DS9InternalMem<R> {
         } else {
             self.data_cache_bits = data as u8
         }
+        self.set_cache_masks();
     }
 
     fn read_access_permission_bits(&self, info: u32) -> u32 {
@@ -272,11 +349,12 @@ impl<R: Renderer> DS9InternalMem<R> {
             self.instr_tcm_region = MemRegion::from_bits_truncate(data);
         } else {
             self.data_tcm_region = MemRegion::from_bits_truncate(data);
-            self.data_tcm_start = (self.data_tcm_region & MemRegion::BASE_ADDR).bits();
-            //println!("SET data TCM: {:X} => {:X}", self.data_tcm_start, self.data_tcm_start + DATA_TCM_SIZE);
+            self.data_tcm_base = (self.data_tcm_region & MemRegion::BASE_ADDR).bits();
+            //println!("SET data TCM: {:X} => {:X}", self.data_tcm_base, self.data_tcm_base + DATA_TCM_SIZE);
         }
     }
 
+    /// Cache and wait commands. CP15 register 7.
     fn cache_command(&mut self, op_reg: usize, data: u32, info: u32) {
         match (op_reg, info) {
             (0, 4) => self.wait_for_interrupt(),
@@ -299,11 +377,17 @@ impl<R: Renderer> DS9InternalMem<R> {
             _ => panic!("unknown cache")
         }
     }
+
+    fn wait_for_interrupt(&mut self) {
+        self.mem_bus.halt = true;
+    }
 }
 
 // Cache commands.
 impl<R: Renderer> DS9InternalMem<R> {
     /// Write data back to memory if necessary.
+    /// 
+    /// Argument specifies the address of the data.
     fn clean_line(&mut self, addr: u32) {
         if let Some(cache_data) = self.data_cache.clean_line(addr) {
             for (offset, b) in cache_data.iter().enumerate() {
@@ -314,9 +398,11 @@ impl<R: Renderer> DS9InternalMem<R> {
     }
 
     /// Write data back to memory if necessary.
+    /// 
+    /// Argument specifies the exact set and line to replace.
     fn clean_set_line(&mut self, set_line: SetLine) {
         if let Some((tag, cache_data)) = self.data_cache.clean_set_line(set_line.set_idx(), set_line.data_index()) {
-            let addr = tag + set_line.data_index();
+            let addr = tag + set_line.data_offset();
             for (offset, b) in cache_data.iter().enumerate() {
                 let cycles = self.mem_bus.store_byte(MemCycleType::S, addr + (offset as u32), *b);
                 self.mem_bus.clock(cycles);
@@ -325,6 +411,8 @@ impl<R: Renderer> DS9InternalMem<R> {
     }
 
     /// Write data back to memory if necessary, and mark the line as invalid.
+    /// 
+    /// Argument specifies the address of the data.
     fn clean_and_invalidate_line(&mut self, addr: u32) {
         if let Some(cache_data) = self.data_cache.clean_and_invalidate_line(addr) {
             for (offset, b) in cache_data.iter().enumerate() {
@@ -335,9 +423,11 @@ impl<R: Renderer> DS9InternalMem<R> {
     }
 
     /// Write data back to memory if necessary, and mark the line as invalid.
+    /// 
+    /// Argument specifies the exact set and line to replace.
     fn clean_and_invalidate_set_line(&mut self, set_line: SetLine) {
         if let Some((tag, cache_data)) = self.data_cache.clean_and_invalidate_set_line(set_line.set_idx(), set_line.data_index()) {
-            let addr = tag + set_line.data_index();
+            let addr = tag + set_line.data_offset();
             for (offset, b) in cache_data.iter().enumerate() {
                 let cycles = self.mem_bus.store_byte(MemCycleType::S, addr + (offset as u32), *b);
                 self.mem_bus.clock(cycles);
@@ -355,8 +445,64 @@ impl<R: Renderer> DS9InternalMem<R> {
         self.instr_cache.fill_line(addr, &buffer);
     }
 
-    fn wait_for_interrupt(&mut self) {
-        self.mem_bus.halt = true;
+    fn set_cache_masks(&mut self) {
+        self.data_cache_mask = u32::MAX;
+        self.data_cache_base = 0;
+        if self.control_reg.contains(CP15Control::DATA_CACHE) {
+            for region in 0..8 {
+                if self.protection_unit_regions[region].enabled() &&
+                    u8::test_bit(self.data_cache_bits, region) &&
+                    (region & 0xFF00_0000 == 0x0200_0000)
+                {
+                    self.data_cache_base = self.protection_unit_regions[region].base();
+                    self.data_cache_mask = u32::MAX - (self.protection_unit_regions[region].size() - 1);
+                    break;
+                }
+            }
+        }
+
+        self.instr_cache_mask = u32::MAX;
+        self.instr_cache_base = 0;
+        if self.control_reg.contains(CP15Control::I_CACHE) {
+            for region in 0..8 {
+                if self.protection_unit_regions[region].enabled() &&
+                    u8::test_bit(self.instr_cache_bits, region) &&
+                    (region & 0xFF00_0000 == 0x0200_0000)
+                {
+                    self.instr_cache_base = self.protection_unit_regions[region].base();
+                    self.instr_cache_mask = u32::MAX - (self.protection_unit_regions[region].size() - 1);
+                    break;
+                }
+            }
+        }
+    }
+
+    fn fill_i_cache_line(&mut self, addr: u32) {
+        let base = addr & 0xFFFF_FFE0;
+        let mut buffer = [0_u8; 32];
+        for (offset, b) in buffer.iter_mut().enumerate() {
+            let (data, cycles) = self.mem_bus.load_byte(MemCycleType::S, base + (offset as u32));
+            *b = data;
+            self.mem_bus.clock(cycles);
+        }
+        self.instr_cache.fill_line(base, &buffer);
+    }
+
+    fn fill_d_cache_line(&mut self, addr: u32) {
+        let base = addr & 0xFFFF_FFE0;
+        let mut in_buffer = [0_u8; 32];
+        for (offset, b) in in_buffer.iter_mut().enumerate() {
+            let (data, cycles) = self.mem_bus.load_byte(MemCycleType::S, base + (offset as u32));
+            *b = data;
+            self.mem_bus.clock(cycles);
+        }
+        let mut out_buffer = [0_u8; 32];
+        if let Some(addr) = self.data_cache.clean_and_fill_line(base, &in_buffer, &mut out_buffer) {
+            for (offset, b) in out_buffer.iter().enumerate() {
+                let cycles = self.mem_bus.store_byte(MemCycleType::S, addr + (offset as u32), *b);
+                self.mem_bus.clock(cycles);
+            }
+        }
     }
 }
 
@@ -393,6 +539,20 @@ bitflags!{
     }
 }
 
+impl MemRegion {
+    fn enabled(&self) -> bool {
+        self.contains(MemRegion::ENABLE)
+    }
+
+    fn size(&self) -> u32 {
+        1 << (*self & MemRegion::SIZE).bits()
+    }
+
+    fn base(&self) -> u32 {
+        (*self & MemRegion::BASE_ADDR).bits()
+    }
+}
+
 impl<R: Renderer> ARM9Mem for DS9InternalMem<R> {
     fn mut_cp15<'a>(&'a mut self) -> &'a mut dyn CoprocV5 {
         self
@@ -408,12 +568,20 @@ impl<R: Renderer> CoprocV4 for DS9InternalMem<R> {
             (0, 0) => {},
             (1, 0) => self.write_control_reg(data),
             (2, 0) => self.write_cache_bits(data, info),
-            (3, 0) => self.cache_write_buffer_bits = data as u8,
+            (3, 0) => {
+                self.cache_write_buffer_bits = data as u8;
+                // TODO...
+                println!("cache WB: {:X}", data);
+            },
             (5, 0) => self.write_access_permission_bits(data, info),
-            (6, _) => self.protection_unit_regions[op_reg] = MemRegion::from_bits_truncate(data),
+            (6, _) => {
+                self.protection_unit_regions[op_reg] = MemRegion::from_bits_truncate(data);
+                self.set_cache_masks();
+                println!("region {}: {:X}", op_reg, data);
+            },
             (7, _) => self.cache_command(op_reg, data, info),
             (9, 1) => self.write_tcm_settings(data, info),
-            (_, _) => {},
+            (_, _) => panic!("unknown mcr"),
         };
 
         0

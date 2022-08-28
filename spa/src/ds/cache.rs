@@ -23,6 +23,11 @@ impl SetLine {
     pub fn data_index(&self) -> u32 {
         (*self & SetLine::D_INDEX).bits() >> 5
     }
+
+    /// Get the actual address offset of the line.
+    pub fn data_offset(&self) -> u32 {
+        (*self & SetLine::D_INDEX).bits()
+    }
 }
 
 /// ARM9 on-chip cache.
@@ -102,6 +107,13 @@ impl Cache {
         let index = ((addr & self.index_mask) >> 5) as usize;
         let tag = addr & self.tag_mask;
         self.sets[index].fill_line(tag, data);
+    }
+
+    /// Fill a line with new data, returning the old data and addr if it needs to be flushed.
+    pub fn clean_and_fill_line(&mut self, addr: u32, data_in: &[u8], data_out: &mut [u8]) -> Option<u32> {
+        let index = (addr & self.index_mask) >> 5;
+        let tag = addr & self.tag_mask;
+        self.sets[index as usize].clean_and_fill_line(tag, data_in, data_out).map(|addr| addr | (index << 5))
     }
 }
 
@@ -233,6 +245,16 @@ impl CacheSet {
         self.lines[self.replace].fill(tag, data);
         self.replace = (self.replace + 1) & 3;
     }
+
+    fn clean_and_fill_line(&mut self, tag: u32, data_in: &[u8], data_out: &mut [u8]) -> Option<u32> {
+        let mut dirty_addr = None;
+        if self.lines[self.replace].dirty {
+            data_out.clone_from_slice(&self.lines[self.replace].data);
+            dirty_addr = Some(self.lines[self.replace].tag);
+        }
+        self.fill_line(tag, data_in);
+        dirty_addr
+    }
 }
 
 const LINE_SIZE: usize = 32;
@@ -282,6 +304,8 @@ impl CacheLine {
         self.dirty = false;
     }
 
+    /// Replace existing data with new data.
+    /// Make sure to flush existing dirty data first.
     fn fill(&mut self, tag: u32, data: &[u8]) {
         self.dirty = false;
         self.tag = tag;
