@@ -355,7 +355,7 @@ impl<R: Renderer> DS9InternalMem<R> {
     }
 
     /// Cache and wait commands. CP15 register 7.
-    fn cache_command(&mut self, op_reg: usize, data: u32, info: u32) {
+    fn cache_command(&mut self, op_reg: usize, data: u32, info: u32) -> usize {
         match (op_reg, info) {
             (0, 4) => self.wait_for_interrupt(),
             (5, 0) => self.instr_cache.invalidate_all(),
@@ -367,15 +367,17 @@ impl<R: Renderer> DS9InternalMem<R> {
             (6, 2) => panic!("inv d S/I"),
             (7, _) => panic!("unified"),
             (8, 2) => self.wait_for_interrupt(),
-            (10, 1) => self.clean_line(data),
-            (10, 2) => self.clean_set_line(SetLine::from_bits_truncate(data)),
+            (10, 1) => return self.clean_line(data),
+            (10, 2) => return self.clean_set_line(SetLine::from_bits_truncate(data)),
             (10, 4) => {},  // TODO: Drain write buffer
-            (13, 1) => self.prefetch_icache_line(data),
-            (14, 1) => self.clean_and_invalidate_line(data),
-            (14, 2) => self.clean_and_invalidate_set_line(SetLine::from_bits_truncate(data)),
+            (13, 1) => return self.prefetch_icache_line(data),
+            (14, 1) => return self.clean_and_invalidate_line(data),
+            (14, 2) => return self.clean_and_invalidate_set_line(SetLine::from_bits_truncate(data)),
 
-            _ => panic!("unknown cache")
+            _ => panic!("unknown cache command {} | {}", op_reg, info)
         }
+
+        0
     }
 
     fn wait_for_interrupt(&mut self) {
@@ -388,61 +390,63 @@ impl<R: Renderer> DS9InternalMem<R> {
     /// Write data back to memory if necessary.
     /// 
     /// Argument specifies the address of the data.
-    fn clean_line(&mut self, addr: u32) {
-        if let Some(cache_data) = self.data_cache.clean_line(addr) {
-            for (offset, b) in cache_data.iter().enumerate() {
-                let cycles = self.mem_bus.store_byte(MemCycleType::S, addr + (offset as u32), *b);
-                self.mem_bus.clock(cycles);
+    fn clean_line(&mut self, addr: u32) -> usize {
+        let mut cache_line = [0_u32; 8];
+        let mut cycles = 0;
+        if self.data_cache.clean_line(addr, &mut cache_line) {
+            cycles += self.mem_bus.store_word(MemCycleType::N, addr, cache_line[0]);
+            for (data, offset) in cache_line[1..8].iter().zip((4..32).step_by(4)) {
+                cycles += self.mem_bus.store_word(MemCycleType::S, addr + offset, *data);
             }
         }
+        cycles
     }
 
     /// Write data back to memory if necessary.
     /// 
     /// Argument specifies the exact set and line to replace.
-    fn clean_set_line(&mut self, set_line: SetLine) {
-        if let Some((tag, cache_data)) = self.data_cache.clean_set_line(set_line.set_idx(), set_line.data_index()) {
+    fn clean_set_line(&mut self, set_line: SetLine) -> usize {
+        let mut cache_line = [0_u32; 8];
+        let mut cycles = 0;
+        if let Some(tag) = self.data_cache.clean_set_line(set_line.set_idx(), set_line.data_index(), &mut cache_line) {
             let addr = tag + set_line.data_offset();
-            for (offset, b) in cache_data.iter().enumerate() {
-                let cycles = self.mem_bus.store_byte(MemCycleType::S, addr + (offset as u32), *b);
-                self.mem_bus.clock(cycles);
+            cycles += self.mem_bus.store_word(MemCycleType::N, addr, cache_line[0]);
+            for (data, offset) in cache_line[1..8].iter().zip((4..32).step_by(4)) {
+                cycles += self.mem_bus.store_word(MemCycleType::S, addr + offset, *data);
             }
         }
+        cycles
     }
 
     /// Write data back to memory if necessary, and mark the line as invalid.
     /// 
     /// Argument specifies the address of the data.
-    fn clean_and_invalidate_line(&mut self, addr: u32) {
-        if let Some(cache_data) = self.data_cache.clean_and_invalidate_line(addr) {
-            for (offset, b) in cache_data.iter().enumerate() {
-                let cycles = self.mem_bus.store_byte(MemCycleType::S, addr + (offset as u32), *b);
-                self.mem_bus.clock(cycles);
+    fn clean_and_invalidate_line(&mut self, addr: u32) -> usize {
+        let mut cache_line = [0_u32; 8];
+        let mut cycles = 0;
+        if self.data_cache.clean_and_invalidate_line(addr, &mut cache_line) {
+            cycles += self.mem_bus.store_word(MemCycleType::N, addr, cache_line[0]);
+            for (data, offset) in cache_line[1..8].iter().zip((4..32).step_by(4)) {
+                cycles += self.mem_bus.store_word(MemCycleType::S, addr + offset, *data);
             }
         }
+        cycles
     }
 
     /// Write data back to memory if necessary, and mark the line as invalid.
     /// 
     /// Argument specifies the exact set and line to replace.
-    fn clean_and_invalidate_set_line(&mut self, set_line: SetLine) {
-        if let Some((tag, cache_data)) = self.data_cache.clean_and_invalidate_set_line(set_line.set_idx(), set_line.data_index()) {
+    fn clean_and_invalidate_set_line(&mut self, set_line: SetLine) -> usize {
+        let mut cache_line = [0_u32; 8];
+        let mut cycles = 0;
+        if let Some(tag) = self.data_cache.clean_and_invalidate_set_line(set_line.set_idx(), set_line.data_index(), &mut cache_line) {
             let addr = tag + set_line.data_offset();
-            for (offset, b) in cache_data.iter().enumerate() {
-                let cycles = self.mem_bus.store_byte(MemCycleType::S, addr + (offset as u32), *b);
-                self.mem_bus.clock(cycles);
+            cycles += self.mem_bus.store_word(MemCycleType::N, addr, cache_line[0]);
+            for (data, offset) in cache_line[1..8].iter().zip((4..32).step_by(4)) {
+                cycles += self.mem_bus.store_word(MemCycleType::S, addr + offset, *data);
             }
         }
-    }
-
-    fn prefetch_icache_line(&mut self, addr: u32) {
-        let mut buffer = [0_u8; 32];
-        for (offset, b) in buffer.iter_mut().enumerate() {
-            let (data, cycles) = self.mem_bus.load_byte(MemCycleType::S, addr + (offset as u32));
-            *b = data;
-            self.mem_bus.clock(cycles);
-        }
-        self.instr_cache.fill_line(addr, &buffer);
+        cycles
     }
 
     fn set_cache_masks(&mut self) {
@@ -477,32 +481,60 @@ impl<R: Renderer> DS9InternalMem<R> {
         }
     }
 
-    fn fill_i_cache_line(&mut self, addr: u32) {
-        let base = addr & 0xFFFF_FFE0;
-        let mut buffer = [0_u8; 32];
-        for (offset, b) in buffer.iter_mut().enumerate() {
-            let (data, cycles) = self.mem_bus.load_byte(MemCycleType::S, base + (offset as u32));
-            *b = data;
-            self.mem_bus.clock(cycles);
+    fn prefetch_icache_line(&mut self, addr: u32) -> usize {
+        let mut buffer = [0_u32; 8];
+
+        let (data, mut cycles) = self.mem_bus.load_word(MemCycleType::N, addr);
+        buffer[0] = data;
+
+        for (buf, offset) in buffer[1..8].iter_mut().zip((4..32).step_by(4)) {
+            let (data, load_cycles) = self.mem_bus.load_word(MemCycleType::S, addr + offset);
+            *buf = data;
+            cycles += load_cycles;
         }
-        self.instr_cache.fill_line(base, &buffer);
+
+        self.instr_cache.fill_line(addr, &buffer);
+        cycles
     }
 
-    fn fill_d_cache_line(&mut self, addr: u32) {
+    fn fill_i_cache_line(&mut self, addr: u32) -> usize {
         let base = addr & 0xFFFF_FFE0;
-        let mut in_buffer = [0_u8; 32];
-        for (offset, b) in in_buffer.iter_mut().enumerate() {
-            let (data, cycles) = self.mem_bus.load_byte(MemCycleType::S, base + (offset as u32));
-            *b = data;
-            self.mem_bus.clock(cycles);
+        let mut buffer = [0_u32; 8];
+
+        let (data, mut cycles) = self.mem_bus.load_word(MemCycleType::N, base);
+        buffer[0] = data;
+
+        for (buf, offset) in buffer[1..8].iter_mut().zip((4..32).step_by(4)) {
+            let (data, load_cycles) = self.mem_bus.load_word(MemCycleType::S, base + offset);
+            *buf = data;
+            cycles += load_cycles;
         }
-        let mut out_buffer = [0_u8; 32];
+
+        self.instr_cache.fill_line(base, &buffer);
+        cycles
+    }
+
+    fn fill_d_cache_line(&mut self, addr: u32) -> usize {
+        let base = addr & 0xFFFF_FFE0;
+
+        let mut in_buffer = [0_u32; 8];
+        let (data, mut cycles) = self.mem_bus.load_word(MemCycleType::N, base);
+        in_buffer[0] = data;
+
+        for (buf, offset) in in_buffer[1..8].iter_mut().zip((4..32).step_by(4)) {
+            let (data, load_cycles) = self.mem_bus.load_word(MemCycleType::S, base + offset);
+            *buf = data;
+            cycles += load_cycles;
+        }
+
+        let mut out_buffer = [0_u32; 8];
         if let Some(addr) = self.data_cache.clean_and_fill_line(base, &in_buffer, &mut out_buffer) {
-            for (offset, b) in out_buffer.iter().enumerate() {
-                let cycles = self.mem_bus.store_byte(MemCycleType::S, addr + (offset as u32), *b);
-                self.mem_bus.clock(cycles);
+            cycles += self.mem_bus.store_word(MemCycleType::N, addr, out_buffer[0]);
+            for (data, offset) in out_buffer[1..8].iter().zip((4..32).step_by(4)) {
+                cycles += self.mem_bus.store_word(MemCycleType::S, addr + offset, *data);
             }
         }
+        cycles
     }
 }
 
@@ -579,7 +611,10 @@ impl<R: Renderer> CoprocV4 for DS9InternalMem<R> {
                 self.set_cache_masks();
                 println!("region {}: {:X}", op_reg, data);
             },
-            (7, _) => self.cache_command(op_reg, data, info),
+            (7, _) => {
+                let cycles = self.cache_command(op_reg, data, info);
+                return cycles;
+            },
             (9, 1) => self.write_tcm_settings(data, info),
             (_, _) => panic!("unknown mcr"),
         };

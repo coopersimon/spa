@@ -69,48 +69,48 @@ impl Cache {
         }
     }
 
-    pub fn clean_line<'a>(&'a mut self, addr: u32) -> Option<&'a [u8]> {
+    pub fn clean_line<'a>(&'a mut self, addr: u32, buffer: &mut [u32]) -> bool {
         let index = ((addr & self.index_mask) >> 5) as usize;
         let set = &mut self.sets[index];
         let tag = addr & self.tag_mask;
         for line in &mut set.lines {
             if line.tag == tag {
-                return line.ref_dirty_data().map(|(_, d)| d);
+                return line.ref_dirty_data(buffer).is_some();
             }
         }
-        None
+        false
     }
 
-    pub fn clean_set_line<'a>(&'a mut self, set: u32, index: u32) -> Option<(u32, &'a [u8])> {
+    pub fn clean_set_line<'a>(&'a mut self, set: u32, index: u32, buffer: &mut [u32]) -> Option<u32> {
         self.sets[index as usize].lines[set as usize]
-            .ref_dirty_data()
+            .ref_dirty_data(buffer)
     }
 
-    pub fn clean_and_invalidate_line<'a>(&'a mut self, addr: u32) -> Option<&'a [u8]> {
+    pub fn clean_and_invalidate_line<'a>(&'a mut self, addr: u32, buffer: &mut [u32]) -> bool {
         let index = ((addr & self.index_mask) >> 5) as usize;
         let set = &mut self.sets[index];
         let tag = addr & self.tag_mask;
         for line in &mut set.lines {
             if line.tag == tag {
-                return line.ref_dirty_data_and_invalidate().map(|(_, d)| d);
+                return line.ref_dirty_data_and_invalidate(buffer).is_some();
             }
         }
-        None
+        false
     }
 
-    pub fn clean_and_invalidate_set_line<'a>(&'a mut self, set: u32, index: u32) -> Option<(u32, &'a [u8])> {
+    pub fn clean_and_invalidate_set_line<'a>(&'a mut self, set: u32, index: u32, buffer: &mut [u32]) -> Option<u32> {
         self.sets[index as usize].lines[set as usize]
-            .ref_dirty_data_and_invalidate()
+            .ref_dirty_data_and_invalidate(buffer)
     }
 
-    pub fn fill_line(&mut self, addr: u32, data: &[u8]) {
+    pub fn fill_line(&mut self, addr: u32, data: &[u32]) {
         let index = ((addr & self.index_mask) >> 5) as usize;
         let tag = addr & self.tag_mask;
         self.sets[index].fill_line(tag, data);
     }
 
     /// Fill a line with new data, returning the old data and addr if it needs to be flushed.
-    pub fn clean_and_fill_line(&mut self, addr: u32, data_in: &[u8], data_out: &mut [u8]) -> Option<u32> {
+    pub fn clean_and_fill_line(&mut self, addr: u32, data_in: &[u32], data_out: &mut [u32]) -> Option<u32> {
         let index = (addr & self.index_mask) >> 5;
         let tag = addr & self.tag_mask;
         self.sets[index as usize].clean_and_fill_line(tag, data_in, data_out).map(|addr| addr | (index << 5))
@@ -241,17 +241,18 @@ impl CacheSet {
         self.lines[set as usize].invalidate();
     }
 
-    fn fill_line(&mut self, tag: u32, data: &[u8]) {
+    fn fill_line(&mut self, tag: u32, data: &[u32]) {
         self.lines[self.replace].fill(tag, data);
         self.replace = (self.replace + 1) & 3;
     }
 
-    fn clean_and_fill_line(&mut self, tag: u32, data_in: &[u8], data_out: &mut [u8]) -> Option<u32> {
-        let mut dirty_addr = None;
+    fn clean_and_fill_line(&mut self, tag: u32, data_in: &[u32], data_out: &mut [u32]) -> Option<u32> {
+        /*let mut dirty_addr = None;
         if self.lines[self.replace].dirty {
             data_out.clone_from_slice(&self.lines[self.replace].data);
             dirty_addr = Some(self.lines[self.replace].tag);
-        }
+        }*/
+        let dirty_addr = self.lines[self.replace].ref_dirty_data(data_out);
         self.fill_line(tag, data_in);
         dirty_addr
     }
@@ -279,20 +280,26 @@ impl CacheLine {
         }
     }
 
-    fn ref_dirty_data<'a>(&'a mut self) -> Option<(u32, &'a [u8])> {
+    fn ref_dirty_data<'a>(&'a mut self, data_out: &mut [u32]) -> Option<u32> {
         if self.dirty {
             self.dirty = false;
-            Some((self.tag, &self.data))
+            for (o, i) in data_out.iter_mut().zip(self.data.chunks_exact(4)) {
+                *o = u32::from_le_bytes(i.try_into().unwrap());
+            }
+            Some(self.tag)
         } else {
             None
         }
     }
 
-    fn ref_dirty_data_and_invalidate<'a>(&'a mut self) -> Option<(u32, &'a [u8])> {
+    fn ref_dirty_data_and_invalidate<'a>(&'a mut self, data_out: &mut [u32]) -> Option<u32> {
         let tag = std::mem::replace(&mut self.tag, INVALID);
         if self.dirty {
             self.dirty = false;
-            Some((tag, &self.data))
+            for (o, i) in data_out.iter_mut().zip(self.data.chunks_exact(4)) {
+                *o = u32::from_le_bytes(i.try_into().unwrap());
+            }
+            Some(tag)
         } else {
             None
         }
@@ -306,9 +313,11 @@ impl CacheLine {
 
     /// Replace existing data with new data.
     /// Make sure to flush existing dirty data first.
-    fn fill(&mut self, tag: u32, data: &[u8]) {
+    fn fill(&mut self, tag: u32, data: &[u32]) {
         self.dirty = false;
         self.tag = tag;
-        self.data.clone_from_slice(data);
+        for (o, i) in self.data.chunks_exact_mut(4).zip(data.iter()) {
+            o.clone_from_slice(&i.to_le_bytes());
+        }
     }
 }
