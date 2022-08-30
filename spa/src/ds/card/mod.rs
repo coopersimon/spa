@@ -411,6 +411,20 @@ impl MemInterface16 for DSCard {
                 self.write_rom_control_lo(bytes::u32::lo(data));
                 self.write_rom_control_hi(bytes::u32::hi(data))
             },
+            0x0400_01A8 => {
+                let bytes = data.to_le_bytes();
+                self.command[7] = bytes[0];
+                self.command[6] = bytes[1];
+                self.command[5] = bytes[2];
+                self.command[4] = bytes[3];
+            },
+            0x0400_01AC => {
+                let bytes = data.to_le_bytes();
+                self.command[3] = bytes[0];
+                self.command[2] = bytes[1];
+                self.command[1] = bytes[2];
+                self.command[0] = bytes[3];
+            },
             _ => panic!("write word to card @ {:X}", addr)
         }
     }
