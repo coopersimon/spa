@@ -64,16 +64,18 @@ DS:
 - Loads of unaligned memory accesses.
 
 ### DS Status of selected games:
-- Age of Empires: Age of Kings: Loads main menu, freezes
-- Animal Crossing Wild World: Loads up titles shows menu and gameplay. Intro rain + glass looks a bit wrong.
+- Age of Empires: Age of Kings: Works OK.
+- Animal Crossing Wild World: Works mostly OK.
 - Brain Training (Brain Age): Seems to run OK.
+- Black Ops: Boots mostly OK, unable to find strings to display for some reason.
+- Civilization Revolution: Gets stuck creating save data.
 - Chrono Trigger: Mostly OK.
 - Dragon Quest IX: Shows intro cards and video. Shows broken screen and freezes.
-- Dragon Quest IV: Black screen - getting stuck in halt loop
-- Dragon Quest V: Black screen
-- Dragon Quest VI: Black screen
-- Final Fantasy Tactics A2: Loads up and game starts. Flickering (capture issues?). Some broken graphics. Freezes when gameplay begins (?)
-- Final Fantasy III: Sets up save ram, shows titles, now locks up.
+- Dragon Quest IV: Mostly OK, shows a strange counter in intro
+- Dragon Quest V: Mostly OK
+- Dragon Quest VI: Slow start, broken intro, mostly OK
+- Final Fantasy Tactics A2: Lots of broken graphics and visibility / depth issues. However functionally seems ok now.
+- Final Fantasy III: Mostly OK
 - Final Fantasy IV: Mostly OK.
 - Final Fantasy: 4 Heroes of Light: Game starts OK, 2D has visibility issues in menu. 3D is pretty good but has some precision issues.
 - GTA Chinatown Wars: Titles & menu looks OK, intro 3D is broken
@@ -84,21 +86,21 @@ DS:
 - Mario and Luigi: Bowser's Inside Story: Blank screen
 - Mario and Luigi: Partners in Time: Loads up mostly ok, menu title 3D is ok, intro has serious graphical issues
 - Mario Party DS: Mostly OK. Some precision issues with 3D.
-- Metroid Prime Hunters: Initial titles are broken. Shows intro video. Gets to menu then locks up.
+- Metroid Prime Hunters: Lots of broken graphics in titles and menu, also seems to lock up occasionally.
 - New Super Mario Bros: Mostly OK. precision issues with 3D graphics
 - LoZ Phantom Hourglass: Just white screen now.
 - LoZ Spirit Tracks: White screen.
 - LEGO Lord of the Rings: Loads up OK, some visibility issues in menus (2D issues?)
 - LEGO Star Wars II: Mostly OK, some near-plane clipping issues throughout, some graphics have missing pixels on 3D screen
 - Mario Slam Basketball (Hoops 3-on-3): Mostly OK.
-- Nintendogs (Labrador): Intro is mostly OK with clipping errors. Gameplay begins, crashes due to full GPU command fifo.
-- Pokemon Mystery Dungeon Explorers of Sky: Intro plays. It's super slow. Gameplay starts up ok, with some graphical glitches on lower screen.
+- Nintendogs (Labrador): Intro is mostly OK with clipping errors. Gameplay begins, crashes due to full GPU command fifo. (Now crashes due to unimplemented cache command)
+- Pokemon Mystery Dungeon Explorers of Sky: Mostly OK.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
 - Pokemon Diamond: 2d elements of game work ok, 3D in intro looks good, 3D in title looks good
 - Pokemon Black: Black screen
 - Pokemon HeartGold: 2d elements of game work ok, 3D in intro good, 3D in title is quite broken
 - Pokemon Ranger: Mostly OK, 2D components are rendered as 3D and there are some precision issues.
-- Shin Megami Tensei: Strange Journey: Black screen
+- Shin Megami Tensei: Strange Journey: Titles OK, menu has visibility issues, freezes when gameplay begins.
 - Super Mario 64 DS: Loads up ok, star in intro looks wrong (specular lighting/texture issues). 3D in menu looks good. Actual game has polygons flying everywhere in front of scene + perspective issues
 - Super Scribblenauts: Mostly OK.
 - Tony Hawk's Downhill Jam: Shows titles, then black screen

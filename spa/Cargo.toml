@@ -24,7 +24,7 @@ path = "../dscrypto"
 
 [dependencies.arm]
 git = "https://github.com/coopersimon/e-arm"
-#path = "../../arm"
+#path = "../../e-arm"
 
 [features]
 debug = []

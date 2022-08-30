@@ -62,10 +62,8 @@ bitflags!{
     }
 }
 
-/// We read 1kB at a time from disk.
-const ROM_BUFFER_SIZE: u32 = 1024;
-
-const ROM_ID: [u8; 4] = [0xC2, 0x1F, 0x00, 0x00];
+/// We read 16kB at a time from disk.
+const ROM_BUFFER_SIZE: u32 = 16 * 1024;
 
 /// DS Card attached to IO ports.
 pub struct DSCardIO {
@@ -121,6 +119,10 @@ impl DSCardIO {
         CardHeader::new(data)
     }
 
+    pub fn get_rom_id(&self) -> u32 {
+        u32::from_le_bytes(self.card.lock().rom_id)
+    }
+
     pub fn load_data(&self, from_addr: u32, into_buffer: &mut [u8]) {
         self.card.lock().load_data(from_addr, into_buffer);
     }
@@ -167,6 +169,7 @@ struct DSCard {
     rom_control_hi: RomControlHi,
 
     key1: Vec<u32>, // 0x1048 byte key
+    rom_id: [u8; 4],
 
     command: [u8; 8],
     seed_0: [u8; 8],
@@ -200,6 +203,11 @@ impl DSCard {
         let id_code = u32::from_le_bytes([buffer[0xC], buffer[0xD], buffer[0xE], buffer[0xF]]);
         let key1_level2 = dscrypto::key1::init(id_code, &key1, 2, 2);
 
+        // ROM ID
+        let file_size_mb = rom_file.metadata().unwrap().len() / (1024 * 1024);
+        let id_size = (file_size_mb as u8) - 1;
+        let id_hi_flags = if id_size >= 0x7F {0x80} else {0x00};    // TODO: 0x80 for DSi cards too
+
         Ok(Self {
             rom_file:   rom_file,
             rom_buffer: buffer,
@@ -211,6 +219,7 @@ impl DSCard {
             rom_control_hi: RomControlHi::default(),
 
             key1: key1_level2,
+            rom_id: [0xC2, id_size, 0x00, id_hi_flags],
 
             command: [0; 8],
             seed_0: [0xE8, 0xE0, 0x6D, 0xC5, 0x58, 0, 0, 0],
@@ -259,6 +268,7 @@ impl DSCard {
         // TODO: load seed 0
         //self.apply_key2_seeds();
         self.cmd_encrypt_mode = CommandEncryptMode::Key2;
+        self.data_state = DSCardDataState::Key2Dummy;
     }
 }
 
@@ -407,6 +417,7 @@ impl MemInterface16 for DSCard {
 }
 
 /// How the input commands are encrypted.
+#[derive(PartialEq)]
 enum CommandEncryptMode {
     None,
     Key1,
@@ -427,6 +438,7 @@ enum DSCardDataState {
     SecureBlock(u32),   // 2
     Key2Disable(u32),   // 6
     EnterMain(u32),     // A
+    Key2Dummy,
     GetData(u32),       // B7
     Key2ID              // B8
 }
@@ -553,6 +565,9 @@ impl DSCard {
         match command >> 56 {
             0xB7 => {
                 let addr = (command >> 24) as u32;
+                if (addr % 0x4000) + 0x200 > 0x4000 {
+                    panic!("Trying to read addr {:X}", addr);
+                }
                 if addr >= 0x8000 {
                     GetData(addr)
                 } else {
@@ -582,7 +597,7 @@ impl DSCard {
             },
             ID | Key1ID | Key2ID => {
                 let idx = 4 - self.transfer_count;
-                ROM_ID[idx]
+                self.rom_id[idx]
             },
             Key2 => {
                 // TODO: calc keys
@@ -595,6 +610,7 @@ impl DSCard {
                 data
             },
             Key2Disable(_) => 0,
+            Key2Dummy => 0,
             EnterMain(_) => 0,
             GetData(addr) => {
                 let data = self.read_card_byte(addr);
@@ -605,7 +621,7 @@ impl DSCard {
         //println!("read data: {:X}", data);
         self.transfer_count -= 1;
         if self.transfer_count == 0 {
-            self.data_state = Dummy;
+            self.data_state = if self.cmd_encrypt_mode == CommandEncryptMode::Key2 {Key2Dummy} else {Dummy};
             self.transfer_complete();
         }
         data

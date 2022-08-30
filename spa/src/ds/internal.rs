@@ -395,7 +395,7 @@ impl<R: Renderer> DS9InternalMem<R> {
         let mut cycles = 0;
         //println!("Try clean {:X}", addr);
         if self.data_cache.clean_line(addr, &mut cache_line) {
-            println!("Clean {:X}", addr);
+            //println!("Clean {:X}", addr);
             cycles += self.mem_bus.store_word(MemCycleType::N, addr, cache_line[0]);
             for (data, offset) in cache_line[1..8].iter().zip((4..32).step_by(4)) {
                 cycles += self.mem_bus.store_word(MemCycleType::S, addr + offset, *data);
@@ -412,7 +412,7 @@ impl<R: Renderer> DS9InternalMem<R> {
         let mut cycles = 0;
         //println!("Try clean bits {:X}", set_line.bits());
         if let Some(tag) = self.data_cache.clean_set_line(set_line.set_idx(), set_line.data_index(), &mut cache_line) {
-            println!("Clean {:X} | {:X}", tag, set_line.data_offset());
+            //println!("Clean {:X} | {:X}", tag, set_line.data_offset());
             let addr = tag + set_line.data_offset();
             cycles += self.mem_bus.store_word(MemCycleType::N, addr, cache_line[0]);
             for (data, offset) in cache_line[1..8].iter().zip((4..32).step_by(4)) {
@@ -463,8 +463,9 @@ impl<R: Renderer> DS9InternalMem<R> {
                     u8::test_bit(self.data_cache_bits, region) &&
                     (base & 0xFF00_0000 == 0x0200_0000)
                 {
-                    self.data_cache_base = base;
-                    self.data_cache_mask = u32::MAX - (self.protection_unit_regions[region].size() - 1);
+                    // TODO: temp. disabled data cache due to some bugs.
+                    //self.data_cache_base = base;
+                    //self.data_cache_mask = u32::MAX - (self.protection_unit_regions[region].size() - 1);
                     //println!("DCACHE: base: {:X} | mask: {:X}", base, self.data_cache_mask);
                     break;
                 }
@@ -612,13 +613,13 @@ impl<R: Renderer> CoprocV4 for DS9InternalMem<R> {
             (3, 0) => {
                 self.cache_write_buffer_bits = data as u8;
                 // TODO...
-                println!("cache WB: {:X}", data);
+                //println!("cache WB: {:X}", data);
             },
             (5, 0) => self.write_access_permission_bits(data, info),
             (6, _) => {
                 self.protection_unit_regions[op_reg] = MemRegion::from_bits_truncate(data);
                 self.set_cache_masks();
-                println!("region {}: {:X}", op_reg, data);
+                //println!("region {}: {:X}", op_reg, data);
             },
             (7, _) => {
                 let cycles = self.cache_command(op_reg, data, info);

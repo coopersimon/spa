@@ -187,19 +187,19 @@ impl<R: Renderer> DS9MemoryBus<R> {
             self.main_ram.write_byte((0x3F_FE00 + n) as u32, *byte);
         }
         
-        //println!("autostart: {:X}", self.main_ram.read_byte(0x3F_FE1F));
+        // Autostart.
         self.main_ram.write_byte(0x3F_FE1F, 4);
 
         self.card.fast_boot();
 
         // Write additional data into RAM.
-        self.main_ram.write_word(0x3F_F800, 0x1FC2);
-        self.main_ram.write_word(0x3F_F804, 0x1FC2);
+        self.main_ram.write_word(0x3F_F800, self.card.get_rom_id());
+        self.main_ram.write_word(0x3F_F804, self.card.get_rom_id());
         self.main_ram.write_word(0x3F_F880, 7); // NDS9-7 msg
         self.main_ram.write_word(0x3F_F884, 6); // NDS7 status
         self.main_ram.write_word(0x3F_F890, 0xB0002A22); // Boot flags
-        self.main_ram.write_word(0x3F_FC00, 0x1FC2);
-        self.main_ram.write_word(0x3F_FC04, 0x1FC2);
+        self.main_ram.write_word(0x3F_FC00, self.card.get_rom_id());
+        self.main_ram.write_word(0x3F_FC04, self.card.get_rom_id());
         self.main_ram.write_word(0x3F_FC40, 1); // Boot flag
 
         // Write user settings into RAM.
@@ -292,6 +292,7 @@ impl <R: Renderer> DS9MemoryBus<R> {
     fn do_dma(&mut self) {
         // TODO: keep executing if inside cache?
         let mut last_active = 4;
+        let mut cycles = 0;
         loop {
             if let Some(c) = self.dma.get_active() {
                 // Check if DMA channel has changed since last transfer.
@@ -305,17 +306,26 @@ impl <R: Renderer> DS9MemoryBus<R> {
                     arm::MemCycleType::S
                 };
                 // Transfer one piece of data.
-                let cycles = match self.dma.channels[c].next_addrs() {
+                match self.dma.channels[c].next_addrs() {
                     DMAAddress::Addr {
                         source, dest
-                    } => if self.dma.channels[c].transfer_32bit_word() {
-                        let (data, load_cycles) = self.load_word(access, source);
-                        let store_cycles = self.store_word(access, dest, data);
-                        load_cycles + store_cycles
-                    } else {
-                        let (data, load_cycles) = self.load_halfword(access, source);
-                        let store_cycles = self.store_halfword(access, dest, data);
-                        load_cycles + store_cycles
+                    } => {
+                        cycles += if self.dma.channels[c].transfer_32bit_word() {
+                            let (data, load_cycles) = self.load_word(access, source);
+                            let store_cycles = self.store_word(access, dest, data);
+                            load_cycles + store_cycles
+                        } else {
+                            let (data, load_cycles) = self.load_halfword(access, source);
+                            let store_cycles = self.store_halfword(access, dest, data);
+                            load_cycles + store_cycles
+                        };
+
+                        if cycles > 8 {
+                            if self.do_clock(cycles) {
+                                self.frame_end();
+                            }
+                            cycles = 0;
+                        }
                     },
                     DMAAddress::Done {
                         source, dest, irq
@@ -331,14 +341,20 @@ impl <R: Renderer> DS9MemoryBus<R> {
                         };
                         self.interrupt_control.interrupt_request(Interrupts::from_bits_truncate(irq as u32));
                         self.dma.set_inactive(c);
-                        cycles
+
+                        if self.do_clock(cycles) {
+                            self.frame_end();
+                        }
                     }
                 };
-                if self.do_clock(cycles) {
-                    self.frame_end();
-                }
             } else {
                 break;
+            }
+        }
+
+        if cycles > 0 {
+            if self.do_clock(cycles) {
+                self.frame_end();
             }
         }
     }
@@ -405,6 +421,16 @@ impl <R: Renderer> DS9MemoryBus<R> {
     }
 }
 
+const DS7_MAIN_RAM_N: usize = 5;
+const DS7_MAIN_RAM_S: usize = 1;
+const DS7_MAIN_RAM_WORD_N: usize = DS7_MAIN_RAM_N + DS7_MAIN_RAM_S;
+const DS7_MAIN_RAM_WORD_S: usize = DS7_MAIN_RAM_S + DS7_MAIN_RAM_S;
+
+const DS9_MAIN_RAM_N: usize = DS7_MAIN_RAM_N * 2;
+const DS9_MAIN_RAM_S: usize = DS7_MAIN_RAM_S * 2;
+const DS9_MAIN_RAM_WORD_N: usize = DS9_MAIN_RAM_N + DS9_MAIN_RAM_S;
+const DS9_MAIN_RAM_WORD_S: usize = DS9_MAIN_RAM_S + DS9_MAIN_RAM_S;
+
 impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
     type Addr = u32;
 
@@ -446,7 +472,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => (
                 self.main_ram.read_byte(addr & 0x3F_FFFF),
-                if cycle.is_non_seq() {18} else {2}  // TODO: 18 for instr
+                if cycle.is_non_seq() {DS9_MAIN_RAM_N} else {DS9_MAIN_RAM_S}  // TODO: S=N for instr
             ),
             0x0300_0000..=0x03FF_FFFF => (
                 self.shared_wram.read_byte(addr),
@@ -474,7 +500,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_byte(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {18} else {2}  // TODO: 9 for instr
+                if cycle.is_non_seq() {DS9_MAIN_RAM_N} else {DS9_MAIN_RAM_S}  // TODO: S=N for instr
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared RAM
                 self.shared_wram.write_byte(addr, data);
@@ -516,7 +542,10 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {18} else {2}),
+            0x0200_0000..=0x02FF_FFFF => (
+                self.main_ram.read_halfword(addr & 0x3F_FFFF),
+                if cycle.is_non_seq() {DS9_MAIN_RAM_N} else {DS9_MAIN_RAM_S}  // TODO: S=N for instr
+            ),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_halfword(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
@@ -540,7 +569,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_halfword(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {18} else {2}  // TODO: 18 for instr
+                if cycle.is_non_seq() {DS9_MAIN_RAM_N} else {DS9_MAIN_RAM_S}  // TODO: S=N for instr
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_halfword(addr, data);
@@ -583,12 +612,16 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
 
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {20} else {4}),
+            0x0200_0000..=0x02FF_FFFF => (
+                self.main_ram.read_word(addr & 0x3F_FFFF),
+                if cycle.is_non_seq() {DS9_MAIN_RAM_WORD_N} else {DS9_MAIN_RAM_WORD_S}  // TODO: S=N for instr
+            ),
             0x0300_0000..=0x03FF_FFFF => (self.shared_wram.read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // I/O
             0x0400_0240..=0x0400_024B => (self.read_mem_control_word(addr & 0xF), if cycle.is_non_seq() {8} else {2}),
             0x0400_1000..=0x0400_106F => (self.video.mem.mut_engine_b().registers.read_word(addr & 0xFF), 2),
+            0x0410_0010..=0x0410_0013 => (self.card.read_word(addr), 10),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), if cycle.is_non_seq() {8} else {2}),
 
             // VRAM
@@ -607,7 +640,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_word(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {20} else {4}
+                if cycle.is_non_seq() {DS9_MAIN_RAM_WORD_N} else {DS9_MAIN_RAM_WORD_S}  // TODO: S=N for instr
             },
             0x0300_0000..=0x03FF_FFFF => {  // Shared WRAM
                 self.shared_wram.write_word(addr, data);
@@ -775,6 +808,8 @@ impl DS7MemoryBus {
         self.counter += cycles;
         if self.counter >= ARM7_THREAD_SYNC_CYCLES {
             self.counter -= ARM7_THREAD_SYNC_CYCLES;
+            self.barrier.wait();
+
             // Check buttons + touchpad
             if let Ok(new_input) = self.input_recv.try_recv() {
                 self.set_input(new_input);
@@ -784,7 +819,6 @@ impl DS7MemoryBus {
                 }
                 self.card.flush_save();
             }
-            self.barrier.wait();
         }
 
         self.card.clock(cycles);
@@ -833,26 +867,24 @@ impl Mem32 for DS7MemoryBus {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
-        self.inner_counter += cycles;
-        if self.inner_counter < 4 {
-            return None;
-        }
 
-        self.do_clock(self.inner_counter);
         self.do_dma();
-        self.inner_counter = 0;
+        self.do_clock(cycles);
 
         // Check if CPU is halted.
         if self.power_control.halt {
             loop {
-                self.do_clock(4);
-                self.do_dma();
                 if self.check_irq() {
                     self.power_control.halt = false;
                     return Some(arm::ExternalException::IRQ);
                 }
+                self.do_dma();
+                self.do_clock(4);
             }
         }
+
+        //self.do_clock(self.inner_counter);
+        //self.inner_counter = 0;
 
         if self.check_irq() {
             self.power_control.halt = false;
@@ -866,7 +898,10 @@ impl Mem32 for DS7MemoryBus {
         match addr {
             0x0000_0000..=0x0000_3FFF => (self.bios.read_byte(addr), 1),
 
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_byte(addr & 0x3F_FFFF), if cycle.is_non_seq() {9} else {1}),
+            0x0200_0000..=0x02FF_FFFF => (
+                self.main_ram.read_byte(addr & 0x3F_FFFF),
+                if cycle.is_non_seq() {DS7_MAIN_RAM_N} else {DS7_MAIN_RAM_S}
+            ),
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_byte(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_byte(addr & 0xFFFF), 1),
 
@@ -885,7 +920,7 @@ impl Mem32 for DS7MemoryBus {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_byte(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {9} else {1}
+                if cycle.is_non_seq() {DS7_MAIN_RAM_N} else {DS7_MAIN_RAM_S}
             },
             0x0300_0000..=0x037F_FFFF => {  // Shared RAM
                 self.shared_wram.write_byte(addr, data);
@@ -915,7 +950,10 @@ impl Mem32 for DS7MemoryBus {
     fn load_halfword(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u16, usize) {
         match addr {
             0x0000_0000..=0x0000_3FFF => (self.bios.read_halfword(addr), 1),
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_halfword(addr & 0x3F_FFFF), if cycle.is_non_seq() {9} else {1}),
+            0x0200_0000..=0x02FF_FFFF => (
+                self.main_ram.read_halfword(addr & 0x3F_FFFF),
+                if cycle.is_non_seq() {DS7_MAIN_RAM_N} else {DS7_MAIN_RAM_S}
+            ),
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_halfword(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_halfword(addr & 0xFFFF), 1),
 
@@ -932,7 +970,7 @@ impl Mem32 for DS7MemoryBus {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_halfword(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {9} else {1}
+                if cycle.is_non_seq() {DS7_MAIN_RAM_N} else {DS7_MAIN_RAM_S}
             },
             0x0300_0000..=0x037F_FFFF => {  // Shared RAM
                 self.shared_wram.write_halfword(addr, data);
@@ -962,10 +1000,14 @@ impl Mem32 for DS7MemoryBus {
     fn load_word(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u32, usize) {
         match addr {
             0x0000_0000..=0x0000_3FFF => (self.bios.read_word(addr), 1),
-            0x0200_0000..=0x02FF_FFFF => (self.main_ram.read_word(addr & 0x3F_FFFF), if cycle.is_non_seq() {10} else {2}),
+            0x0200_0000..=0x02FF_FFFF => (
+                self.main_ram.read_word(addr & 0x3F_FFFF),
+                if cycle.is_non_seq() {DS7_MAIN_RAM_WORD_N} else {DS7_MAIN_RAM_WORD_S}
+            ),
             0x0300_0000..=0x037F_FFFF => (self.shared_wram.read_word(addr), 1),
             0x0380_0000..=0x03FF_FFFF => (self.wram.read_word(addr & 0xFFFF), 1),
 
+            0x0410_0010..=0x0410_0013 => (self.card.read_word(addr), 5),
             0x0400_0000..=0x04FF_FFFF => (self.io_read_word(addr), 1),
 
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_word(addr), 2),
@@ -979,7 +1021,7 @@ impl Mem32 for DS7MemoryBus {
         match addr {
             0x0200_0000..=0x02FF_FFFF => {  // WRAM
                 self.main_ram.write_word(addr & 0x3F_FFFF, data);
-                if cycle.is_non_seq() {10} else {2}
+                if cycle.is_non_seq() {DS7_MAIN_RAM_WORD_N} else {DS7_MAIN_RAM_WORD_S}
             },
             0x0300_0000..=0x037F_FFFF => {  // Shared RAM
                 self.shared_wram.write_word(addr, data);
