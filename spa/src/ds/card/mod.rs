@@ -390,7 +390,7 @@ impl MemInterface16 for DSCard {
         }
     }
 
-    /*fn read_word(&mut self, addr: u32) -> u32 {
+    fn read_word(&mut self, addr: u32) -> u32 {
         match addr {
             0x0400_01A4 => bytes::u32::make(self.rom_control_hi.bits(), self.rom_control_lo.bits()),
             0x0410_0010 => {    // Data out
@@ -413,7 +413,7 @@ impl MemInterface16 for DSCard {
             },
             _ => panic!("write word to card @ {:X}", addr)
         }
-    }*/
+    }
 }
 
 /// How the input commands are encrypted.
@@ -542,6 +542,7 @@ impl DSCard {
             0x2 => {
                 let block = ((command >> 44) & 0xFFFF) as u32;
                 let addr = block * 0x1000;
+                self.load_block(addr);
                 SecureBlock(addr)
             },
             0x6 => {
@@ -565,14 +566,13 @@ impl DSCard {
         match command >> 56 {
             0xB7 => {
                 let addr = (command >> 24) as u32;
-                if (addr % 0x4000) + 0x200 > 0x4000 {
-                    panic!("Trying to read addr {:X}", addr);
-                }
-                if addr >= 0x8000 {
-                    GetData(addr)
+                let addr = if addr >= 0x8000 {
+                    addr
                 } else {
-                    GetData(0x8000 + (addr & 0x1FF))
-                }
+                    0x8000 + (addr & 0x1FF)
+                };
+                self.load_block(addr);
+                GetData(addr)
             },
             0xB8 => Key2ID,
             _ => panic!("unrecognised (key2) DS card command: {:X}", command)
@@ -628,7 +628,14 @@ impl DSCard {
     }
 
     /// Read a byte from the actual game card ROM.
+    /// 
+    /// Reads from the current loaded block.
     fn read_card_byte(&mut self, addr: u32) -> u8 {
+        self.rom_buffer[(addr % ROM_BUFFER_SIZE) as usize]
+    }
+
+    /// Load a 16kB block into memory from card.
+    fn load_block(&mut self, addr: u32) {
         let tag = addr / ROM_BUFFER_SIZE;
         if tag != self.buffer_tag {
             self.buffer_tag = tag;
@@ -636,7 +643,6 @@ impl DSCard {
             self.rom_file.seek(SeekFrom::Start(seek_addr)).unwrap();
             self.rom_file.read_exact(&mut self.rom_buffer).unwrap();
         }
-        self.rom_buffer[(addr % ROM_BUFFER_SIZE) as usize]
     }
 
     //#[inline]
