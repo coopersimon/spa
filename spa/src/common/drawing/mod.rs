@@ -41,7 +41,7 @@ pub struct SoftwareRenderer {
     mode:           RendererMode,
     h_res:          usize,
     palette_cache:  PaletteCache,
-    pub line_3d:   Vec<ColourAlpha>,
+    pub frame_3d:   Vec<ColourAlpha>,
 }
 
 impl SoftwareRenderer {
@@ -51,14 +51,14 @@ impl SoftwareRenderer {
             RendererMode::GBA   => 240,
             /* NDS */_          => 256,
         };
-        let line_3d = if mode == RendererMode::NDSA {
-            vec![ColourAlpha::default(); 256]
+        let frame_3d = if mode == RendererMode::NDSA {
+            vec![ColourAlpha::default(); 256 * 192]
         } else {Vec::new()};
         Self {
             mode:           mode,
             h_res:          h_res,
             palette_cache:  PaletteCache::new(),
-            line_3d,
+            frame_3d,
         }
     }
 
@@ -673,11 +673,11 @@ impl SoftwareRenderer {
                 let scroll_x = u16::sign_extend(d.scroll_x & 0x1FF, 9);
                 let scrolled_x = (x as i16).wrapping_add(scroll_x) as u16;
                 if scrolled_x < 0x100 {
-                    let idx = scrolled_x as usize;
-                    if self.line_3d[idx].alpha == 0 {
+                    let idx = (scrolled_x as usize) + (y as usize) * 256;
+                    if self.frame_3d[idx].alpha == 0 {
                         None
                     } else {
-                        _3D(self.line_3d[idx])
+                        _3D(self.frame_3d[idx])
                     }
                 } else {
                     None

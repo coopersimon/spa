@@ -105,7 +105,7 @@ impl Renderer for ProceduralRenderer {
                             data.finish_frame();
                         }
                     }
-                    RenderCommand::_3D => ()//data.render_3d()
+                    RenderCommand::_3D => data.render_3d()
                 }
                 
                 //reply_tx.send(()).unwrap();
@@ -147,13 +147,7 @@ impl ProceduralRendererThread {
                 self.capture = true;
             }
         }
-        {
-            self.vram.engine_b_mem.lock().registers.reset_v_count();
-        }
-        {
-            let mut engine_3d_mem = self.vram.engine_3d_vram.lock();
-            self.engine_3d.setup_caches(&mut engine_3d_mem);  
-        }
+        self.vram.engine_b_mem.lock().registers.reset_v_count();
     }
 
     fn finish_frame(&mut self) {
@@ -163,16 +157,21 @@ impl ProceduralRendererThread {
         }
     }
 
-    fn render_line(&mut self, line: u16) {
+    fn render_3d(&mut self) {
         let power_cnt = self.vram.read_power_cnt();
 
         if power_cnt.contains(GraphicsPowerControl::RENDER_3D) {
-            let engine_3d_mem = self.vram.engine_3d_vram.lock();
+            let mut engine_3d_mem = self.vram.engine_3d_vram.lock();
+            self.engine_3d.setup_caches(&mut engine_3d_mem);  
 
             let render_engine = self.vram.render_engine.lock();
 
-            self.engine_3d.draw(&render_engine, &engine_3d_mem, &mut self.engine_a.line_3d, line as u8);
+            self.engine_3d.draw(&render_engine, &engine_3d_mem, &mut self.engine_a.frame_3d);
         }
+    }
+
+    fn render_line(&mut self, line: u16) {
+        let power_cnt = self.vram.read_power_cnt();
 
         if power_cnt.contains(GraphicsPowerControl::ENABLE_A) {
             self.engine_a_line(line as u8, power_cnt.contains(GraphicsPowerControl::DISPLAY_SWAP));
@@ -253,7 +252,9 @@ impl ProceduralRendererThread {
                         }
                     },
                     DispCapSourceA::_3D => {
-                        for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.line_3d) {
+                        let start = (line as usize) * H_RES;
+                        let end = start + H_RES;
+                        for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.frame_3d[start..=end]) {
                             *a = b.col;
                         }
                     }
@@ -274,7 +275,9 @@ impl ProceduralRendererThread {
                             }
                         },
                         DispCapSourceA::_3D => {
-                            for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.line_3d) {
+                            let start = (line as usize) * H_RES;
+                            let end = start + H_RES;
+                            for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.frame_3d[start..=end]) {
                                 *a = b.col;
                             }
                         }
