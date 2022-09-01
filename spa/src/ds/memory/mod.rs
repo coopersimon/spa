@@ -157,7 +157,6 @@ impl<R: Renderer> DS9MemoryBus<R> {
             ex_mem_status:      ex_mem_status,
             card:               card_7,
 
-            inner_counter:      0,
             counter:            0,
             barrier:            barrier,
             input_recv:         input_recv
@@ -413,8 +412,6 @@ impl <R: Renderer> DS9MemoryBus<R> {
 
     /// Called when vblank occurs. Halts emulation until the next frame.
     fn frame_end(&mut self) {
-        //self.game_pak.flush_save();
-
         let input = self.frame_sender.sync_frame();
         self.joypad.set_all_buttons(input.buttons);
         self.input_send.send(input).unwrap();
@@ -435,30 +432,36 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
+        // Check if CPU is halted.
+        if self.halt {
+            loop {
+                if self.do_clock(8) {
+                    self.frame_end();
+                }
+                self.do_dma();
+                if self.check_irq() {
+                    self.halt = false;
+                    break;
+                }
+            }
+        } else {
+            if self.dma.get_active().is_some() {
+                self.do_dma();
+            }
+        }
+
         self.inner_counter += cycles;
-        if self.inner_counter < 4 {
+        if self.inner_counter < 16 {
+            if self.check_irq() {
+                return Some(arm::ExternalException::IRQ);
+            }
             return None;
         }
 
         if self.do_clock(self.inner_counter) {
             self.frame_end();
         }
-        self.do_dma();
         self.inner_counter = 0;
-
-        // Check if CPU is halted.
-        if self.halt {
-            loop {
-                if self.do_clock(4) {
-                    self.frame_end();
-                }
-                self.do_dma();
-                if self.check_irq() {
-                    self.halt = false;
-                    return Some(arm::ExternalException::IRQ);
-                }
-            }
-        }
 
         if self.check_irq() {
             self.halt = false;
@@ -725,7 +728,6 @@ pub struct DS7MemoryBus {
     ex_mem_status:      ExMemStatus,
     card:               DSCardIO,
 
-    inner_counter:      usize,
     counter:            usize,
     barrier:            Arc<Barrier>,
     input_recv:         Receiver<UserInput>
@@ -867,7 +869,6 @@ impl Mem32 for DS7MemoryBus {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
-
         self.do_dma();
         self.do_clock(cycles);
 
@@ -882,9 +883,6 @@ impl Mem32 for DS7MemoryBus {
                 self.do_clock(4);
             }
         }
-
-        //self.do_clock(self.inner_counter);
-        //self.inner_counter = 0;
 
         if self.check_irq() {
             self.power_control.halt = false;

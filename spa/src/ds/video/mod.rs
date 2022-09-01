@@ -242,6 +242,9 @@ impl<R: Renderer> DSVideo<R> {
                 self.v_count_out.fetch_add(1, Ordering::AcqRel);
                 self.lcd_status.remove(LCDStatus::HBLANK_FLAG);
                 self.lcd_status.set(LCDStatus::VCOUNT_FLAG, self.v_count == self.lcd_status.v_count());
+                if self.v_count == 214 {
+                    self.renderer.render_3d();
+                }
                 (Signal::None, self.v_count_irq())
             },
         }
