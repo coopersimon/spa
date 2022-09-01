@@ -223,7 +223,7 @@ pub struct Vertex {
 /// 
 /// Contains polygon order, polygon metadata, and vertex data.
 pub struct PolygonRAM {
-    pub opaque_polygons:    Vec<PolygonOrder>,
+    pub opaque_polygons:    BTreeSet<PolygonOrder>,
 
     pub use_manual_mode:        bool,   // Insert transparent polys in order.
     pub trans_polygon_auto:     BTreeSet<PolygonOrder>,
@@ -236,7 +236,7 @@ pub struct PolygonRAM {
 impl PolygonRAM {
     pub fn new() -> Self {
         Self {
-            opaque_polygons:        Vec::new(),
+            opaque_polygons:        BTreeSet::new(),
             use_manual_mode:        false,
             trans_polygon_auto:     BTreeSet::new(),
             trans_polygon_manual:   Vec::new(),
@@ -275,7 +275,7 @@ impl PolygonRAM {
         };
 
         if polygon.is_opaque() {
-            self.opaque_polygons.push(polygon_order);
+            self.opaque_polygons.insert(polygon_order);
         } else if self.use_manual_mode {
             self.trans_polygon_manual.push(polygon_order);
         } else {

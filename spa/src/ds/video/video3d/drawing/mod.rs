@@ -82,7 +82,7 @@ impl Software3DRenderer {
                 let depth = clear_depth_image.read_halfword(addr);
                 let clear_attrs = Attributes {
                     opaque_id:  render_engine.clear_poly_id,
-                    trans_id:   0,
+                    trans_id:   render_engine.clear_poly_id,
                     fog:        u16::test_bit(depth, 15),
                 };
 
@@ -95,7 +95,7 @@ impl Software3DRenderer {
         } else {
             let clear_attrs = Attributes {
                 opaque_id:  render_engine.clear_poly_id,
-                trans_id:   0,
+                trans_id:   render_engine.clear_poly_id,
                 fog:        render_engine.fog_enabled,
             };
             self.attr_buffer.fill(clear_attrs);
