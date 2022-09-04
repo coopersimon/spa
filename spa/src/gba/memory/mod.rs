@@ -18,12 +18,13 @@ use crate::{
         wram::WRAM,
         timers::Timers,
         framecomms::FrameSender,
-        joypad::{Joypad, Buttons}
+        joypad::{Joypad, Buttons},
+        resampler::SamplePacket
     },
     gba::{
         interrupt::{Interrupts, InterruptControl},
         video::*,
-        audio::{GBAAudio, SamplePacket}
+        audio::GBAAudio
     }
 };
 use cart::{GamePak, GamePakController};

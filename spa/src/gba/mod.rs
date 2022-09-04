@@ -11,7 +11,8 @@ use crossbeam_channel::{Receiver, unbounded};
 
 use crate::common::{
     framecomms::{new_frame_comms, FrameRequester},
-    joypad::Buttons
+    joypad::Buttons,
+    resampler::{Resampler, SamplePacket}
 };
 #[cfg(feature = "debug")]
 use crate::common::debug::DebugInterface;
@@ -19,9 +20,10 @@ use memory::{
     MemoryBus,
     emulated_swi
 };
-pub use memory::MemoryConfig;
-use audio::{Resampler, SamplePacket};
 use video::Renderer;
+use audio::REAL_BASE_SAMPLE_RATE;
+
+pub use memory::MemoryConfig;
 pub use input::Button;
 
 type RendererType = video::ProceduralRenderer;
@@ -77,7 +79,12 @@ impl GBA {
     pub fn enable_audio(&mut self, sample_rate: f64) -> Option<GBAAudioHandler> {
         if let Some((sample_rx, rate_rx)) = self.audio_channels.take() {
             Some(GBAAudioHandler {
-                resampler: Resampler::new(sample_rx, rate_rx, sample_rate),
+                resampler: Resampler::new(
+                    sample_rx,
+                    rate_rx,
+                    REAL_BASE_SAMPLE_RATE,
+                    sample_rate
+                ),
             })
         } else {
             None

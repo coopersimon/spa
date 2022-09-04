@@ -15,5 +15,7 @@ pub mod videomem;
 pub mod drawing;
 pub mod colour;
 
+pub mod resampler;
+
 #[cfg(feature = "debug")]
 pub mod debug;

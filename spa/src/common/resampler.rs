@@ -9,9 +9,10 @@ use dasp::{
         Signal,
     }
 };
-use super::SamplePacket;
 
-/// Resample from the GBA rate to the output sample rate.
+pub type SamplePacket = Box<[Stereo<f32>]>;
+
+/// Resample from the GBA/NDS rate to the output sample rate.
 pub struct Resampler {
     converter:          Converter<Source, Sinc<[Stereo<f32>; 2]>>,
     source_rate_recv:   Receiver<f64>,
@@ -19,10 +20,10 @@ pub struct Resampler {
 }
 
 impl Resampler {
-    pub fn new(sample_recv: Receiver<SamplePacket>, source_rate_recv: Receiver<f64>, target_sample_rate: f64) -> Self {
+    pub fn new(sample_recv: Receiver<SamplePacket>, source_rate_recv: Receiver<f64>, source_sample_rate: f64, target_sample_rate: f64) -> Self {
         let sinc = Sinc::new(Fixed::from([Stereo::EQUILIBRIUM; 2]));
         Resampler {
-            converter:          Source::new(sample_recv).from_hz_to_hz(sinc, super::REAL_BASE_SAMPLE_RATE, target_sample_rate),
+            converter:          Source::new(sample_recv).from_hz_to_hz(sinc, source_sample_rate, target_sample_rate),
             source_rate_recv:   source_rate_recv,
             target_rate:        target_sample_rate,
         }

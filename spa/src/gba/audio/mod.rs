@@ -2,7 +2,6 @@
 
 mod fifo;
 mod gb;
-mod resampler;
 
 use bitflags::bitflags;
 use crossbeam_channel::Sender;
@@ -13,8 +12,8 @@ use crate::utils::{
     bits::u8,
     bytes::u16
 };
+use crate::common::resampler::*;
 use gb::*;
-pub use resampler::Resampler;
 
 bitflags! {
     #[derive(Default)]
@@ -75,9 +74,7 @@ const CLOCK_RATE: usize = 16_777_216;
 const REAL_CLOCK_RATE: f64 = 16_853_760.0;
 
 const REAL_SAMPLE_RATE_RATIO: f64 = REAL_CLOCK_RATE / (CLOCK_RATE as f64);
-const REAL_BASE_SAMPLE_RATE: f64 = (BASE_SAMPLE_RATE as f64) * REAL_SAMPLE_RATE_RATIO;
-
-pub type SamplePacket = Box<[Stereo<f32>]>;
+pub const REAL_BASE_SAMPLE_RATE: f64 = (BASE_SAMPLE_RATE as f64) * REAL_SAMPLE_RATE_RATIO;
 
 pub struct GBAAudio {
     // GB channels
