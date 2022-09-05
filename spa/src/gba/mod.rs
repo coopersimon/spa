@@ -81,7 +81,7 @@ impl GBA {
             Some(GBAAudioHandler {
                 resampler: Resampler::new(
                     sample_rx,
-                    rate_rx,
+                    Some(rate_rx),
                     REAL_BASE_SAMPLE_RATE,
                     sample_rate
                 ),

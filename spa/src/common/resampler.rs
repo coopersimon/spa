@@ -15,12 +15,12 @@ pub type SamplePacket = Box<[Stereo<f32>]>;
 /// Resample from the GBA/NDS rate to the output sample rate.
 pub struct Resampler {
     converter:          Converter<Source, Sinc<[Stereo<f32>; 2]>>,
-    source_rate_recv:   Receiver<f64>,
+    source_rate_recv:   Option<Receiver<f64>>,
     target_rate:        f64,
 }
 
 impl Resampler {
-    pub fn new(sample_recv: Receiver<SamplePacket>, source_rate_recv: Receiver<f64>, source_sample_rate: f64, target_sample_rate: f64) -> Self {
+    pub fn new(sample_recv: Receiver<SamplePacket>, source_rate_recv: Option<Receiver<f64>>, source_sample_rate: f64, target_sample_rate: f64) -> Self {
         let sinc = Sinc::new(Fixed::from([Stereo::EQUILIBRIUM; 2]));
         Resampler {
             converter:          Source::new(sample_recv).from_hz_to_hz(sinc, source_sample_rate, target_sample_rate),
@@ -34,7 +34,7 @@ impl Iterator for Resampler {
     type Item = Stereo<f32>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Ok(source_sample_rate) = self.source_rate_recv.try_recv() {
+        if let Some(source_sample_rate) = self.source_rate_recv.as_ref().and_then(|r| r.try_recv().ok()) {
             self.converter.set_hz_to_hz(source_sample_rate, self.target_rate);
         }
         while self.converter.is_exhausted() {}
