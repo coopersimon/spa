@@ -1,11 +1,20 @@
 mod fifo;
 mod adpcm;
+mod noise;
+mod psg;
 
 use bitflags::bitflags;
 use crate::utils::bits::u32;
 
 use fifo::AudioFIFO;
 use adpcm::ADPCMGenerator;
+use noise::NoiseGenerator;
+use psg::SquareGenerator;
+
+/// "High" output for PSG and noise.
+const SAMPLE_MAX: i16 = 0x7FFF;
+/// "Low" output for PSG and noise.
+const SAMPLE_MIN: i16 = -0x7FFF;
 
 bitflags!{
     #[derive(Default)]
@@ -56,6 +65,8 @@ pub struct AudioChannel {
 
     fifo:           AudioFIFO,
     adpcm_gen:      ADPCMGenerator,
+    noise_gen:      NoiseGenerator,
+    psg_gen:        SquareGenerator,
 
     current_sample: i32,
     sample_latch:   bool,
@@ -86,6 +97,8 @@ impl AudioChannel {
 
             fifo:           AudioFIFO::new(),
             adpcm_gen:      ADPCMGenerator::new(),
+            noise_gen:      NoiseGenerator::new(),
+            psg_gen:        SquareGenerator::new(),
 
             current_sample: 0,
             sample_latch:   false,
@@ -137,21 +150,28 @@ impl AudioChannel {
 
         if overflow && self.control.contains(ChannelControl::START) {
             let psg_noise = self.control.contains(ChannelControl::FORMAT);
-            if !psg_noise && self.fifo.len() == 0 {
-                return self.dma_mask;
-            }
-            
-            self.timer_counter = self.timer + new;  // TODO: what if this overflows too?
-            if self.sample_latch {
+            if psg_noise {
+                self.timer_counter = self.timer + new;  // TODO: what if this overflows too?
                 self.generate_sample();
-                self.sample_latch = false;
-            } else {
-                self.sample_latch = true;
-            }
-            if !psg_noise && self.fifo.len() < fifo::RELOAD_SIZE {
-                self.dma_mask
-            } else {
                 0
+            } else {
+                if self.fifo.len() == 0 {
+                    return self.dma_mask;
+                }
+                
+                self.timer_counter = self.timer + new;  // TODO: what if this overflows too?
+                if self.sample_latch {
+                    self.generate_sample();
+                    self.sample_latch = false;
+                } else {
+                    self.sample_latch = true;
+                }
+                
+                if self.fifo.len() < fifo::RELOAD_SIZE {
+                    self.dma_mask
+                } else {
+                    0
+                }
             }
         } else {
             0
@@ -198,8 +218,12 @@ impl AudioChannel {
         self.current_sample = 0;
         self.sample_latch = false;
         self.hold_trigger = false;
+
         self.fifo.clear();
         self.adpcm_gen.reset();
+        self.noise_gen.reset();
+        let duty_cycle = (self.control & ChannelControl::WAVE_DUTY).bits() >> 24;
+        self.psg_gen.reset(duty_cycle as u8);
 
         //println!("reset sound: @{:X} | {} + {} | {:X}", self.src_addr, self.loop_start_pos, self.sound_len, self.control);
     }
@@ -255,11 +279,11 @@ impl AudioChannel {
     }
 
     fn get_psg(&mut self) -> i32 {
-        0   // TODO
+        self.psg_gen.generate_sample() as i32
     }
 
     fn get_noise(&mut self) -> i32 {
-        0   // TODO
+        self.noise_gen.generate_sample() as i32
     }
 
     /// Step PCM
