@@ -45,7 +45,7 @@ const CLOCK_RATE: usize = 0x1FF61FE;
 const REAL_CLOCK_RATE: usize = 6 * 355 * 263 * 60;
 
 /// Base sample rate for audio.
-const BASE_SAMPLE_RATE: f64 = (REAL_CLOCK_RATE as f64) / (CYCLES_PER_SAMPLE as f64); // ~32_768;
+const BASE_SAMPLE_RATE: f64 = (CLOCK_RATE as f64) / (CYCLES_PER_SAMPLE as f64); // ~32_768;
 
 const REAL_SAMPLE_RATE_RATIO: f64 = (REAL_CLOCK_RATE as f64) / (CLOCK_RATE as f64);
 pub const REAL_BASE_SAMPLE_RATE: f64 = BASE_SAMPLE_RATE * REAL_SAMPLE_RATE_RATIO;

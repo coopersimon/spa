@@ -16,7 +16,7 @@ use winit::{
 use cpal::traits::StreamTrait;
 use super::Vertex;
 
-pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
+pub fn run_nds(config: ds::MemoryConfig, mute: bool) {
 
     let mut nds = ds::NDS::new(config);
     let render_size = nds.render_size();
@@ -225,9 +225,9 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
 
     // AUDIO
     let audio_stream = make_audio_stream(&mut nds);
-    //if !mute {
+    if !mute {
         audio_stream.play().expect("Couldn't start audio stream");
-    //}
+    }
 
     let screen_tex_size = render_size.0 * render_size.1 * 4;
     let mut upper_buffer = vec![0_u8; screen_tex_size];
