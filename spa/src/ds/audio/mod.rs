@@ -224,12 +224,12 @@ impl DSAudio {
             .filter_map(|(i, c)| c.get_sample().map(|s| (i, s)))
         {
             if idx == 1 {
-                if self.control.contains(SoundControl::MIX_CH1) {
+                if !self.control.contains(SoundControl::MIX_CH1) {
                     mixer_output.0 += sample.0;
                     mixer_output.1 += sample.1;
                 }
             } else if idx == 3 {
-                if self.control.contains(SoundControl::MIX_CH3) {
+                if !self.control.contains(SoundControl::MIX_CH3) {
                     mixer_output.0 += sample.0;
                     mixer_output.1 += sample.1;
                 }
@@ -260,15 +260,15 @@ impl DSAudio {
         let adjusted_left = ((master_left) >> 9) + self.bias;
         let adjusted_right = ((master_right) >> 9) + self.bias;
 
-        let clipped_left = adjusted_left & 0x3FF;//std::cmp::max(0, std::cmp::min(0x3FF, adjusted_left));
-        let clipped_right = adjusted_right & 0x3FF;//std::cmp::max(0, std::cmp::min(0x3FF, adjusted_right));
+        let clipped_left = std::cmp::max(0, std::cmp::min(0x3FF, adjusted_left));
+        let clipped_right = std::cmp::max(0, std::cmp::min(0x3FF, adjusted_right));
 
-        [to_output(clipped_left), to_output(clipped_right)]
+        [to_output(clipped_left) * 0.25, to_output(clipped_right) * 0.25]
     }
 }
 
 #[inline]
 fn to_output(sample: i32) -> f32 {
-    const VOL_MAX: f32 = 0x200 as f32;
-    ((sample as f32) / VOL_MAX) - 1.0
+    const VOL_MAX_RECIP: f32 = 1.0 / (0x200 as f32);
+    ((sample as f32) * VOL_MAX_RECIP) - 1.0
 }

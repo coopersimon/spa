@@ -57,10 +57,11 @@ pub struct AudioChannel {
     fifo:           AudioFIFO,
     adpcm_gen:      ADPCMGenerator,
 
-    current_sample: i16,
-    current_frame:  (i32, i32),
+    current_sample: i32,
+    sample_latch:   bool,
     left_vol:       i32,
     right_vol:      i32,
+    hold_trigger:   bool,
 }
 
 impl AudioChannel {
@@ -87,9 +88,10 @@ impl AudioChannel {
             adpcm_gen:      ADPCMGenerator::new(),
 
             current_sample: 0,
-            current_frame:  (0, 0),
+            sample_latch:   false,
             left_vol:       0,
             right_vol:      0,
+            hold_trigger:   false,
         }
     }
 
@@ -105,11 +107,11 @@ impl AudioChannel {
         let pan = ((self.control & ChannelControl::PAN).bits() >> 16) as i32;
         self.left_vol = (127 - pan) * volume;
         self.right_vol = pan * volume;
+        //println!("LEFT: {:X} | RIGHT: {:X}", self.left_vol, self.right_vol);
     }
 
     pub fn write_src_addr(&mut self, data: u32) {
-        self.src_addr = data & 0x7FF_FFFF;
-        self.current_addr = self.src_addr;
+        self.src_addr = data & 0x7FF_FFFC;
     }
 
     pub fn write_timer(&mut self, data: u16) {
@@ -133,15 +135,20 @@ impl AudioChannel {
         let (new, overflow) = self.timer_counter.overflowing_add(cycles as u16);
         self.timer_counter = new;
 
-        if overflow {
+        if overflow && self.control.contains(ChannelControl::START) {
             let psg_noise = self.control.contains(ChannelControl::FORMAT);
             if !psg_noise && self.fifo.len() == 0 {
                 return self.dma_mask;
             }
             
             self.timer_counter = self.timer + new;  // TODO: what if this overflows too?
-            self.current_frame = self.generate_sample();
-            if !psg_noise && self.fifo.len() <= fifo::RELOAD_SIZE {
+            if self.sample_latch {
+                self.generate_sample();
+                self.sample_latch = false;
+            } else {
+                self.sample_latch = true;
+            }
+            if !psg_noise && self.fifo.len() < fifo::RELOAD_SIZE {
                 self.dma_mask
             } else {
                 0
@@ -153,8 +160,10 @@ impl AudioChannel {
 
     /// Get the current sample, panned and amplified for each output channel.
     pub fn get_sample(&self) -> Option<(i32, i32)> {
-        if self.control.contains(ChannelControl::START) {
-            Some(self.current_frame)
+        if self.control.contains(ChannelControl::START) || self.hold_trigger {
+            let left = (self.current_sample * self.left_vol) >> 14;
+            let right = (self.current_sample * self.right_vol) >> 14;
+            Some((left, right))
         } else {
             None
         }
@@ -187,17 +196,18 @@ impl AudioChannel {
         self.sample_count = 0;
         self.sample_len = (self.loop_start_pos + self.sound_len) << 3;
         self.current_sample = 0;
-        self.current_frame = (0, 0);
+        self.sample_latch = false;
+        self.hold_trigger = false;
         self.fifo.clear();
         self.adpcm_gen.reset();
 
         //println!("reset sound: @{:X} | {} + {} | {:X}", self.src_addr, self.loop_start_pos, self.sound_len, self.control);
     }
 
-    /// Generate a new sample, panned and amplified for each output channel.
+    /// Generate a new sample.
     /// 
     /// Returns true if DMA is needed.
-    fn generate_sample(&mut self) -> (i32, i32) {
+    fn generate_sample(&mut self) {
         let sample = match (self.control & ChannelControl::FORMAT).bits() >> 29 {
             0b00 => self.get_pcm8(),
             0b01 => self.get_pcm16(),
@@ -217,11 +227,7 @@ impl AudioChannel {
             0b11 => 4,
             _ => unreachable!()
         };
-        let sample = sample >> vol_shift;
-
-        let left = (sample * self.left_vol) >> 14;
-        let right = (sample * self.right_vol) >> 14;
-        (left, right)
+        self.current_sample = sample >> vol_shift;
     }
 
     fn get_pcm8(&mut self) -> i32 {
@@ -261,12 +267,15 @@ impl AudioChannel {
         self.sample_count += nybbles;
         if self.sample_count >= self.sample_len {
             match (self.control & ChannelControl::REPEAT).bits() >> 27 {
-                0b00 => self.control.remove(ChannelControl::START), // Manual
+                0b00 => (), // Manual
                 0b01 => {   // Repeat
                     self.adpcm_gen.restore_loop_values();
                     self.sample_count = self.loop_start_pos << 3;
                 },
-                0b10 => self.control.remove(ChannelControl::START), // TODO: one-shot (+hold)
+                0b10 => {   // One-shot
+                    self.control.remove(ChannelControl::START);
+                    self.hold_trigger = self.control.contains(ChannelControl::HOLD);
+                },
                 0b11 => self.control.remove(ChannelControl::START), // Prohibited
                 _ => unreachable!()
             }
