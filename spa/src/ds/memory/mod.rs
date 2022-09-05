@@ -5,7 +5,7 @@ mod power;
 mod exmem;
 
 use arm::{Mem32, MemCycleType};
-use crossbeam_channel::{Sender, Receiver, bounded};
+use crossbeam_channel::{Sender, Receiver, bounded, unbounded};
 
 use std::{
     path::PathBuf,
@@ -22,7 +22,8 @@ use crate::{
         timers::Timers,
         wram::WRAM,
         framecomms::FrameSender,
-        joypad::Joypad
+        joypad::Joypad,
+        resampler::SamplePacket
     },
     utils::{
         meminterface::{MemInterface8, MemInterface16, MemInterface32}
@@ -36,6 +37,7 @@ use crate::{
         rtc::RealTimeClock,
         spi::SPI,
         video::*,
+        audio::DSAudio,
         input::UserInput
     }
 };
@@ -144,6 +146,8 @@ impl<R: Renderer> DS9MemoryBus<R> {
 
             video:              arm7_video,
             vram:               arm7_vram,
+
+            audio:              DSAudio::new(),
 
             ipc:                ds7_ipc,
             timers:             Timers::new(),
@@ -715,6 +719,8 @@ pub struct DS7MemoryBus {
     video:          ARM7Video,
     vram:           ARM7VRAM,
 
+    audio:          DSAudio,
+
     ipc:    IPC,
 
     timers:     Timers,
@@ -745,6 +751,12 @@ impl DS7MemoryBus {
             self.store_byte(MemCycleType::N, arm7_addr + (n as u32), *byte);
         }
     }
+
+    pub fn enable_audio(&mut self) -> Receiver<SamplePacket> {
+        let (sample_tx, sample_rx) = unbounded();
+        self.audio.enable_audio(sample_tx);
+        sample_rx
+    }
 }
 
 // Internal
@@ -754,7 +766,6 @@ impl DS7MemoryBus {
     /// This function clocks the memory bus internally.
     /// It will continue until the transfer is done.
     fn do_dma(&mut self) {
-        // TODO: keep executing if inside cache?
         let mut last_active = 4;
         loop {
             if let Some(c) = self.dma.get_active() {
@@ -762,9 +773,9 @@ impl DS7MemoryBus {
                 let access = if last_active != c {
                     last_active = c;
                     self.do_clock(4);
-                    arm::MemCycleType::N
+                    MemCycleType::N
                 } else {
-                    arm::MemCycleType::S
+                    MemCycleType::S
                 };
                 // Transfer one piece of data.
                 let cycles = match self.dma.channels[c].next_addrs() {
@@ -803,6 +814,28 @@ impl DS7MemoryBus {
         }
     }
 
+    /// Do an audio DMA transfer.
+    /// 
+    /// This function clocks the memory bus internally.
+    /// It will continue until the transfer is done.
+    fn do_audio_dma(&mut self, audio_channels: u16) {
+
+        if audio_channels == 0 {
+            return;
+        }
+
+        let mut cycle_count = 0;
+        for chan_idx in (0..16).filter(|c| crate::utils::bits::u16::test_bit(audio_channels, *c)) {
+            for _ in 0..4 {
+                let addr = self.audio.get_dma_addr(chan_idx);
+                let (data, load_cycles) = self.load_word(MemCycleType::S, addr);
+                self.audio.write_fifo(chan_idx, data);
+                cycle_count += load_cycles;
+            }
+        }
+        self.do_clock(cycle_count);
+    }
+
     /// Indicate to all of the devices on the memory bus that cycles have passed.
     fn do_clock(&mut self, cycles: usize) {
         let mut vblank = Interrupts::empty();
@@ -836,7 +869,9 @@ impl DS7MemoryBus {
         };
 
         let (timer_irq, _, _) = self.timers.clock(cycles);
-        //self.audio.clock(cycles);
+
+        let audio_channels = self.audio.clock(cycles);
+        self.do_audio_dma(audio_channels);
 
         let joypad_irq = if self.joypad.get_interrupt() {
             Interrupts::KEYPAD
@@ -1061,6 +1096,7 @@ impl DS7MemoryBus {
         (0x0400_0204, 0x0400_0207, ex_mem_status),
         (0x0400_0208, 0x0400_0217, interrupt_control),
         (0x0400_0300, 0x0400_0307, power_control),
+        (0x0400_0400, 0x0400_051F, audio),
         (0x0410_0000, 0x0410_0003, ipc),
         (0x0410_0010, 0x0410_0013, card)
     }

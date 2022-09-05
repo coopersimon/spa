@@ -9,6 +9,7 @@ mod card;
 mod rtc;
 mod spi;
 mod video;
+mod audio;
 mod input;
 
 use arm::{
@@ -19,13 +20,15 @@ use crossbeam_channel::{Sender, Receiver, unbounded};
 #[cfg(feature = "debug")]
 use crate::common::debug::DebugInterface;
 use crate::common::framecomms::{new_frame_comms, FrameRequester};
+use crate::common::resampler::*;
 use internal::DS9InternalMem;
 use memory::{
     DS9MemoryBus, DS7MemoryBus
 };
 use video::Renderer;
-//use joypad::DSButtons;
 use input::UserInput;
+use audio::REAL_BASE_SAMPLE_RATE;
+
 pub use memory::MemoryConfig;
 pub use input::Button;
 
@@ -33,6 +36,7 @@ type RendererType = video::ProceduralRenderer;
 
 pub struct NDS {
     frame_receiver: FrameRequester<UserInput>,
+    audio_channel:  Option<Receiver<SamplePacket>>,
     current_input:  UserInput
 }
 
@@ -43,7 +47,7 @@ impl NDS {
         // The below is a bit dumb but it avoids sending the CPU (which introduces a ton of problems).
         // We have to extract the audio receivers from the CPU and get them in the main thread to use
         //   for the audio handler.
-        //let (channel_sender, channel_receiver) = unbounded();
+        let (channel_sender, channel_receiver) = unbounded();
         let (mut arm9_bus, mut arm7_bus) = DS9MemoryBus::<RendererType>::new(&config, frame_sender);
 
         let fast_boot = config.fast_boot;
@@ -70,17 +74,17 @@ impl NDS {
         //let arm7_no_bios = config.ds7_bios_path.is_none();
         std::thread::Builder::new().name("ARM7-CPU".to_string()).spawn(move || {
             let mut cpu = new_arm7_cpu(arm7_bus, fast_entry_arm7, false);
-            //let audio_channels = cpu.mut_mem().enable_audio();
-            //channel_sender.send(audio_channels).unwrap();
+            let audio_channels = cpu.mut_mem().enable_audio();
+            channel_sender.send(audio_channels).unwrap();
             loop {
                 cpu.step();
             }
         }).unwrap();
 
-        //let audio_channels = channel_receiver.recv().unwrap();
+        let audio_channel = channel_receiver.recv().unwrap();
         Self {
             frame_receiver: frame_receiver,
-            //audio_channels: Some(audio_channels),
+            audio_channel:  Some(audio_channel),
 //
             current_input:  UserInput::default()
         }
@@ -108,6 +112,40 @@ impl NDS {
     /// Call with None when the touchscreen is released.
     pub fn touchscreen_pressed(&mut self, coords: Option<(f64, f64)>) {
         self.current_input.set_touchscreen(coords);
+    }
+
+    /// Call this at the start to enable audio.
+    /// It creates a NDSAudioHandler that can be sent to the audio thread.
+    pub fn enable_audio(&mut self, sample_rate: f64) -> Option<NDSAudioHandler> {
+        if let Some(sample_rx) = self.audio_channel.take() {
+            Some(NDSAudioHandler {
+                resampler: Resampler::new(
+                    sample_rx,
+                    None,
+                    REAL_BASE_SAMPLE_RATE,
+                    sample_rate
+                ),
+            })
+        } else {
+            None
+        }
+    }
+}
+
+/// Created by NDS.
+pub struct NDSAudioHandler {
+    resampler:    Resampler,
+}
+
+impl NDSAudioHandler {
+    /// Fill the provided buffer with samples.
+    /// The format is PCM interleaved stereo.
+    pub fn get_audio_packet(&mut self, buffer: &mut [f32]) {
+        for (o_frame, i_frame) in buffer.chunks_exact_mut(2).zip(&mut self.resampler) {
+            for (o, i) in o_frame.iter_mut().zip(i_frame.iter()) {
+                *o = *i;
+            }
+        }
     }
 }
 

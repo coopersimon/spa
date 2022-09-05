@@ -13,7 +13,7 @@ use winit::{
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder
 };
-//use cpal::traits::StreamTrait;
+use cpal::traits::StreamTrait;
 use super::Vertex;
 
 pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
@@ -224,9 +224,9 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
     let mut frame_idx = 0;
 
     // AUDIO
-    //let audio_stream = make_audio_stream(&mut gba);
+    let audio_stream = make_audio_stream(&mut nds);
     //if !mute {
-    //    audio_stream.play().expect("Couldn't start audio stream");
+        audio_stream.play().expect("Couldn't start audio stream");
     //}
 
     let screen_tex_size = render_size.0 * render_size.1 * 4;
@@ -413,7 +413,7 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
     });
 }
 
-/*fn make_audio_stream(nds: &mut nds::GBA) -> cpal::Stream {
+fn make_audio_stream(nds: &mut ds::NDS) -> cpal::Stream {
     use cpal::traits::{
         DeviceTrait,
         HostTrait
@@ -436,4 +436,4 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
             println!("Error occurred: {}", err);
         }
     ).unwrap()
-}*/
+}
