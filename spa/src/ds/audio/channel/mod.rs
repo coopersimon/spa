@@ -116,11 +116,9 @@ impl AudioChannel {
             self.reset();
         }
 
-        let volume = (self.control & ChannelControl::VOLUME).bits() as i32;
         let pan = ((self.control & ChannelControl::PAN).bits() >> 16) as i32;
-        self.left_vol = (127 - pan) * volume;
-        self.right_vol = pan * volume;
-        //println!("LEFT: {:X} | RIGHT: {:X}", self.left_vol, self.right_vol);
+        self.left_vol = 127 - pan;
+        self.right_vol = pan;
     }
 
     pub fn write_src_addr(&mut self, data: u32) {
@@ -141,49 +139,66 @@ impl AudioChannel {
 }
 
 impl AudioChannel {
-    /// Clock the internal timer, and possibly advance the sample.
-    /// 
-    /// Returns the DMA mask bit if it needs more samples (PCM only).
-    pub fn clock(&mut self, cycles: usize) -> u16 {
+    /// Clock the internal timer, and returns true if an overflow occurred.
+    pub fn clock(&mut self, cycles: usize) -> bool {
         let (new, overflow) = self.timer_counter.overflowing_add(cycles as u16);
         self.timer_counter = new;
 
         if overflow && self.control.contains(ChannelControl::START) {
+            self.timer_counter = self.timer + new;  // TODO: what if this overflows too?
+
             let psg_noise = self.control.contains(ChannelControl::FORMAT);
             if psg_noise {
-                self.timer_counter = self.timer + new;  // TODO: what if this overflows too?
-                self.generate_sample();
-                0
+                true
             } else {
-                if self.fifo.len() == 0 {
-                    return self.dma_mask;
-                }
-                
-                self.timer_counter = self.timer + new;  // TODO: what if this overflows too?
-                if self.sample_latch {
-                    self.generate_sample();
-                    self.sample_latch = false;
-                } else {
-                    self.sample_latch = true;
-                }
-                
-                if self.fifo.len() < fifo::RELOAD_SIZE {
-                    self.dma_mask
-                } else {
-                    0
-                }
+                let new_value = !self.sample_latch;
+                std::mem::replace(&mut self.sample_latch, new_value)
             }
+        } else {
+            false
+        }
+    }
+
+    /// Advance to the next sample, potentially generating / fetching.
+    /// 
+    /// Returns the mask of the audio DMA channel if the FIFO needs filling.
+    pub fn advance_sample(&mut self) -> u16 {
+        let psg_noise = self.control.contains(ChannelControl::FORMAT);
+        if !psg_noise && self.fifo.len() == 0 {
+            return self.dma_mask;
+        }
+        
+        self.generate_sample();
+
+        if !psg_noise && self.fifo.len() < fifo::RELOAD_SIZE {
+            self.dma_mask
+        } else {
+            0
+        }
+    }
+
+    /// Get the current sample, amplified but not panned.
+    /// 
+    /// Used for capture.
+    pub fn get_sample(&self) -> i16 {
+        if self.control.contains(ChannelControl::START) || self.hold_trigger {
+            let volume = (self.control & ChannelControl::VOLUME).bits() as i32;
+            ((self.current_sample * volume) >> 11) as i16
         } else {
             0
         }
     }
 
     /// Get the current sample, panned and amplified for each output channel.
-    pub fn get_sample(&self) -> Option<(i32, i32)> {
+    pub fn get_panned_sample(&self) -> Option<(i32, i32)> {
         if self.control.contains(ChannelControl::START) || self.hold_trigger {
-            let left = (self.current_sample * self.left_vol) >> 14;
-            let right = (self.current_sample * self.right_vol) >> 14;
-            Some((left, right))
+            let volume = (self.control & ChannelControl::VOLUME).bits() as i32;
+            let left = (self.current_sample * volume) >> 11;
+            let right = (self.current_sample * volume) >> 11;
+            Some((
+                (left * self.left_vol) >> 7,
+                (right * self.right_vol) >> 7
+            ))
         } else {
             None
         }
@@ -245,13 +260,13 @@ impl AudioChannel {
         };
 
         let vol_shift = match (self.control & ChannelControl::VOL_DIV).bits() >> 8 {
-            0b00 => 0,
-            0b01 => 1,
+            0b00 => 4,
+            0b01 => 3,
             0b10 => 2,
-            0b11 => 4,
+            0b11 => 0,
             _ => unreachable!()
         };
-        self.current_sample = sample >> vol_shift;
+        self.current_sample = sample << vol_shift;
     }
 
     fn get_pcm8(&mut self) -> i32 {

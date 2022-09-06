@@ -48,7 +48,7 @@ use power::*;
 use exmem::*;
 
 /// How many cycles the ARM7 should run for before syncing.
-const ARM7_THREAD_SYNC_CYCLES: usize = 500;
+const ARM7_THREAD_SYNC_CYCLES: usize = 2000;
 /// How many cycles the ARM9 should run for before syncing.
 const ARM9_THREAD_SYNC_CYCLES: usize = ARM7_THREAD_SYNC_CYCLES * 2;
 
@@ -162,6 +162,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
             card:               card_7,
 
             counter:            0,
+            v_counter:          0,
             barrier:            barrier,
             input_recv:         input_recv
         }))
@@ -735,6 +736,7 @@ pub struct DS7MemoryBus {
     card:               DSCardIO,
 
     counter:            usize,
+    v_counter:          usize,
     barrier:            Arc<Barrier>,
     input_recv:         Receiver<UserInput>
 }
@@ -818,9 +820,9 @@ impl DS7MemoryBus {
     /// 
     /// This function clocks the memory bus internally.
     /// It will continue until the transfer is done.
-    fn do_audio_dma(&mut self, audio_channels: u16) {
+    fn do_audio_dma(&mut self, audio_channels: u16, audio_cap_dma_0: bool, audio_cap_dma_1: bool) {
 
-        if audio_channels == 0 {
+        if audio_channels == 0 && !audio_cap_dma_0 && !audio_cap_dma_1 {
             return;
         }
 
@@ -831,6 +833,20 @@ impl DS7MemoryBus {
                 let (data, load_cycles) = self.load_word(MemCycleType::S, addr);
                 self.audio.write_fifo(chan_idx, data);
                 cycle_count += load_cycles;
+            }
+        }
+        if audio_cap_dma_0 {
+            for _ in 0..4 {
+                let addr = self.audio.get_capture_dma_addr(0);
+                let data = self.audio.read_capture_fifo(0);
+                cycle_count += self.store_word(MemCycleType::S, addr, data);
+            }
+        }
+        if audio_cap_dma_1 {
+            for _ in 0..4 {
+                let addr = self.audio.get_capture_dma_addr(1);
+                let data = self.audio.read_capture_fifo(1);
+                cycle_count += self.store_word(MemCycleType::S, addr, data);
             }
         }
         self.do_clock(cycle_count);
@@ -848,11 +864,18 @@ impl DS7MemoryBus {
             // Check buttons + touchpad
             if let Ok(new_input) = self.input_recv.try_recv() {
                 self.set_input(new_input);
-                self.dma.on_vblank();
-                if self.video.v_blank_enabled() {
-                    vblank = Interrupts::V_BLANK;
-                }
                 self.card.flush_save();
+            }
+        }
+
+        // TODO: make this a better const
+        const V: usize = 6 * 355 * 263;
+        self.v_counter += cycles;
+        if self.v_counter >= V {
+            self.v_counter -= V;
+            self.dma.on_vblank();
+            if self.video.v_blank_enabled() {
+                vblank = Interrupts::V_BLANK;
             }
         }
 
@@ -870,8 +893,8 @@ impl DS7MemoryBus {
 
         let (timer_irq, _, _) = self.timers.clock(cycles);
 
-        let audio_channels = self.audio.clock(cycles);
-        self.do_audio_dma(audio_channels);
+        let (audio_channels, audio_cap_dma_0, audio_cap_dma_1) = self.audio.clock(cycles);
+        self.do_audio_dma(audio_channels, audio_cap_dma_0, audio_cap_dma_1);
 
         let joypad_irq = if self.joypad.get_interrupt() {
             Interrupts::KEYPAD
