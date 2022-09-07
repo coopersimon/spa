@@ -30,7 +30,7 @@ impl Default for UserInput {
     fn default() -> Self {
         Self {
             buttons:    Buttons::from_bits_truncate(0xFFFF),
-            ds_buttons: DSButtons::from_bits_truncate(0x3),
+            ds_buttons: DSButtons::from_bits_truncate(0x4B),
 
             touchscreen:    None,
         }

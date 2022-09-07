@@ -69,7 +69,7 @@ DS:
 - Animal Crossing Wild World: Works mostly OK.
 - Brain Training (Brain Age): Seems to run OK.
 - Black Ops: Boots mostly OK, unable to find strings to display for some reason.
-- Civilization Revolution: Mostly OK, some issues with "3D" graphics in-game.
+- Civilization Revolution: Mostly OK - some blending issues for translucent polygons that form fog
 - Chrono Trigger: Audio skips a little in intro, but mostly ok otherwise.
 - Dragon Quest IX: Shows intro cards and video. Shows broken screen and freezes. (Timing issues?)
 - Dragon Quest IV: Mostly OK, shows a strange counter in intro
@@ -92,7 +92,7 @@ DS:
 - New Super Mario Bros: Mostly OK. precision issues with 3D graphics
 - LoZ Phantom Hourglass: Just white screen now.
 - LoZ Spirit Tracks: White screen.
-- LEGO Lord of the Rings: Loads up OK, some visibility issues in menus (2D issues?), now gameplay doesn't load (also crash due to 3D capture overreading)
+- LEGO Lord of the Rings: Loads up OK, some visibility issues in menus (2D issues?), now gameplay doesn't load
 - LEGO Star Wars II: Mostly OK, some near-plane clipping issues throughout, some graphics have missing pixels on 3D screen. Crashes due to reading beyond end of specular table
 - Mario Slam Basketball (Hoops 3-on-3): Mostly OK.
 - Nintendogs (Labrador): Intro is mostly OK with clipping errors. Gameplay begins, crashes due to full GPU command fifo. (Now crashes due to unimplemented cache command)

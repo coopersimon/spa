@@ -631,7 +631,7 @@ impl SoftwareRenderer {
                         } else {
                             return col;
                         },
-                        BGPixel::_3D(col) => if colour_window() {
+                        BGPixel::_3D(col) => if priority == 0 || colour_window() {
                             let alpha = ((col.alpha >> 1) + 1) as u16;
                             match Self::colour_effect(&mem.registers, bg.blend_mask, col.col, target_1, BlendType::BG3D(alpha)) {
                                 Blended::Colour(c) => return c,

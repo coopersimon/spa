@@ -254,7 +254,7 @@ impl ProceduralRendererThread {
                     DispCapSourceA::_3D => {
                         let start = (line as usize) * H_RES;
                         let end = start + H_RES;
-                        for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.frame_3d[start..=end]) {
+                        for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.frame_3d[start..end]) {
                             *a = b.col;
                         }
                     }
@@ -277,7 +277,7 @@ impl ProceduralRendererThread {
                         DispCapSourceA::_3D => {
                             let start = (line as usize) * H_RES;
                             let end = start + H_RES;
-                            for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.frame_3d[start..=end]) {
+                            for (a, b) in self.line_cache.iter_mut().zip(&self.engine_a.frame_3d[start..end]) {
                                 *a = b.col;
                             }
                         }

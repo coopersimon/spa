@@ -593,7 +593,7 @@ impl GeometryEngine {
             };
 
             intersects_far_plane = intersects_far_plane || (
-                vertex.position.z() >= I23F9::ONE
+                vertex.position.z() > I23F9::ONE
             );
         }
 
