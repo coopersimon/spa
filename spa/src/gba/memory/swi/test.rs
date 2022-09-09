@@ -8,7 +8,7 @@ use crate::utils::{
     bytes::u16,
     meminterface::MemInterface8
 };
-use crate::common::bios::BIOS;
+use crate::common::mem::bios::BIOS;
 use super::emulated_swi;
 
 const TEST_RAM_SIZE: u32 = 32 * 1024;

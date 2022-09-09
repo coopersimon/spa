@@ -1,4 +1,4 @@
-use crate::common::colour::Colour;
+use crate::common::video::colour::Colour;
 
 /// The current palette of colours for textures.
 pub struct TexPaletteCache {

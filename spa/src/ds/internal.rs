@@ -13,7 +13,7 @@ use bitflags::bitflags;
 
 use crate::{
     utils::bits::{u8, u32},
-    common::wram::WRAM,
+    common::mem::wram::WRAM,
 };
 use super::{
     memory::DS9MemoryBus,

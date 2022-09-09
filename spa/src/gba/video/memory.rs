@@ -6,7 +6,7 @@ use std::{
     cell::RefCell
 };
 use crate::utils::meminterface::MemInterface16;
-use crate::common::videomem::VRAM2D;
+use crate::common::video::mem::VRAM2D;
 
 const VRAM_SIZE: u32 = 96 * 1024;
 const OBJ_VRAM_SIZE: u32 = 32 * 1024;

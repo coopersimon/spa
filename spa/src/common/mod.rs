@@ -1,20 +1,9 @@
 /// Common components.
 
 #[macro_use]
-pub mod membusio;
-pub mod bios;
-
-pub mod dma;
-pub mod wram;
-
-pub mod timers;
-pub mod joypad;
-
-pub mod framecomms;
-pub mod videomem;
-pub mod drawing;
-pub mod colour;
-
+pub mod mem;
+pub mod peripheral;
+pub mod video;
 pub mod resampler;
 
 #[cfg(feature = "debug")]

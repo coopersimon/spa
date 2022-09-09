@@ -1,4 +1,4 @@
-use crate::common::joypad::Buttons;
+use crate::common::peripheral::joypad::Buttons;
 
 pub enum Button {
     A,

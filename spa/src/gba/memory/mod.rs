@@ -13,12 +13,16 @@ use crate::{
         meminterface::{MemInterface8, MemInterface16}
     },
     common::{
-        bios::BIOS,
-        dma::{DMA, DMAAddress},
-        wram::WRAM,
-        timers::Timers,
-        framecomms::FrameSender,
-        joypad::{Joypad, Buttons},
+        mem::{
+            bios::BIOS,
+            wram::WRAM,
+        },
+        peripheral::{
+            dma::{DMA, DMAAddress},
+            timers::Timers,
+            joypad::{Joypad, Buttons},
+        },
+        video::framecomms::FrameSender,
         resampler::SamplePacket
     },
     gba::{

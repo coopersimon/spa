@@ -2,11 +2,13 @@
 use crossbeam_channel::{bounded, Sender};
 use parking_lot::Mutex;
 use std::sync::Arc;
-use crate::common::colour::Colour;
-use crate::common::drawing::{
-    SoftwareRenderer, RendererMode
+use crate::common::video::{
+    colour::Colour,
+    drawing::{
+        SoftwareRenderer, RendererMode
+    },
+    mem::{DispCapSourceB, DispCapMode, DispCapSourceA, VideoRegisters}
 };
-use crate::common::videomem::{DispCapSourceB, DispCapMode, DispCapSourceA, VideoRegisters};
 use super::memory::ARM9VRAM;
 use super::{
     memory::{RendererVRAM, GraphicsPowerControl},

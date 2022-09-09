@@ -7,7 +7,7 @@ use crate::utils::{
     bytes,
     meminterface::MemInterface32
 };
-use crate::common::dma::DMAAddress;
+use crate::common::peripheral::dma::DMAAddress;
 use crate::ds::interrupt::Interrupts;
 
 bitflags!{

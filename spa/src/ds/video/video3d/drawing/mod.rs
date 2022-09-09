@@ -8,7 +8,7 @@ use fixed::types::I40F24;
 use fixed::traits::ToFixed;
 use crate::{
     ds::video::{memory::Engine3DVRAM, video3d::types::Vertex},
-    common::colour::*,
+    common::video::colour::*,
     utils::bits::u16, utils::bytes
 };
 
@@ -54,9 +54,9 @@ impl Software3DRenderer {
             self.mark_edges(render_engine, target);
         }
 
-        if render_engine.control.contains(Display3DControl::FOG_ENABLE) {
-            self.draw_fog(render_engine, target);
-        }
+        //if render_engine.control.contains(Display3DControl::FOG_ENABLE) {
+        //    self.draw_fog(render_engine, target);
+        //}
 
         // Anti-aliasing (after 2d-blend?)
 
@@ -247,6 +247,7 @@ impl Software3DRenderer {
                 } else if render_engine.control.contains(Display3DControl::ALPHA_TEST_ENABLE) && frag_colour.alpha < render_engine.alpha_test {
                     continue;
                 } else if frag_colour.alpha != 0x1F && self.attr_buffer[idx].trans_id == id {
+                    //target[idx] = ColourAlpha{ col: Colour{r: 0, g: 0, b: 0xFF}, alpha: 0x1F};
                     continue;
                 }
 

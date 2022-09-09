@@ -1,6 +1,6 @@
 /// Palette and object types for rendering.
 
-use crate::common::colour::Colour;
+use crate::common::video::colour::Colour;
 
 /// An object pixel.
 #[derive(Clone, Copy)]

@@ -3,7 +3,7 @@ use super::types::{
     Depth, TexCoords
 };
 use super::geometry::N;
-use crate::common::colour::Colour;
+use crate::common::video::colour::Colour;
 
 // Interpolation helpers.
 

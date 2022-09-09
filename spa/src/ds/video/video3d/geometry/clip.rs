@@ -1,7 +1,7 @@
 
 use fixed::types::I40F24;
 use fixed::traits::ToFixed;
-use crate::common::colour::Colour;
+use crate::common::video::colour::Colour;
 use super::{
     super::interpolate::*,
     super::types::*,

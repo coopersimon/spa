@@ -9,7 +9,7 @@ use crate::utils::{
     bytes,
     meminterface::MemInterface16
 };
-use crate::common::{
+use crate::common::video::{
     colour::Colour,
     drawing::background::*
 };
@@ -78,7 +78,7 @@ bitflags! {
         const MAP_BASE      = u16::bits(8, 12);
         const USE_8_BPP     = u16::bit(7);
         const MOSAIC        = u16::bit(6);
-        const TILE_BASE     = u16::bits(2, 5);  // 2,3 for GBA
+        const TILE_BASE     = u16::bits(2, 5);  // 2,3 for GBA, ENG B
         const PRIORITY      = u16::bits(0, 1);
 
         const AFFINE_BMP_COL = u16::bit(2);
@@ -817,6 +817,10 @@ impl VideoRegisters {
     pub fn nds_obj_1d_tile_boundary(&self) -> u16 {
         (self.lcd_control_hi & NDSControl::OBJ_TILE_1D_GAP).bits() >> 4
     }
+
+    /*fn nds_a_bg_map_base(&self) -> u32 {
+        //if self.
+    }*/
 
     /// Check if bitmap objects should use 2D or 1D mapping.
     /// Returns true if 1D should be used.

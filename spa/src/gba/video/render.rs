@@ -4,11 +4,13 @@ use parking_lot::Mutex;
 use std::sync::Arc;
 use super::memory::VRAMRenderRef;
 use super::constants::*;
-use crate::common::colour::Colour;
-use crate::common::drawing::{
-    SoftwareRenderer, RendererMode
+use crate::common::video::{
+    colour::Colour,
+    drawing::{
+        SoftwareRenderer, RendererMode
+    },
+    mem::VideoMemory
 };
-use crate::common::videomem::VideoMemory;
 
 pub type RenderTarget = Arc<Mutex<Box<[u8]>>>;
 

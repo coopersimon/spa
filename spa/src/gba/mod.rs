@@ -10,8 +10,8 @@ use arm::{
 use crossbeam_channel::{Receiver, unbounded};
 
 use crate::common::{
-    framecomms::{new_frame_comms, FrameRequester},
-    joypad::Buttons,
+    video::framecomms::{new_frame_comms, FrameRequester},
+    peripheral::joypad::Buttons,
     resampler::{Resampler, SamplePacket}
 };
 #[cfg(feature = "debug")]
@@ -118,7 +118,7 @@ impl GBAAudioHandler {
 impl GBA {
     /// Make a new debuggable GBA.
     pub fn new_debug(config: MemoryConfig) -> DebugInterface<Buttons> {
-        use crate::common::framecomms::debug::new_debug_frame_comms;
+        use crate::common::video::framecomms::debug::new_debug_frame_comms;
 
         let (render_width, render_height) = RendererType::render_size();
         let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4, 1);

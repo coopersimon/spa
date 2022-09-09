@@ -39,7 +39,7 @@ pub fn run_gba(config: gba::MemoryConfig, mute: bool) {
 
     let (device, queue) = futures::executor::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
         label: None,
-        features: wgpu::Features::SPIRV_SHADER_PASSTHROUGH,
+        features: wgpu::Features::default(),
         limits: wgpu::Limits::default()
     }, None)).expect("Failed to create device");
     
@@ -61,7 +61,7 @@ pub fn run_gba(config: gba::MemoryConfig, mute: bool) {
                 visibility: wgpu::ShaderStages::FRAGMENT,
                 ty: wgpu::BindingType::Texture {
                     multisampled: false,
-                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
                     view_dimension: wgpu::TextureViewDimension::D2,
                 },
                 count: None
@@ -137,9 +137,8 @@ pub fn run_gba(config: gba::MemoryConfig, mute: bool) {
         usage: wgpu::BufferUsages::VERTEX
     });
 
-    let vs_module = unsafe {device.create_shader_module_spirv(&wgpu::include_spirv_raw!("../shaders/shader.vert.spv"))};
-
-    let fs_module = unsafe {device.create_shader_module_spirv(&wgpu::include_spirv_raw!("../shaders/shader.frag.spv"))};
+    let vs_module = device.create_shader_module(&wgpu::include_spirv!("../shaders/shader.vert.spv"));
+    let fs_module = device.create_shader_module(&wgpu::include_spirv!("../shaders/shader.frag.spv"));
 
     let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: None,

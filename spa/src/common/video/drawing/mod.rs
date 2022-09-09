@@ -1,13 +1,15 @@
-/// Software rendering.
+// Software rendering.
 
 pub mod palette;
 pub mod background;
 
 use fixed::types::I24F8;
 use crate::utils::bits::u16;
-use crate::common::colour::*;
-use crate::common::videomem::{
-    VideoMemory, VideoRegisters, VRAM2D
+use crate::common::video::{
+    colour::*,
+    mem::{
+        VideoMemory, VideoRegisters, VRAM2D
+    }
 };
 use palette::*;
 use background::*;

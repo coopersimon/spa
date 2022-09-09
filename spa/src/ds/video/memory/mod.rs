@@ -11,8 +11,8 @@ use crate::utils::{
     meminterface::MemInterface16,
     bits::{u8, u16}
 };
-use crate::common::wram::WRAM;
-use crate::common::videomem::VideoMemory;
+use crate::common::mem::wram::WRAM;
+use crate::common::video::mem::VideoMemory;
 use crate::ds::video::video3d::RenderingEngine;
 use vram::ARM7VRAMSlots;
 pub use vram::{ARM9VRAM, ARM7VRAM, EngineAVRAM, EngineBVRAM, Engine3DVRAM};

@@ -1,6 +1,6 @@
 // Dealing with user input.
 
-use crate::common::joypad::Buttons;
+use crate::common::peripheral::joypad::Buttons;
 use super::joypad::DSButtons;
 
 pub enum Button {

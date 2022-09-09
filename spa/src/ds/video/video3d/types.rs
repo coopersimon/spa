@@ -7,7 +7,7 @@ use fixed::types::{I12F4, I23F9};
 use super::geometry::N;
 use crate::{
     utils::bits::{u16, u32},
-    common::colour::Colour
+    common::video::colour::Colour
 };
 
 bitflags! {

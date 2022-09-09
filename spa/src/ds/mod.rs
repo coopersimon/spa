@@ -19,7 +19,7 @@ use crossbeam_channel::{Sender, Receiver, unbounded};
 
 #[cfg(feature = "debug")]
 use crate::common::debug::DebugInterface;
-use crate::common::framecomms::{new_frame_comms, FrameRequester};
+use crate::common::video::framecomms::{new_frame_comms, FrameRequester};
 use crate::common::resampler::*;
 use internal::DS9InternalMem;
 use memory::{
@@ -156,7 +156,7 @@ impl NDS {
     /// 
     /// Steps through the ARM7 CPU.
     pub fn new_debug_7(config: MemoryConfig) -> DebugInterface<UserInput> {
-        use crate::common::framecomms::debug::new_debug_frame_comms;
+        use crate::common::video::framecomms::debug::new_debug_frame_comms;
 
         let (render_width, render_height) = RendererType::render_size();
         let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4, 2);
@@ -200,7 +200,7 @@ impl NDS {
     /// 
     /// Steps through the ARM9 CPU.
     pub fn new_debug_9(config: MemoryConfig) -> DebugInterface<UserInput> {
-        use crate::common::framecomms::debug::new_debug_frame_comms;
+        use crate::common::video::framecomms::debug::new_debug_frame_comms;
 
         let (render_width, render_height) = RendererType::render_size();
         let (frame_sender, frame_receiver) = new_debug_frame_comms(render_width * render_height * 4, 2);

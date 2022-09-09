@@ -7,8 +7,8 @@ use crate::utils::{
     bits::u8
 };
 use crate::common::{
-    videomem::VRAM2D,
-    wram::WRAM
+    video::mem::VRAM2D,
+    mem::wram::WRAM
 };
 use super::VRAMRegion;
 

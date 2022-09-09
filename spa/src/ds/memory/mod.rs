@@ -14,15 +14,19 @@ use std::{
 
 use crate::{
     common::{
-        bios::BIOS,
-        dma::{
-            DMA as ds7DMA,
-            DMAAddress
+        mem::{
+            bios::BIOS,
+            wram::WRAM,
         },
-        timers::Timers,
-        wram::WRAM,
-        framecomms::FrameSender,
-        joypad::Joypad,
+        peripheral::{
+            dma::{
+                DMA as ds7DMA,
+                DMAAddress
+            },
+            timers::Timers,
+            joypad::Joypad,
+        },
+        video::framecomms::FrameSender,
         resampler::SamplePacket
     },
     utils::{

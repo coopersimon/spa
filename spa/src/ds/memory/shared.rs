@@ -4,7 +4,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicU8, Ordering}
 };
-use crate::common::wram::WRAM;
+use crate::common::mem::wram::WRAM;
 use crate::utils::bits::u32;
 
 const BANK_SIZE: usize = 16 * 1024;

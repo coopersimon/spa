@@ -28,7 +28,7 @@ bitflags!{
 
 const SAMPLE_PACKET_SIZE: usize = 32;
  
-const CYCLES_PER_SAMPLE: usize = 1024;
+const CYCLES_PER_SAMPLE: usize = 512;
 
 /// Cycles per second.
 const CLOCK_RATE: usize = 0x1FF61FE;

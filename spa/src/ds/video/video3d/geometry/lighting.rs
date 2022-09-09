@@ -4,7 +4,7 @@ use crate::{
         bits::u32,
         bytes
     },
-    common::colour::Colour,
+    common::video::colour::Colour,
 };
 use super::math::*;
 use super::super::types::PolygonAttrs;

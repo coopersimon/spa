@@ -10,7 +10,7 @@ use crate::utils::{
     bits::u16,
     bytes
 };
-use crate::common::videomem::VideoMemory;
+use crate::common::video::mem::VideoMemory;
 use crate::gba::interrupt::Interrupts;
 pub use render::*;
 use memory::{VRAM, VRAMRenderRef};

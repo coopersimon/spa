@@ -1,6 +1,6 @@
 /// Debug comms
 
-use super::framecomms::debug::DebugFrameReq;
+use super::video::framecomms::debug::DebugFrameReq;
 use arm::{
     CPUState,
     Debugger,

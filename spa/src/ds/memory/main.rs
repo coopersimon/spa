@@ -1,7 +1,7 @@
 
 use parking_lot::Mutex;
 use std::sync::Arc;
-use crate::common::wram::WRAM;
+use crate::common::mem::wram::WRAM;
 
 #[derive(Clone)]
 pub struct MainRAM {
