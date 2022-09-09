@@ -15,7 +15,7 @@ mod input;
 use arm::{
     ARM7TDMI, ARM9ES, ARMDriver, ARMCore
 };
-use crossbeam_channel::{Sender, Receiver, unbounded};
+use crossbeam_channel::{Receiver, unbounded};
 
 #[cfg(feature = "debug")]
 use crate::common::debug::DebugInterface;

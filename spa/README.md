@@ -64,7 +64,7 @@ DS:
 - Loads of unaligned memory accesses.
 
 ### DS Status of selected games:
-- Ace Attorney: Crashes due to unimplemented cache command.
+- Ace Attorney: Seems ok.
 - Age of Empires: Age of Kings: Works OK.
 - Animal Crossing Wild World: Works mostly OK.
 - Brain Training (Brain Age): Seems to run OK.
@@ -95,7 +95,7 @@ DS:
 - LEGO Lord of the Rings: Loads up OK, some visibility issues in menus (2D issues?), now gameplay doesn't load
 - LEGO Star Wars II: Mostly OK, some near-plane clipping issues throughout, some graphics have missing pixels on 3D screen. Crashes due to reading beyond end of specular table
 - Mario Slam Basketball (Hoops 3-on-3): Mostly OK.
-- Nintendogs (Labrador): Intro is mostly OK with clipping errors. Gameplay begins, crashes due to full GPU command fifo. (Now crashes due to unimplemented cache command)
+- Nintendogs (Labrador): Intro is mostly OK with clipping errors. Gameplay begins, crashes due to full GPU command fifo.
 - Pokemon Mystery Dungeon Explorers of Sky: Mostly OK.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
 - Pokemon Diamond: 2d elements of game work ok, 3D in intro looks good, 3D in title looks good

@@ -69,6 +69,10 @@ impl Cache {
         }
     }
 
+    pub fn invalidate_set_line(&mut self, set: u32, index: u32) {
+        self.sets[index as usize].lines[set as usize].invalidate();
+    }
+
     pub fn clean_line<'a>(&'a mut self, addr: u32, buffer: &mut [u32]) -> bool {
         let index = ((addr & self.index_mask) >> 5) as usize;
         let set = &mut self.sets[index];
@@ -237,10 +241,6 @@ impl CacheSet {
         for line in &mut self.lines {
             line.invalidate();
         }
-    }
-
-    fn invalidate_line(&mut self, set: u32) {
-        self.lines[set as usize].invalidate();
     }
 
     /// Fill a line with new data.

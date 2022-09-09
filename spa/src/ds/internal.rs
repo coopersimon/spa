@@ -360,11 +360,17 @@ impl<R: Renderer> DS9InternalMem<R> {
             (0, 4) => self.wait_for_interrupt(),
             (5, 0) => self.instr_cache.invalidate_all(),
             (5, 1) => self.instr_cache.invalidate_line(data),
-            (5, 2) => panic!("inv i S/I"),
+            (5, 2) => {
+                let set_line = SetLine::from_bits_truncate(data);
+                self.instr_cache.invalidate_set_line(set_line.set_idx(), set_line.instr_index());
+            },
             (5, 4) => panic!("prefetch"),
             (6, 0) => self.data_cache.invalidate_all(),
             (6, 1) => self.data_cache.invalidate_line(data),
-            (6, 2) => panic!("inv d S/I"),
+            (6, 2) => {
+                let set_line = SetLine::from_bits_truncate(data);
+                self.data_cache.invalidate_set_line(set_line.set_idx(), set_line.data_index());
+            },
             (7, _) => panic!("unified"),
             (8, 2) => self.wait_for_interrupt(),
             (10, 1) => return self.clean_line(data),

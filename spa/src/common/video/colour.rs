@@ -11,14 +11,6 @@ impl ColourAlpha {
     pub fn transparent() -> Self {
         Self { col: Colour::black(), alpha: 0 }
     }
-
-    pub fn colour(&self) -> Option<Colour> {
-        if self.alpha != 0 {
-            Some(self.col)
-        } else {
-            None
-        }
-    }
 }
 
 /// A colour in R8G8B8 format.

@@ -80,10 +80,7 @@ pub struct RealTimeClock {
 
 impl RealTimeClock {
     pub fn new() -> Self {
-        let now = Local::now();
-        let year = now.year() % 100;
-        let weekday = now.weekday().num_days_from_sunday(); // Appears to use Monday = 1, ...
-        let rtc = Self {
+        let mut rtc = Self {
             state:      RTCState::Idle,
             transfer:   0,
             write_buf:  0,
@@ -93,14 +90,14 @@ impl RealTimeClock {
             status_1:   0,
             status_2:   0,
 
-            year:       Bcd8::from_binary(year as u8),
-            month:      Bcd8::from_binary(now.month() as u8),
-            day:        Bcd8::from_binary(now.day() as u8),
-            weekday:    Bcd8::from_binary(weekday as u8),
+            year:       Bcd8::from_binary(0),
+            month:      Bcd8::from_binary(0),
+            day:        Bcd8::from_binary(0),
+            weekday:    Bcd8::from_binary(0),
 
-            hour:       Bcd8::from_binary(now.hour() as u8),
-            minute:     Bcd8::from_binary(now.minute() as u8),
-            second:     Bcd8::from_binary(now.second() as u8),
+            hour:       Bcd8::from_binary(0),
+            minute:     Bcd8::from_binary(0),
+            second:     Bcd8::from_binary(0),
 
             alarm1_weekday: Bcd8::default(),
             alarm1_hour:    Bcd8::default(),
@@ -114,6 +111,8 @@ impl RealTimeClock {
             free:       0,
         };
 
+        rtc.set_current_time();
+
         // TODO: Log
         //println!("RTC init: Y {:X} M {:X} D {:X} W {:X}", rtc.year.binary(), rtc.month.binary(), rtc.day.binary(), rtc.weekday.binary());
         //println!("RTC init: h {:X} m {:X} s {:X}", rtc.hour.binary(), rtc.minute.binary(), rtc.second.binary());
@@ -122,7 +121,7 @@ impl RealTimeClock {
     }
 
     /// Advance RTC and return true if interrupt occurred.
-    pub fn clock(&mut self, cycles: usize) -> bool {
+    pub fn _clock(&mut self, _cycles: usize) -> bool {
         false
     }
 
@@ -133,8 +132,14 @@ impl RealTimeClock {
         self.state = match (self.command >> 1) & 0b111 {
             0 => StatusReg1,
             1 => StatusReg2,
-            2 => DateTime(7),
-            3 => DateTime(3),
+            2 => {
+                self.set_current_time();
+                DateTime(7)
+            },
+            3 => {
+                self.set_current_time();
+                DateTime(3)
+            },
             4 => if u8::test_bit(self.status_2, 2) {Int1(1)} else {Int1(3)},
             5 => Int2(3),
             6 => ClockAdjust,
@@ -219,6 +224,23 @@ impl RealTimeClock {
             _ => Ready,
         };
         self.transfer = 8;
+    }
+
+    /// Set the time.
+    fn set_current_time(&mut self) {
+        // TODO: offset from configured time.
+        let now = Local::now();
+        let year = now.year() % 100;
+        let weekday = now.weekday().num_days_from_sunday(); // Appears to use Monday = 1, ...
+
+        self.year = Bcd8::from_binary(year as u8);
+        self.month = Bcd8::from_binary(now.month() as u8);
+        self.day = Bcd8::from_binary(now.day() as u8);
+        self.weekday = Bcd8::from_binary(weekday as u8);
+
+        self.hour = Bcd8::from_binary(now.hour() as u8);
+        self.minute = Bcd8::from_binary(now.minute() as u8);
+        self.second = Bcd8::from_binary(now.second() as u8);
     }
 }
 
