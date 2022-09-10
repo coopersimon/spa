@@ -69,16 +69,16 @@ DS:
 - Animal Crossing Wild World: Works mostly OK.
 - Brain Training (Brain Age): Seems to run OK.
 - Black Ops: Boots mostly OK, unable to find strings to display for some reason.
-- Civilization Revolution: Mostly OK - some blending issues for translucent polygons that form fog
+- Civilization Revolution: Mostly OK, 3D precision issues
 - Chrono Trigger: Audio skips a little in intro, but mostly ok otherwise.
 - Dragon Quest IX: Shows intro cards and video. Shows broken screen and freezes. (Timing issues?)
 - Dragon Quest IV: Mostly OK, shows a strange counter in intro
 - Dragon Quest V: Mostly OK
 - Dragon Quest VI: Slow start, broken intro, mostly OK
-- Final Fantasy Tactics A2: Lots of broken graphics and visibility / depth issues. However functionally seems ok now.
+- Final Fantasy Tactics A2: Some flickering and precision issues with 3D stuff (presented as 2D)
 - Final Fantasy III: Mostly OK, tries to use mode 6 on engine A and crashes.
 - Final Fantasy IV: Mostly OK.
-- Final Fantasy: 4 Heroes of Light: Mostly ok, visibility issues with menus on 3D screen.
+- Final Fantasy: 4 Heroes of Light: Mostly ok
 - Fire Emblem: Shadow Dragon: Intro missing some graphics. Also in-game intro. Otherwise looks and sounds fine.
 - GTA Chinatown Wars: Titles & menu looks OK, intro 3D is broken
 - Hotel Dusk: Room 215: Now crashes with an undefined instruction in ITCM.
@@ -88,7 +88,7 @@ DS:
 - Mario and Luigi: Bowser's Inside Story: Blank screen
 - Mario and Luigi: Partners in Time: Loads up mostly ok, menu title 3D is ok, intro has serious graphical issues
 - Mario Party DS: Mostly OK. Some precision issues with 3D.
-- Metroid Prime Hunters: Lots of broken graphics in titles and menu, also seems to lock up occasionally.
+- Metroid Prime Hunters: Titles and menu mostly fine (aside from precision + stream audio), gameplay works but with near plane clipping issues
 - New Super Mario Bros: Mostly OK. precision issues with 3D graphics
 - LoZ Phantom Hourglass: Just white screen now.
 - LoZ Spirit Tracks: White screen.
@@ -101,11 +101,11 @@ DS:
 - Pokemon Diamond: 2d elements of game work ok, 3D in intro looks good, 3D in title looks good
 - Pokemon Black: Black screen
 - Pokemon HeartGold: 2d elements of game work ok, 3D in intro good, 3D in title is quite broken
-- Pokemon Ranger: 2D components are rendered as 3D and there are some precision issues.
+- Pokemon Ranger: 2D components are rendered as 3D and there are some minor precision issues.
 - Shin Megami Tensei: Strange Journey: Titles OK, menu has visibility issues, freezes when gameplay begins.
 - Super Mario 64 DS: Loads up ok, star in intro looks wrong (specular lighting/texture issues). 3D in menu looks good. Actual game has polygons flying everywhere in front of scene + perspective issues
 - Super Princess Peach: Mostly OK.
-- Super Scribblenauts: Kind of fine, lots of layering issues with 2D in the 3D engine.
+- Super Scribblenauts: Mostly fine, (3D as 2D precision issues)
 - Tony Hawk's Downhill Jam: Shows titles, then black screen
 - Tony Hawk's American Sk8land: Shows titles, menus, then gameplay crashes after matrix overflow
 - The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)

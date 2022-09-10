@@ -120,7 +120,7 @@ impl GeometryEngine {
     /// Set values for next frame.
     /// Actual swapping of polygon/vertex buffers happens outside.
     pub fn swap_buffers(&mut self, data: u32) {
-        self.w_buffer = u32::test_bit(data, 0);
+        self.w_buffer = u32::test_bit(data, 1);
     }
 
     pub fn set_vertex_colour(&mut self, data: u32) -> isize {
@@ -212,7 +212,7 @@ impl GeometryEngine {
             1 => {
                 let s = self.tex_coords.s.to_fixed::<N>();
                 let t = self.tex_coords.t.to_fixed::<N>();
-                let m = &self.matrices.tex_matrix();
+                let m = self.matrices.tex_matrix();
                 let s0 = s * m.elements[0] + t * m.elements[4] + (m.elements[8] / 16) + (m.elements[12] / 16);
                 let t0 = s * m.elements[1] + t * m.elements[5] + (m.elements[9] / 16) + (m.elements[13] / 16);
                 self.trans_tex_coords.s = s0.to_fixed();
@@ -428,7 +428,7 @@ impl GeometryEngine {
         if self.texture_attrs.transform_mode() == 3 {
             let s = self.tex_coords.s.to_fixed::<N>();
             let t = self.tex_coords.t.to_fixed::<N>();
-            let m = &self.matrices.tex_matrix();
+            let m = self.matrices.tex_matrix();
             let s0 = vertex.x() * m.elements[0] + vertex.y() * m.elements[4] + vertex.z() * m.elements[8] + s;
             let t0 = vertex.x() * m.elements[1] + vertex.y() * m.elements[5] + vertex.z() * m.elements[9] + t;
             self.trans_tex_coords.s = s0.to_fixed();
