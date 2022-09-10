@@ -193,11 +193,10 @@ impl AudioChannel {
     pub fn get_panned_sample(&self) -> Option<(i32, i32)> {
         if self.control.contains(ChannelControl::START) || self.hold_trigger {
             let volume = (self.control & ChannelControl::VOLUME).bits() as i32;
-            let left = (self.current_sample * volume) >> 11;
-            let right = (self.current_sample * volume) >> 11;
+            let sample = (self.current_sample * volume) >> 11;
             Some((
-                (left * self.left_vol) >> 7,
-                (right * self.right_vol) >> 7
+                (sample * self.left_vol) >> 7,
+                (sample * self.right_vol) >> 7
             ))
         } else {
             None

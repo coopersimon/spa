@@ -49,7 +49,7 @@ impl ADPCMGenerator {
         self.initialised = true;
         self.current_value = (header & 0xFFFF) as u16 as i16;
         let index = (header >> 16) & 0x7F;
-        self.current_index = std::cmp::max(index as usize, 88);
+        self.current_index = std::cmp::min(index as usize, 88);
         self.current_value
     }
 

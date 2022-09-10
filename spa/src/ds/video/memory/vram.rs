@@ -354,7 +354,7 @@ impl EngineBVRAM {
 
 impl VRAM2D for EngineBVRAM {
     fn get_bg_byte(&self, addr: u32) -> u8 {
-        if let Some((mask, vram)) = self.lookup_bg(addr) {
+        if let Some((mask, vram)) = self.lookup_bg(addr & 0x1_FFFF) {
             vram.read_byte(addr & mask)
         } else {
             //panic!("reading from strange addr (ENG_B_BG: {:X})", addr)
@@ -363,7 +363,7 @@ impl VRAM2D for EngineBVRAM {
     }
 
     fn get_bg_halfword(&self, addr: u32) -> u16 {
-        if let Some((mask, vram)) = self.lookup_bg(addr) {
+        if let Some((mask, vram)) = self.lookup_bg(addr & 0x1_FFFF) {
             vram.read_halfword(addr & mask)
         } else {
             //panic!("reading from strange addr (ENG_B_BG: {:X})", addr)

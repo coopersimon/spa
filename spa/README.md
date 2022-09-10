@@ -78,7 +78,7 @@ DS:
 - Final Fantasy Tactics A2: Lots of broken graphics and visibility / depth issues. However functionally seems ok now.
 - Final Fantasy III: Mostly OK, tries to use mode 6 on engine A and crashes.
 - Final Fantasy IV: Mostly OK.
-- Final Fantasy: 4 Heroes of Light: Game starts OK, 2D has visibility issues in menu. 3D is pretty good but has some precision issues.
+- Final Fantasy: 4 Heroes of Light: Mostly ok, visibility issues with menus on 3D screen.
 - Fire Emblem: Shadow Dragon: Intro missing some graphics. Also in-game intro. Otherwise looks and sounds fine.
 - GTA Chinatown Wars: Titles & menu looks OK, intro 3D is broken
 - Hotel Dusk: Room 215: Now crashes with an undefined instruction in ITCM.
@@ -101,7 +101,7 @@ DS:
 - Pokemon Diamond: 2d elements of game work ok, 3D in intro looks good, 3D in title looks good
 - Pokemon Black: Black screen
 - Pokemon HeartGold: 2d elements of game work ok, 3D in intro good, 3D in title is quite broken
-- Pokemon Ranger: 2D components are rendered as 3D and there are some precision issues. Audio also has some volume issues.
+- Pokemon Ranger: 2D components are rendered as 3D and there are some precision issues.
 - Shin Megami Tensei: Strange Journey: Titles OK, menu has visibility issues, freezes when gameplay begins.
 - Super Mario 64 DS: Loads up ok, star in intro looks wrong (specular lighting/texture issues). 3D in menu looks good. Actual game has polygons flying everywhere in front of scene + perspective issues
 - Super Princess Peach: Mostly OK.
