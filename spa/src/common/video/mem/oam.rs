@@ -152,55 +152,47 @@ impl ObjAttrs {
     /// Get top-left corner of object.
     pub fn coords(&self) -> (u16, u8) {
         let y = (self.attrs_0 & ObjAttr0::Y_COORD).bits() as u8;
-        let mut x = (self.attrs_1 & ObjAttr1::X_COORD).bits();
-        if u16::test_bit(x, 8) {
-            x |= 0xFE00;
-        }
-        (x, y)
+        let x = (self.attrs_1 & ObjAttr1::X_COORD).bits();
+        (u16::sign_extend(x, 9) as u16, y)
     }
 
     /// Get the size of the underlying object.
     pub fn source_size(&self) -> (u8, u8) {
-        const SHAPE_SQ: u16     = 0 << 14;
-        const SHAPE_HOR: u16    = 1 << 14;
-        const SHAPE_VER: u16    = 2 << 14;
-        const SHAPE_NONE: u16   = 3 << 14;
-        const SIZE_SMALL: u16   = 0 << 14;
-        const SIZE_MID: u16     = 1 << 14;
-        const SIZE_LARGE: u16   = 2 << 14;
-        const SIZE_XLARGE: u16  = 3 << 14;
-
-        match (self.attrs_0 & ObjAttr0::SHAPE).bits() {
-            SHAPE_SQ => match (self.attrs_1 & ObjAttr1::SIZE).bits() {
-                SIZE_SMALL  => (8, 8),
-                SIZE_MID    => (16, 16),
-                SIZE_LARGE  => (32, 32),
-                SIZE_XLARGE => (64, 64),
+        match (self.attrs_0 & ObjAttr0::SHAPE).bits() >> 14 {
+            // Square
+            0 => match (self.attrs_1 & ObjAttr1::SIZE).bits() >> 14 {
+                0   => (8, 8),
+                1   => (16, 16),
+                2   => (32, 32),
+                3   => (64, 64),
                 _ => unreachable!(),
             },
-            SHAPE_HOR => match (self.attrs_1 & ObjAttr1::SIZE).bits() {
-                SIZE_SMALL  => (16, 8),
-                SIZE_MID    => (32, 8),
-                SIZE_LARGE  => (32, 16),
-                SIZE_XLARGE => (64, 32),
+            // Wide
+            1 => match (self.attrs_1 & ObjAttr1::SIZE).bits() >> 14 {
+                0   => (16, 8),
+                1   => (32, 8),
+                2   => (32, 16),
+                3   => (64, 32),
                 _ => unreachable!(),
             },
-            SHAPE_VER => match (self.attrs_1 & ObjAttr1::SIZE).bits() {
-                SIZE_SMALL  => (8, 16),
-                SIZE_MID    => (8, 32),
-                SIZE_LARGE  => (16, 32),
-                SIZE_XLARGE => (32, 64),
+            // Tall
+            2 => match (self.attrs_1 & ObjAttr1::SIZE).bits() >> 14 {
+                0   => (8, 16),
+                1   => (8, 32),
+                2   => (16, 32),
+                3   => (32, 64),
                 _ => unreachable!(),
             },
-            SHAPE_NONE => (0, 0),
+            3 => (0, 0),
             _ => unreachable!(),
         }
     }
 
     /// Get size of object clipping window.
     pub fn size(&self) -> (u16, u8) {
-        let double_size = self.attrs_0.contains(ObjAttr0::AFFINE | ObjAttr0::DOUBLE_CLIP);
-        let shift = if double_size {1} else {0};
+        // This bit will only be set for enabled affine objects.
+        // Enable should have already been checked before calling this.
+        let shift = (self.attrs_0 & ObjAttr0::DOUBLE_CLIP).bits() >> 9;
         let base_size = self.source_size();
         ((base_size.0 as u16) << shift, base_size.1 << shift)
     }

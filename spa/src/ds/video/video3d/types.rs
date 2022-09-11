@@ -57,10 +57,17 @@ bitflags! {
 }
 
 impl PolygonAttrs {
+    #[inline]
+    pub fn is_wireframe(self) -> bool {
+        (self & PolygonAttrs::ALPHA).bits() == 0
+    }
+
+    #[inline]
     pub fn alpha(self) -> u8 {
         ((self & PolygonAttrs::ALPHA).bits() >> 16) as u8
     }
     
+    #[inline]
     pub fn id(self) -> u8 {
         ((self & PolygonAttrs::POLYGON_ID).bits() >> 24) as u8
     }
@@ -92,26 +99,31 @@ bitflags! {
 }
 
 impl TextureAttrs {
+    #[inline]
     pub fn transform_mode(self) -> u8 {
         ((self & TextureAttrs::TEX_COORD_TRANS).bits() >> 30) as u8
     }
     
+    #[inline]
     pub fn format(self) -> u8 {
         ((self & TextureAttrs::FORMAT).bits() >> 26) as u8
     }
 
+    #[inline]
     pub fn height(self) -> u32 {
         // 8 - 1024 (in powers of 2)
         let shift = ((self & TextureAttrs::SIZE_T).bits() >> 23) + 3;
         1 << shift
     }
     
+    #[inline]
     pub fn width(self) -> u32 {
         // 8 - 1024 (in powers of 2)
         let shift = ((self & TextureAttrs::SIZE_S).bits() >> 20) + 3;
         1 << shift
     }
 
+    #[inline]
     pub fn addr(self) -> u32 {
         (self & TextureAttrs::ADDR).bits() << 3
     }
@@ -172,16 +184,24 @@ impl Polygon {
     /// A polygon is opaque if it is wireframe (alpha 0),
     /// or alpha is max, and it must not have a translucent
     /// texture type (A3I5 or A5I3).
+    #[inline]
     pub fn is_opaque(&self) -> bool {
         let alpha = self.attrs.alpha();
         let tex_format = self.tex.format();
         (alpha == 0 || alpha == 31) && (tex_format != 1 && tex_format != 6)
     }
 
+    #[inline]
+    pub fn is_wireframe(&self) -> bool {
+        self.attrs.is_wireframe()
+    }
+
+    #[inline]
     pub fn render_eq_depth(&self) -> bool {
         self.attrs.contains(PolygonAttrs::RENDER_EQ_DEPTH)
     }
 
+    #[inline]
     pub fn add_vertex_index(&mut self, index: u16) {
         self.vertex_indices[self.num_vertices as usize] = index;
         self.num_vertices += 1;

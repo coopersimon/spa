@@ -165,6 +165,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
             ex_mem_status:      ex_mem_status,
             card:               card_7,
 
+            inner_counter:      0,
             counter:            0,
             v_counter:          0,
             barrier:            barrier,
@@ -739,6 +740,8 @@ pub struct DS7MemoryBus {
     ex_mem_status:      ExMemStatus,
     card:               DSCardIO,
 
+    // Sync
+    inner_counter:      usize,
     counter:            usize,
     v_counter:          usize,
     barrier:            Arc<Barrier>,
@@ -931,9 +934,6 @@ impl Mem32 for DS7MemoryBus {
     type Addr = u32;
 
     fn clock(&mut self, cycles: usize) -> Option<arm::ExternalException> {
-        self.do_dma();
-        self.do_clock(cycles);
-
         // Check if CPU is halted.
         if self.power_control.halt {
             loop {
@@ -944,7 +944,22 @@ impl Mem32 for DS7MemoryBus {
                 self.do_dma();
                 self.do_clock(4);
             }
+        } else {
+            if self.dma.get_active().is_some() {
+                self.do_dma();
+            }
         }
+
+        self.inner_counter += cycles;
+        if self.inner_counter < 8 {
+            if self.check_irq() {
+                return Some(arm::ExternalException::IRQ);
+            }
+            return None;
+        }
+
+        self.do_clock(self.inner_counter);
+        self.inner_counter = 0;
 
         if self.check_irq() {
             self.power_control.halt = false;

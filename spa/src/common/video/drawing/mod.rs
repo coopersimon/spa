@@ -143,12 +143,7 @@ impl SoftwareRenderer {
     /// VRAM address, for 1D objects.
     fn obj_1d_tile_shift(&self, regs: &VideoRegisters) -> usize {
         match self.mode {
-            RendererMode::NDSA => match regs.nds_obj_1d_tile_boundary() {
-                0 => TILE_SHIFT_4BPP,
-                1 => TILE_SHIFT_4BPP + 1,
-                2 => TILE_SHIFT_4BPP + 2,
-                _ => TILE_SHIFT_4BPP + 3,
-            },
+            RendererMode::NDSA => TILE_SHIFT_4BPP + (regs.nds_obj_1d_tile_boundary() as usize),
             RendererMode::NDSB => match regs.nds_obj_1d_tile_boundary() {
                 0 => TILE_SHIFT_4BPP,
                 1 => TILE_SHIFT_4BPP + 1,
