@@ -23,7 +23,7 @@ dependencies = [
 [[package]]
 name = "arm"
 version = "0.5.0"
-source = "git+https://github.com/coopersimon/e-arm#2c9123d0e720dfee80a946fb6a4d0811f613376f"
+source = "git+https://github.com/coopersimon/e-arm#0027d4dfdfcefc244978494abfb31b36eff27daf"
 dependencies = [
  "bitflags",
  "dynasmrt",

@@ -16,7 +16,7 @@ use crate::{
     common::{
         mem::{
             bios::BIOS,
-            wram::WRAM,
+            ram::RAM,
         },
         peripheral::{
             dma::{
@@ -145,7 +145,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
             power_control:      DS7PowerControl::new(config.fast_boot),
 
             main_ram:           main_ram,
-            wram:               WRAM::new(64 * 1024),
+            wram:               RAM::new(64 * 1024),
             shared_wram:        arm7_wram,
 
             video:              arm7_video,
@@ -719,7 +719,7 @@ pub struct DS7MemoryBus {
     power_control:  DS7PowerControl,
 
     main_ram:       MainRAM,
-    wram:           WRAM,
+    wram:           RAM,
     shared_wram:    ARM7SharedRAM,
 
     video:          ARM7Video,

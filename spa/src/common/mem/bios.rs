@@ -5,13 +5,13 @@ use std::{
         Result, Read
     },
     fs::File,
-    convert::TryInto,
     path::Path
 };
+use crate::common::mem::ram::RAM;
 
 /// BIOS that can be loaded from file.
 pub struct BIOS {
-    data: Vec<u8>
+    data: RAM
 }
 
 impl BIOS {
@@ -20,31 +20,25 @@ impl BIOS {
         let mut buffer = Vec::new();
         cart_file.read_to_end(&mut buffer)?;
         Ok(Self {
-            data: buffer
+            data: buffer.into()
         })
     }
 
     pub fn new_from_data(data: Vec<u8>) -> Self {
         Self {
-            data
+            data: data.into()
         }
     }
 
     pub fn read_byte(&self, addr: u32) -> u8 {
-        self.data[addr as usize]
+        self.data.read_byte(addr)
     }
 
     pub fn read_halfword(&self, addr: u32) -> u16 {
-        let start = addr as usize;
-        let end = start + 2;
-        let data = (self.data[start..end]).try_into().unwrap();
-        u16::from_le_bytes(data)
+        self.data.read_halfword(addr)
     }
 
     pub fn read_word(&self, addr: u32) -> u32 {
-        let start = addr as usize;
-        let end = start + 4;
-        let data = (self.data[start..end]).try_into().unwrap();
-        u32::from_le_bytes(data)
+        self.data.read_word(addr)
     }
 }

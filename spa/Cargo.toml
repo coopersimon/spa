@@ -27,4 +27,5 @@ git = "https://github.com/coopersimon/e-arm"
 #path = "../../e-arm"
 
 [features]
-debug = []
+debug = []  #
+fast = []   # For fast and potentially unsafe optimisations.

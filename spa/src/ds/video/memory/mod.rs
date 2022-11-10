@@ -11,7 +11,7 @@ use crate::utils::{
     meminterface::MemInterface16,
     bits::{u8, u16}
 };
-use crate::common::mem::wram::WRAM;
+use crate::common::mem::ram::RAM;
 use crate::common::video::mem::VideoMemory;
 use crate::ds::video::video3d::RenderingEngine;
 use vram::ARM7VRAMSlots;
@@ -400,7 +400,7 @@ impl DSVideoMemory {
 }
 
 impl DSVideoMemory {
-    fn swap_mem(&mut self, from_slot: Slot, new: Option<Box<WRAM>>) -> Option<Box<WRAM>> {
+    fn swap_mem(&mut self, from_slot: Slot, new: Option<Box<RAM>>) -> Option<Box<RAM>> {
         match from_slot {
             Slot::LCDC(lcdc) => {
                 let mut vram = self.lcdc_vram.lock();

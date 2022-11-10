@@ -1,7 +1,7 @@
 
 use bitflags::bitflags;
 use crate::{
-    utils::bits::u32
+    utils::bits::u32, common::mem::ram::RAM
 };
 
 bitflags!{
@@ -130,7 +130,7 @@ impl Cache {
         let tag = addr & self.tag_mask;
         for line in &set.lines {
             if line.tag == tag {
-                return Some(line.data[(addr & LINE_MASK) as usize]);
+                return Some(line.data.read_byte(addr & LINE_MASK));
             }
         }
         None
@@ -142,7 +142,7 @@ impl Cache {
         let tag = addr & self.tag_mask;
         for line in &mut set.lines {
             if line.tag == tag {
-                line.data[(addr & LINE_MASK) as usize] = data;
+                line.data.write_byte(addr & LINE_MASK, data);
                 line.dirty = true;
                 return true;
             }
@@ -156,11 +156,7 @@ impl Cache {
         let tag = addr & self.tag_mask;
         for line in &set.lines {
             if line.tag == tag {
-                let line_addr = (addr & LINE_MASK) as usize;
-                let data = u16::from_le_bytes([
-                    line.data[line_addr],
-                    line.data[line_addr+1]
-                ]);
+                let data = line.data.read_halfword(addr & LINE_MASK);
                 return Some(data);
             }
         }
@@ -173,10 +169,7 @@ impl Cache {
         let tag = addr & self.tag_mask;
         for line in &mut set.lines {
             if line.tag == tag {
-                let line_addr = (addr & LINE_MASK) as usize;
-                let bytes = data.to_le_bytes();
-                line.data[line_addr] = bytes[0];
-                line.data[line_addr+1] = bytes[1];
+                line.data.write_halfword(addr & LINE_MASK, data);
                 line.dirty = true;
                 return true;
             }
@@ -190,13 +183,7 @@ impl Cache {
         let tag = addr & self.tag_mask;
         for line in &set.lines {
             if line.tag == tag {
-                let line_addr = (addr & LINE_MASK) as usize;
-                let data = u32::from_le_bytes([
-                    line.data[line_addr],
-                    line.data[line_addr+1],
-                    line.data[line_addr+2],
-                    line.data[line_addr+3]
-                ]);
+                let data = line.data.read_word(addr & LINE_MASK);
                 return Some(data);
             }
         }
@@ -209,12 +196,7 @@ impl Cache {
         let tag = addr & self.tag_mask;
         for line in &mut set.lines {
             if line.tag == tag {
-                let line_addr = (addr & LINE_MASK) as usize;
-                let bytes = data.to_le_bytes();
-                line.data[line_addr] = bytes[0];
-                line.data[line_addr+1] = bytes[1];
-                line.data[line_addr+2] = bytes[2];
-                line.data[line_addr+3] = bytes[3];
+                line.data.write_word(addr & LINE_MASK, data);
                 line.dirty = true;
                 return true;
             }
@@ -231,7 +213,7 @@ struct CacheSet {
 impl CacheSet {
     fn new() -> Self {
         Self {
-            lines:      [CacheLine::new(); 4],
+            lines:      [CacheLine::new(), CacheLine::new(), CacheLine::new(), CacheLine::new()],
             replace:    0,
         }
     }
@@ -265,9 +247,8 @@ const LINE_MASK: u32 = 0x1F;
 /// This saves us an extra valid bit check.
 const INVALID: u32 = u32::MAX;
 
-#[derive(Clone, Copy)]
 struct CacheLine {
-    data:   [u8; LINE_SIZE],
+    data:   RAM,
     tag:    u32,
     dirty:  bool,
 }
@@ -275,7 +256,7 @@ struct CacheLine {
 impl CacheLine {
     fn new() -> Self {
         Self {
-            data:   [0; LINE_SIZE],
+            data:   RAM::new(LINE_SIZE),
             tag:    INVALID,
             dirty:  false,
         }
@@ -284,8 +265,8 @@ impl CacheLine {
     fn ref_dirty_data<'a>(&'a mut self, data_out: &mut [u32]) -> Option<u32> {
         if self.dirty {
             self.dirty = false;
-            for (o, i) in data_out.iter_mut().zip(self.data.chunks_exact(4)) {
-                *o = u32::from_le_bytes(i.try_into().unwrap());
+            for (i, out) in data_out.iter_mut().enumerate() {
+                *out = self.data.read_word((i * 4) as u32);
             }
             Some(self.tag)
         } else {
@@ -297,8 +278,8 @@ impl CacheLine {
         let tag = std::mem::replace(&mut self.tag, INVALID);
         if self.dirty {
             self.dirty = false;
-            for (o, i) in data_out.iter_mut().zip(self.data.chunks_exact(4)) {
-                *o = u32::from_le_bytes(i.try_into().unwrap());
+            for (i, out) in data_out.iter_mut().enumerate() {
+                *out = self.data.read_word((i * 4) as u32);
             }
             Some(tag)
         } else {
@@ -318,8 +299,8 @@ impl CacheLine {
     fn fill(&mut self, tag: u32, data: &[u32]) {
         self.dirty = false;
         self.tag = tag;
-        for (o, i) in self.data.chunks_exact_mut(4).zip(data.iter()) {
-            o.clone_from_slice(&i.to_le_bytes());
+        for (i, data_word) in data.iter().enumerate() {
+            self.data.write_word((i * 4) as u32, *data_word);
         }
     }
 }

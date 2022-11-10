@@ -15,7 +15,7 @@ use crate::{
     common::{
         mem::{
             bios::BIOS,
-            wram::WRAM,
+            ram::RAM,
         },
         peripheral::{
             dma::{DMA, DMAAddress},
@@ -46,8 +46,8 @@ pub struct MemoryBus<R: Renderer> {
     bios:       BIOS,
     internal:   Internal,
 
-    wram:       WRAM,
-    fast_wram:  WRAM,
+    wram:       RAM,
+    fast_wram:  RAM,
 
     game_pak:           GamePak,
     game_pak_control:   GamePakController,
@@ -77,8 +77,8 @@ impl<R: Renderer> MemoryBus<R> {
             bios:       bios,
             internal:   Internal::new(),
 
-            wram:       WRAM::new(256 * 1024),
-            fast_wram:  WRAM::new(32 * 1024),
+            wram:       RAM::new(256 * 1024),
+            fast_wram:  RAM::new(32 * 1024),
 
             game_pak:           game_pak,
             game_pak_control:   GamePakController::new(),

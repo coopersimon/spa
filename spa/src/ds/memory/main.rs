@@ -1,17 +1,17 @@
 
 use parking_lot::Mutex;
 use std::sync::Arc;
-use crate::common::mem::wram::WRAM;
+use crate::common::mem::ram::RAM;
 
 #[derive(Clone)]
 pub struct MainRAM {
-    ram: Arc<Mutex<WRAM>>
+    ram: Arc<Mutex<RAM>>
 }
 
 impl MainRAM {
     pub fn new() -> Self {
         Self {
-            ram: Arc::new(Mutex::new(WRAM::new(4 * 1024 * 1024)))
+            ram: Arc::new(Mutex::new(RAM::new(4 * 1024 * 1024)))
         }
     }
 

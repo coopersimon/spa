@@ -4,7 +4,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicU8, Ordering}
 };
-use crate::common::mem::wram::WRAM;
+use crate::common::mem::ram::RAM;
 use crate::utils::bits::u32;
 
 const BANK_SIZE: usize = 16 * 1024;
@@ -12,7 +12,7 @@ const BANK_MASK: u32 = (BANK_SIZE as u32) - 1;
 
 /// Reading and writing of shared RAM.
 pub trait SharedRAM {
-    fn get_bank(&self, addr: u32) -> Option<MutexGuard<WRAM>>;
+    fn get_bank(&self, addr: u32) -> Option<MutexGuard<RAM>>;
 
     fn read_byte(&mut self, addr: u32) -> u8 {
         self.get_bank(addr).map(|bank| {
@@ -57,14 +57,14 @@ pub struct ARM9SharedRAM {
     bank_control:   u8,
     bank_status:    Arc<AtomicU8>,
     
-    lo_bank:        Arc<Mutex<WRAM>>,
-    hi_bank:        Arc<Mutex<WRAM>>,
+    lo_bank:        Arc<Mutex<RAM>>,
+    hi_bank:        Arc<Mutex<RAM>>,
 }
 
 impl ARM9SharedRAM {
     pub fn new() -> (Self, ARM7SharedRAM) {
-        let lo_bank = Arc::new(Mutex::new(WRAM::new(BANK_SIZE)));
-        let hi_bank = Arc::new(Mutex::new(WRAM::new(BANK_SIZE)));
+        let lo_bank = Arc::new(Mutex::new(RAM::new(BANK_SIZE)));
+        let hi_bank = Arc::new(Mutex::new(RAM::new(BANK_SIZE)));
         let bank_status = Arc::new(AtomicU8::new(3));
         (Self {
             bank_control:   0,
@@ -89,7 +89,7 @@ impl ARM9SharedRAM {
 }
 
 impl SharedRAM for ARM9SharedRAM {
-    fn get_bank(&self, addr: u32) -> Option<MutexGuard<WRAM>> {
+    fn get_bank(&self, addr: u32) -> Option<MutexGuard<RAM>> {
         match self.bank_control {
             0 => if u32::test_bit(addr, 14) {   // 0x4000
                 Some(self.hi_bank.lock())
@@ -108,8 +108,8 @@ impl SharedRAM for ARM9SharedRAM {
 pub struct ARM7SharedRAM {
     bank_status:    Arc<AtomicU8>,
 
-    lo_bank:        Arc<Mutex<WRAM>>,
-    hi_bank:        Arc<Mutex<WRAM>>,
+    lo_bank:        Arc<Mutex<RAM>>,
+    hi_bank:        Arc<Mutex<RAM>>,
 }
 
 impl ARM7SharedRAM {
@@ -119,7 +119,7 @@ impl ARM7SharedRAM {
 }
 
 impl SharedRAM for ARM7SharedRAM {
-    fn get_bank(&self, addr: u32) -> Option<MutexGuard<WRAM>> {
+    fn get_bank(&self, addr: u32) -> Option<MutexGuard<RAM>> {
         match self.bank_status.load(Ordering::Acquire) {
             1 => Some(self.lo_bank.lock()),
             2 => Some(self.hi_bank.lock()),

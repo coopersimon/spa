@@ -13,7 +13,7 @@ use bitflags::bitflags;
 
 use crate::{
     utils::bits::{u8, u32},
-    common::mem::wram::WRAM,
+    common::mem::ram::RAM,
 };
 use super::{
     memory::DS9MemoryBus,
@@ -30,8 +30,8 @@ const DTCM_MASK: u32 = u32::MAX - (DATA_TCM_SIZE - 1);
 /// Includes Cache and TCM.
 pub struct DS9InternalMem<R: Renderer> {
 
-    instr_tcm:  WRAM,
-    data_tcm:   WRAM,
+    instr_tcm:  RAM,
+    data_tcm:   RAM,
 
     instr_cache:    Cache,
     data_cache:     Cache,
@@ -63,8 +63,8 @@ pub struct DS9InternalMem<R: Renderer> {
 impl<R: Renderer> DS9InternalMem<R> {
     pub fn new(mem_bus: DS9MemoryBus<R>) -> Self {
         Self {
-            instr_tcm:  WRAM::new(INSTR_TCM_SIZE as usize),
-            data_tcm:   WRAM::new(DATA_TCM_SIZE as usize),
+            instr_tcm:  RAM::new(INSTR_TCM_SIZE as usize),
+            data_tcm:   RAM::new(DATA_TCM_SIZE as usize),
 
             instr_cache:    Cache::new(64),
             data_cache:     Cache::new(32),
