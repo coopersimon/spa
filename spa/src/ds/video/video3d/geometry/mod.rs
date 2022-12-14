@@ -8,7 +8,7 @@ use matrix::*;
 use lighting::*;
 use clip::*;
 
-use fixed::{types::{I4F12, I20F12, I23F9, I12F4, I40F24}, traits::ToFixed};
+use fixed::{types::{I4F12, I12F4, I40F24}, traits::ToFixed};
 use crate::utils::{
     bits, bits::u32, bytes
 };
@@ -37,8 +37,6 @@ const QUAD_STRIP_ORDER: [usize; 4] = [0, 1, 3, 2];
 
 pub struct GeometryEngine {
     pub clipping_unit:  ClippingUnit,
-    /// Use W or Z value for depth-buffering.
-    w_buffer:       bool,
     /// Test w against this value for 1-dot polygons.
     dot_polygon_w:  Depth,
 
@@ -79,7 +77,6 @@ impl GeometryEngine {
     pub fn new() -> Self {
         Self {
             clipping_unit:  ClippingUnit::new(),
-            w_buffer:       false,
             dot_polygon_w:  Depth::from_bits(0x7FFF << 6),
 
             matrices:       Box::new(MatrixUnit::new()),
@@ -120,7 +117,7 @@ impl GeometryEngine {
     /// Set values for next frame.
     /// Actual swapping of polygon/vertex buffers happens outside.
     pub fn swap_buffers(&mut self, data: u32) {
-        self.w_buffer = u32::test_bit(data, 1);
+        self.clipping_unit.set_w_buffer(u32::test_bit(data, 1));
     }
 
     pub fn set_vertex_colour(&mut self, data: u32) -> isize {
@@ -438,26 +435,19 @@ impl GeometryEngine {
         // Transform the vertex.
         // Result is a I12F12.
         let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
+
         let w = transformed_vertex.w().to_fixed::<I40F24>();
         let w2 = I40F24::ONE.checked_div(w * 2).unwrap_or(I40F24::MAX);
         let x = (transformed_vertex.x().to_fixed::<I40F24>() + w) * w2;
         let y = I40F24::ONE - (transformed_vertex.y().to_fixed::<I40F24>() + w) * w2;
         let z = (transformed_vertex.z().to_fixed::<I40F24>() + w) * w2;
 
-        let depth = if self.w_buffer {
-            w.to_fixed::<Depth>()
-        } else {
-            (z * 0x7FFF).to_fixed::<Depth>()
-        };
-        
         self.staged_polygon[self.staged_index] = StagedVertex {
             position: Vector::new([
                 x.to_fixed::<N>(), y.to_fixed::<N>(), z.to_fixed::<N>(), w.to_fixed::<N>()
             ]),
-            screen_p:   self.clipping_unit.get_screen_coords(x.to_fixed::<N>(), y.to_fixed::<N>()),
             colour:     self.lighting.get_vertex_colour(),
             tex_coords: self.trans_tex_coords.clone(),
-            depth: depth,
 
             needs_clip: None,
             idx:        None
@@ -558,7 +548,7 @@ impl GeometryEngine {
 
             let v0 = &self.staged_polygon[stage_index_0];
             let v1 = &self.staged_polygon[stage_index_1];
-            let segment_size = (v1.screen_p.x - v0.screen_p.x) * (v1.screen_p.y + v0.screen_p.y);
+            let segment_size = (v1.position.x() - v0.position.x()) * (v1.position.y() + v0.position.y());
             acc + segment_size
         });
 
@@ -576,29 +566,28 @@ impl GeometryEngine {
     fn test_in_view(&mut self) -> bool {
         let mut intersects_far_plane = false;
         
-        //let X_MAX = N::ONE - N::from_bits(1);
-        //let Y_MAX = N::ONE - N::from_bits(1);
-        
         for stage_idx in 0..self.stage_size {
             let vertex = &mut self.staged_polygon[stage_idx];
             if vertex.needs_clip.is_none() {
                 // Calc if in view.
-                let needs_clip = vertex.position.x() < I20F12::ZERO ||
-                    vertex.position.x() > I20F12::ONE ||
-                    vertex.position.y() < I20F12::ZERO ||
-                    vertex.position.y() > I20F12::ONE/* ||
-                    vertex.position.z() < I20F12::ZERO ||
-                    vertex.position.z() >= I20F12::ONE*/;
+                // TODO: optim: calc which planes it clips exactly.
+                let needs_clip = vertex.position.x() < N::ZERO ||
+                    vertex.position.x() > N::ONE ||
+                    vertex.position.y() < N::ZERO ||
+                    vertex.position.y() > N::ONE ||
+                    vertex.position.z() < N::ZERO ||
+                    vertex.position.z() > N::ONE;
                 vertex.needs_clip = Some(needs_clip);
             };
 
             intersects_far_plane = intersects_far_plane || (
-                vertex.position.z() > I23F9::ONE
+                vertex.position.z() >= N::ONE
             );
         }
 
         // !(intersects_far_plane && !self.polygon_attrs.contains(PolygonAttrs::FAR_PLANE_CLIP))
         !intersects_far_plane
+        //true
     }
 
     /// Test one-dot display for the current polygon.
@@ -607,7 +596,7 @@ impl GeometryEngine {
     /// optionally test against the one-dot depth value.
     fn test_one_dot_display(&self) -> bool {
         // Only do this test if the polygon attr is set to 0.
-        if !self.polygon_attrs.contains(PolygonAttrs::RENDER_DOT) {
+        /*if !self.polygon_attrs.contains(PolygonAttrs::RENDER_DOT) {
             let v0 = &self.staged_polygon[0];
             let screen_x = v0.screen_p.x.to_num::<i16>();
             let screen_y = v0.screen_p.y.to_num::<i16>();
@@ -627,14 +616,16 @@ impl GeometryEngine {
             dot_w <= self.dot_polygon_w
         } else {
             true
-        }
+        }*/
+        //TODO...
+        true
     }
 
     /// Clip the vertices, producing 1 or 2 new vertices per clip.
     /// 
     /// It will only output the polygon if some of the vertices are inside the view frustrum.
     fn clip_and_emit_polygon(&mut self) {
-        let mut staged_polygon = StagedPolygon {
+        let mut output_polygon = StagedPolygon {
             polygon: Polygon {
                 attrs:          self.polygon_attrs,
                 tex:            self.texture_attrs,
@@ -645,51 +636,36 @@ impl GeometryEngine {
             max_y: N::ZERO,
             min_y: N::MAX
         };
-        
-        let mut out_clips = [None, None, None, None];
-        let mut in_clips = [None, None, None, None];
 
+        let mut out_polygon = Vec::new();
         for n in 0..self.stage_size {
             let current_index = self.output_order[n];
             let stage_index = (self.staged_index + current_index) % self.stage_size;
-            
-            if self.staged_polygon[stage_index].needs_clip.unwrap() {
-                let vertex = &self.staged_polygon[stage_index];
+            out_polygon.push(self.staged_polygon[stage_index].clone());
+        }
+        let mut in_polygon = Vec::new();
 
-                let prev_index = self.output_order[(self.stage_size + n - 1) % self.stage_size];
-                let stage_index_prev = (self.staged_index + prev_index) % self.stage_size;
-                let prev_vtx = &self.staged_polygon[stage_index_prev];
-                self.clipping_unit.clip(true, vertex, prev_vtx, &mut out_clips, &mut in_clips, &mut staged_polygon);
-                
-                let next_index = self.output_order[(n + 1) % self.stage_size];
-                let stage_index_next = (self.staged_index + next_index) % self.stage_size;
-                let next_vtx = &self.staged_polygon[stage_index_next];
-                self.clipping_unit.clip(false, vertex, next_vtx, &mut out_clips, &mut in_clips, &mut staged_polygon);
+        // Clip against each plane.
+        // TODO: only test against planes that it clips
+        for plane in ClipPlane::all() {
+            std::mem::swap(&mut in_polygon, &mut out_polygon);
+            out_polygon.clear();
 
-            } else {
-                // TODO: store vtx indexes in separate place
-                let vertex = &mut self.staged_polygon[stage_index];
+            self.clipping_unit.clip(*plane, &in_polygon, &mut out_polygon);
 
-                staged_polygon.max_y = std::cmp::max(staged_polygon.max_y, vertex.screen_p.y);
-                staged_polygon.min_y = std::cmp::min(staged_polygon.min_y, vertex.screen_p.y);
-
-                if let Some(idx) = vertex.idx {
-                    staged_polygon.polygon.add_vertex_index(idx);
-                } else {
-                    let idx = self.clipping_unit.polygon_ram.insert_vertex(Vertex {
-                        screen_p:   vertex.screen_p.clone(),
-                        depth:      vertex.depth,
-                        colour:     vertex.colour,
-                        tex_coords: vertex.tex_coords.clone()
-                    });
-                    vertex.idx = Some(idx);
-                    staged_polygon.polygon.add_vertex_index(idx);
-                }
+            if out_polygon.is_empty() {
+                return;
             }
         }
 
-        if !staged_polygon.polygon.vertex_indices.is_empty() && staged_polygon.polygon.vertex_indices.len() >= 3 {
-            self.clipping_unit.polygon_ram.insert_polygon(staged_polygon.polygon, staged_polygon.max_y, staged_polygon.min_y);
+        if out_polygon.len() < 3 {
+            println!("warning! small polygon");
         }
+
+        for vertex in &mut out_polygon {
+            self.clipping_unit.add_vertex(&mut output_polygon, vertex);
+        }
+
+        self.clipping_unit.polygon_ram.insert_polygon(output_polygon.polygon, output_polygon.max_y, output_polygon.min_y);
     }
 }
