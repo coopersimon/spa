@@ -8,7 +8,7 @@ use matrix::*;
 use lighting::*;
 use clip::*;
 
-use fixed::{types::{I4F12, I12F4, I40F24}, traits::ToFixed};
+use fixed::{types::{I4F12, I12F4}, traits::ToFixed};
 use crate::utils::{
     bits, bits::u32, bytes
 };
@@ -436,16 +436,8 @@ impl GeometryEngine {
         // Result is a I12F12.
         let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
 
-        let w = transformed_vertex.w().to_fixed::<I40F24>();
-        let w2 = I40F24::ONE.checked_div(w * 2).unwrap_or(I40F24::MAX);
-        let x = (transformed_vertex.x().to_fixed::<I40F24>() + w) * w2;
-        let y = I40F24::ONE - (transformed_vertex.y().to_fixed::<I40F24>() + w) * w2;
-        let z = (transformed_vertex.z().to_fixed::<I40F24>() + w) * w2;
-
         self.staged_polygon[self.staged_index] = StagedVertex {
-            position: Vector::new([
-                x.to_fixed::<N>(), y.to_fixed::<N>(), z.to_fixed::<N>(), w.to_fixed::<N>()
-            ]),
+            position:   transformed_vertex,
             colour:     self.lighting.get_vertex_colour(),
             tex_coords: self.trans_tex_coords.clone(),
 
@@ -552,9 +544,9 @@ impl GeometryEngine {
             acc + segment_size
         });
 
-        if size > N::ZERO {
+        if size < N::ZERO {
             self.polygon_attrs.contains(PolygonAttrs::RENDER_FRONT)
-        } else if size < N::ZERO {
+        } else if size > N::ZERO {
             self.polygon_attrs.contains(PolygonAttrs::RENDER_BACK)
         } else {
             // Always display line polygons.
@@ -581,13 +573,11 @@ impl GeometryEngine {
             };
 
             intersects_far_plane = intersects_far_plane || (
-                vertex.position.z() >= N::ONE
+                vertex.position.z() >= vertex.position.w()
             );
         }
 
-        // !(intersects_far_plane && !self.polygon_attrs.contains(PolygonAttrs::FAR_PLANE_CLIP))
-        !intersects_far_plane
-        //true
+        !(intersects_far_plane && !self.polygon_attrs.contains(PolygonAttrs::FAR_PLANE_CLIP))
     }
 
     /// Test one-dot display for the current polygon.
@@ -654,12 +644,14 @@ impl GeometryEngine {
             self.clipping_unit.clip(*plane, &in_polygon, &mut out_polygon);
 
             if out_polygon.is_empty() {
+                /*if *plane == ClipPlane::Left {
+                    println!("Culling {:?}", plane);
+                    for p in &in_polygon {
+                        println!("  P: {:?}", p.position.elements);
+                    }
+                }*/
                 return;
             }
-        }
-
-        if out_polygon.len() < 3 {
-            println!("warning! small polygon");
         }
 
         for vertex in &mut out_polygon {
