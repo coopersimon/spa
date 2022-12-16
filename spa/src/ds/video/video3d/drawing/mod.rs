@@ -19,6 +19,7 @@ struct Attributes {
     opaque_id:  u8,
     trans_id:   u8,
     fog:        bool,
+    edge:       bool,
 }
 
 /// Render NDS 3D graphics.
@@ -87,6 +88,7 @@ impl Software3DRenderer {
                         opaque_id:  render_engine.clear_poly_id,
                         trans_id:   render_engine.clear_poly_id,
                         fog:        u16::test_bit(depth, 15),
+                        edge:       false,
                     };
     
                     let idx = y_idx_base + (x as usize);
@@ -101,6 +103,7 @@ impl Software3DRenderer {
                 opaque_id:  render_engine.clear_poly_id,
                 trans_id:   render_engine.clear_poly_id,
                 fog:        render_engine.fog_enabled,
+                edge:       false,
             };
             self.attr_buffer.fill(clear_attrs);
             self.depth_buffer.fill(render_engine.clear_depth);
@@ -114,31 +117,35 @@ impl Software3DRenderer {
             let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
             let mode = polygon.attrs.mode();
             
-            for y_idx in p.y_min.to_num::<u8>()..=p.y_max.ceil().to_num::<u8>() {
+            let (y_min, y_max) = (p.y_min.to_num::<u8>(), std::cmp::min(p.y_max.ceil().to_num::<u8>(), 191));
+            for y_idx in y_min..=y_max {
 
                 let y = N::from_num(y_idx);
                 let y_idx_base = (y_idx as usize) * 256;
 
-                let b = Self::find_intersect_points(render_engine, polygon, y);
-                if b.is_none() {
-                    // TODO: why _can_ this return none?
-                    continue;
-                }
+                let b = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max));
                 let [vtx_a, vtx_b] = b.unwrap();
 
-                let (min, max) = (vtx_a.screen_p.x.to_num::<i16>(), vtx_b.screen_p.x.ceil().to_num::<i16>());
-                let x_diff = (max - min).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
+                let vertical_edge = (y_idx == y_min) || (y_idx == y_max);
 
-                // TODO: wireframe
-                for x_idx in min..=max {
-                    let x = N::from_num(x_idx);// + N::from_num(0.5);
-                    let factor_b = ((x - vtx_a.screen_p.x).to_fixed::<I40F24>() * x_diff).to_fixed::<N>();
+                let (min, max) = (vtx_a.screen_p.x.floor().to_num::<i16>(), vtx_b.screen_p.x.ceil().to_num::<i16>());
+                let x_diff = (vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
+
+                let x_max = std::cmp::min(max, 255);
+                for x_idx in min..=x_max {
+                    let x = N::from_num(x_idx);
+                    let factor_b = ((x - vtx_a.screen_p.x).to_fixed::<I40F24>() * x_diff).to_fixed::<N>().clamp(N::ZERO, N::ONE);
                     let factor_a = N::ONE - factor_b;
 
                     let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
 
                     let idx = y_idx_base + (x_idx as usize);
                     if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[idx], depth) {
+                        continue;
+                    }
+
+                    let edge = vertical_edge || (x_idx == min) || (x_idx == x_max);
+                    if !edge && polygon.is_wireframe() {
                         continue;
                     }
 
@@ -161,6 +168,7 @@ impl Software3DRenderer {
                         self.depth_buffer[idx] = depth;
                         self.attr_buffer[idx].opaque_id = polygon.attrs.id();
                         self.attr_buffer[idx].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
+                        self.attr_buffer[idx].edge = edge;
                     }
                 }
 
@@ -183,22 +191,19 @@ impl Software3DRenderer {
         let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
         let mode = polygon.attrs.mode();
         
-        for y_idx in p.y_min.to_num::<u8>()..=p.y_max.ceil().to_num::<u8>() {
+        let (y_min, y_max) = (p.y_min.to_num::<u8>(), std::cmp::min(p.y_max.ceil().to_num::<u8>(), 191));
+        for y_idx in y_min..=y_max {
 
             let y = N::from_num(y_idx);
             let y_idx_base = (y_idx as usize) * 256;
 
-            let b = Self::find_intersect_points(render_engine, polygon, y);
-            if b.is_none() {
-                // TODO: why _can_ this return none?
-                continue;
-            }
+            let b = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max));
             let [vtx_a, vtx_b] = b.unwrap();
 
-            let (min, max) = (vtx_a.screen_p.x.to_num::<i16>(), vtx_b.screen_p.x.ceil().to_num::<i16>());
-            let x_diff = (max - min).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
+            let (min, max) = (vtx_a.screen_p.x.floor().to_num::<i16>(), vtx_b.screen_p.x.ceil().to_num::<i16>());
+            let x_diff = (vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
 
-            for x_idx in min..=max {
+            for x_idx in min..=std::cmp::min(max, 255) {
                 let id = polygon.attrs.id();
                 let idx = y_idx_base + (x_idx as usize);
                 // TODO: only extract for shadow polygons?
@@ -207,8 +212,8 @@ impl Software3DRenderer {
                     continue;
                 }
 
-                let x = N::from_num(x_idx);// + N::from_num(0.5);
-                let factor_b = ((x - vtx_a.screen_p.x).to_fixed::<I40F24>() * x_diff).to_fixed::<N>();
+                let x = N::from_num(x_idx);
+                let factor_b = ((x - vtx_a.screen_p.x).to_fixed::<I40F24>() * x_diff).to_fixed::<N>().clamp(N::ZERO, N::ONE);
                 let factor_a = N::ONE - factor_b;
 
                 let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
@@ -363,7 +368,8 @@ impl Software3DRenderer {
             }
 
             // Weight of point a (normalised between 0-1)
-            let factor_a = (y - vtx_b.screen_p.y).to_fixed::<I40F24>().checked_div((vtx_a.screen_p.y - vtx_b.screen_p.y).to_fixed::<I40F24>()).unwrap_or(I40F24::ONE).to_fixed::<N>();   // TODO: one dot polygon?
+            let factor_a = (y - vtx_b.screen_p.y).to_fixed::<I40F24>().checked_div((vtx_a.screen_p.y - vtx_b.screen_p.y).to_fixed::<I40F24>())
+                .unwrap_or(I40F24::ONE).to_fixed::<N>().clamp(N::ZERO, N::ONE);   // TODO: one dot polygon?
             // X coordinate where the render line intersects the polygon line.
             let intersect_x = factor_a.to_fixed::<I40F24>() * (vtx_a.screen_p.x - vtx_b.screen_p.x).to_fixed::<I40F24>() + vtx_b.screen_p.x.to_fixed::<I40F24>();
             let factor_b = N::ONE - factor_a;
@@ -427,54 +433,41 @@ impl Software3DRenderer {
     /// Extract texture coordinates.
     fn get_tex_coords(tex_coords: TexCoords, tex_attrs: TextureAttrs) -> (u32, u32) {
         let width = tex_attrs.width();
-        let height = tex_attrs.height();
         let base_tex_s = tex_coords.s.to_num::<i32>();
-        let base_tex_t = tex_coords.t.to_num::<i32>();
-        let unsigned_tex_s = base_tex_s as u32;
-        let unsigned_tex_t = base_tex_t as u32;
 
         let tex_s = if tex_attrs.contains(TextureAttrs::REPEAT_S) {
+            let unsigned_tex_s = base_tex_s as u32;
             let mask = width - 1;
-            if tex_attrs.contains(TextureAttrs::FLIP_S) {
-                if (unsigned_tex_s & width) == 0 {  // Don't flip
-                    unsigned_tex_s & mask
-                } else {    // flip
-                    let s = unsigned_tex_s & mask;
-                    mask - s
-                }
+            if tex_attrs.contains(TextureAttrs::FLIP_S) && (unsigned_tex_s & width) != 0 {
+                // Flip
+                let s = unsigned_tex_s & mask;
+                mask - s
             } else {
                 unsigned_tex_s & mask
             }
         } else {
-            if base_tex_s >= (width as i32) {
-                width - 1
-            } else if base_tex_s < 0 {
-                0
-            } else {
-                unsigned_tex_s
-            }
+            // Clamp
+            let max = (width - 1) as i32;
+            std::cmp::min(max, std::cmp::max(base_tex_s, 0)) as u32
         };
         
+        let height = tex_attrs.height();
+        let base_tex_t = tex_coords.t.to_num::<i32>();
+
         let tex_t = if tex_attrs.contains(TextureAttrs::REPEAT_T) {
+            let unsigned_tex_t = base_tex_t as u32;
             let mask = height - 1;
-            if tex_attrs.contains(TextureAttrs::FLIP_T) {
-                if (unsigned_tex_t & height) == 0 {  // Don't flip
-                    unsigned_tex_t & mask
-                } else {    // flip
-                    let t = unsigned_tex_t & mask;
-                    mask - t
-                }
+            if tex_attrs.contains(TextureAttrs::FLIP_T) && (unsigned_tex_t & height) != 0 {
+                // Flip
+                let t = unsigned_tex_t & mask;
+                mask - t
             } else {
                 unsigned_tex_t & mask
             }
         } else {
-            if base_tex_t >= (height as i32) {
-                height - 1
-            } else if base_tex_t < 0 {
-                0
-            } else {
-                unsigned_tex_t
-            }
+            // Clamp
+            let max = (height - 1) as i32;
+            std::cmp::min(max, std::cmp::max(base_tex_t, 0)) as u32
         };
 
         (tex_s, tex_t)
@@ -663,10 +656,10 @@ impl Software3DRenderer {
                 _ => unreachable!()
             }
         } else {
-            if block_data == 3 && transparent_3 {
+            let palette_offset = block_data as u32;
+            if palette_offset == 3 && transparent_3 {
                 ColourAlpha::transparent()
             } else {
-                let palette_offset = block_data as u32;
                 let colour = self.palette_cache.get_tex_colour(palette_addr + palette_offset);
                 ColourAlpha {col: colour, alpha: 0x1F}
             }
@@ -787,7 +780,7 @@ impl Software3DRenderer {
             }
         } else {
             let frag_alpha = (frag_colour.alpha + 1) as u16;
-            let buffer_alpha = (31 - frag_colour.alpha) as u16;
+            let buffer_alpha = (0x1F - frag_colour.alpha) as u16;
             let r = ((frag_colour.col.r as u16) * frag_alpha) + ((buffer_colour.col.r as u16) * buffer_alpha);
             let g = ((frag_colour.col.g as u16) * frag_alpha) + ((buffer_colour.col.g as u16) * buffer_alpha);
             let b = ((frag_colour.col.b as u16) * frag_alpha) + ((buffer_colour.col.b as u16) * buffer_alpha);
