@@ -20,8 +20,8 @@ pub enum ClipPlane {
 impl ClipPlane {
     pub fn all() -> &'static[Self] {
         use ClipPlane::*;
-        const ALL: [ClipPlane; 6] = [Near, Far, Bottom, Top, Left, Right];
-        &ALL
+        const ALL: &[ClipPlane] = &[Near, Far, Left, Right, Bottom, Top];
+        ALL
     }
 }
 
@@ -33,12 +33,6 @@ pub struct StagedVertex {
 
     pub needs_clip: Option<bool>,
     pub idx:        Option<u16>,
-}
-
-pub struct StagedPolygon {
-    pub polygon:    Polygon,
-    pub max_y:      N,
-    pub min_y:      N,
 }
 
 pub struct ClippingUnit {
@@ -78,6 +72,51 @@ impl ClippingUnit {
     pub fn set_w_buffer(&mut self, w_buffer: bool) {
         self.w_buffer = w_buffer;
     }
+
+    /// Add a polygon and vertices to the vertex list RAM.
+    /// 
+    /// Also make a note of its index in the current polygon.
+    pub fn add_polygon(&mut self, mut staged_polygon: Polygon, vertices: &mut [StagedVertex]) {
+        let (mut min_y, mut max_y) = (N::MAX, N::ZERO);
+
+        let vertices_out = vertices.iter().map(|vertex| {
+
+            let w = vertex.position.w().to_fixed::<I40F24>();
+            let w2 = (w * 2).checked_recip().unwrap_or(I40F24::MAX);
+            let x = (vertex.position.x().to_fixed::<I40F24>() + w) * w2;
+            let y = I40F24::ONE - (vertex.position.y().to_fixed::<I40F24>() + w) * w2;
+            let z = (vertex.position.z().to_fixed::<I40F24>() + w) * w2;
+
+            let screen_p = self.get_screen_coords(x.to_fixed(), y.to_fixed());
+            max_y = std::cmp::max(max_y, screen_p.y);
+            min_y = std::cmp::min(min_y, screen_p.y);
+            // TODO: re-use vertices...
+            /*let idx = if let Some(idx) = vertex.idx {
+                idx
+            } else {*/
+                let depth = if self.w_buffer {
+                    w.to_fixed::<Depth>()
+                } else {
+                    (z * 0x7FFF).to_fixed::<Depth>()
+                };
+                let out_vertex = Vertex {
+                    screen_p,
+                    depth: depth,
+                    colour: vertex.colour,
+                    tex_coords: vertex.tex_coords
+                };
+                let idx = self.polygon_ram.insert_vertex(out_vertex.clone());
+                //vertex.idx = Some(idx);
+                //idx
+            //};
+            staged_polygon.add_vertex_index(idx);
+            out_vertex
+        }).collect::<Vec<_>>();
+
+        if test_winding(&staged_polygon, &vertices_out) {
+            self.polygon_ram.insert_polygon(staged_polygon, max_y, min_y);
+        }
+    }
     
     pub fn get_screen_coords(&self, x: N, y: N) -> Coords {
         let clamped_x = x.clamp(N::ZERO, N::ONE);
@@ -87,41 +126,6 @@ impl ClippingUnit {
         Coords { x: screen_x, y: screen_y }
     }
 
-    /// Add a vertex to the vertex list RAM.
-    /// 
-    /// Also make a note of its index in the current polygon.
-    pub fn add_vertex(&mut self, staged_polygon: &mut StagedPolygon, vertex: &mut StagedVertex) {
-
-        let w = vertex.position.w().to_fixed::<I40F24>();
-        let w2 = I40F24::ONE.checked_div(w * 2).unwrap_or(I40F24::MAX);
-        let x = (vertex.position.x().to_fixed::<I40F24>() + w) * w2;
-        let y = I40F24::ONE - (vertex.position.y().to_fixed::<I40F24>() + w) * w2;
-        let z = (vertex.position.z().to_fixed::<I40F24>() + w) * w2;
-
-        let screen_p = self.get_screen_coords(x.to_fixed(), y.to_fixed());
-        staged_polygon.max_y = std::cmp::max(staged_polygon.max_y, screen_p.y);
-        staged_polygon.min_y = std::cmp::min(staged_polygon.min_y, screen_p.y);
-        let idx = if let Some(idx) = vertex.idx {
-            idx
-        } else {
-            let depth = if self.w_buffer {
-                w.to_fixed::<Depth>()
-            } else {
-                (z * 0x7FFF).to_fixed::<Depth>()
-            };
-            let out_vertex = Vertex {
-                screen_p,
-                depth: depth,
-                colour: vertex.colour,
-                tex_coords: vertex.tex_coords
-            };
-            let idx = self.polygon_ram.insert_vertex(out_vertex);
-            vertex.idx = Some(idx);
-            idx
-        };
-        staged_polygon.polygon.add_vertex_index(idx);
-    }
-    
     pub fn clip(&mut self, plane: ClipPlane, in_polygon: &[StagedVertex], out_polygon: &mut Vec<StagedVertex>) {
         use ClipPlane::*;
         const X: usize = 0;
@@ -152,12 +156,12 @@ impl ClippingUnit {
                 // B clips
                 let over = ((wb * val) - vtx_b.position.elements[dim]).to_fixed::<I40F24>();
                 let under = (vtx_a.position.elements[dim] - vtx_b.position.elements[dim] - (wa * val) + (wb * val)).to_fixed::<I40F24>();
-                let factor_a = (over / under).to_fixed::<N>();
+                let factor_a = (over / under).clamp(I40F24::ZERO, I40F24::ONE);
 
-                let factor_b = N::ONE - factor_a;
+                let factor_b = I40F24::ONE - factor_a;
                 let position = interpolate_position(&vtx_a.position, &vtx_b.position, factor_a, factor_b);
                 
-                let clip_vtx_b = Self::interpolate(vtx_a, vtx_b, factor_a, factor_b, position);
+                let clip_vtx_b = Self::interpolate(vtx_a, vtx_b, factor_a.to_fixed(), factor_b.to_fixed(), position);
 
                 out_polygon.push(vtx_a.clone());
                 out_polygon.push(clip_vtx_b);
@@ -165,12 +169,12 @@ impl ClippingUnit {
                 // A clips
                 let over = ((wb * val) - vtx_b.position.elements[dim]).to_fixed::<I40F24>();
                 let under = (vtx_a.position.elements[dim] - vtx_b.position.elements[dim] - (wa * val) + (wb * val)).to_fixed::<I40F24>();
-                let factor_a = (over / under).to_fixed::<N>();
+                let factor_a = (over / under).clamp(I40F24::ZERO, I40F24::ONE);
 
-                let factor_b = N::ONE - factor_a;
+                let factor_b = I40F24::ONE - factor_a;
                 let position = interpolate_position(&vtx_a.position, &vtx_b.position, factor_a, factor_b);
                 
-                let clip_vtx_a = Self::interpolate(vtx_a, vtx_b, factor_a, factor_b, position);
+                let clip_vtx_a = Self::interpolate(vtx_a, vtx_b, factor_a.to_fixed(), factor_b.to_fixed(), position);
 
                 out_polygon.push(clip_vtx_a);
             }
@@ -189,11 +193,41 @@ impl ClippingUnit {
     }
 }
 
-fn interpolate_position(position_a: &Vector<4>, position_b: &Vector<4>, factor_a: N, factor_b: N) -> Vector<4> {
+fn interpolate_position(position_a: &Vector<4>, position_b: &Vector<4>, factor_a: I40F24, factor_b: I40F24) -> Vector<4> {
+    let x = factor_a * position_a.x().to_fixed::<I40F24>() + factor_b * position_b.x().to_fixed::<I40F24>();
+    let y = factor_a * position_a.y().to_fixed::<I40F24>() + factor_b * position_b.y().to_fixed::<I40F24>();
+    let z = factor_a * position_a.z().to_fixed::<I40F24>() + factor_b * position_b.z().to_fixed::<I40F24>();
+    let w = factor_a * position_a.w().to_fixed::<I40F24>() + factor_b * position_b.w().to_fixed::<I40F24>();
     Vector::new([
-        factor_a * position_a.x() + factor_b * position_b.x(),
-        factor_a * position_a.y() + factor_b * position_b.y(),
-        factor_a * position_a.z() + factor_b * position_b.z(),
-        factor_a * position_a.w() + factor_b * position_b.w(),
+        x.to_fixed(),
+        y.to_fixed(),
+        z.to_fixed(),
+        w.to_fixed(),
     ])
+}
+
+/// Test winding for the current polygon.
+/// This checks if the front or back face is showing,
+/// and if that face should be displayed.
+/// 
+/// Returns true if the polygon should be shown.
+fn test_winding(polygon: &Polygon, vertices: &[Vertex]) -> bool {
+    let size = (0..vertices.len()).fold(N::ZERO, |acc, n| {
+        let current_index = n;
+        let next_index = (n + 1) % vertices.len();
+
+        let v0 = &vertices[current_index];
+        let v1 = &vertices[next_index];
+        let segment_size = (v1.screen_p.x - v0.screen_p.x) * (v1.screen_p.y + v0.screen_p.y);
+        acc + segment_size
+    });
+
+    if size > N::ZERO {
+        polygon.attrs.contains(PolygonAttrs::RENDER_FRONT)
+    } else if size < N::ZERO {
+        polygon.attrs.contains(PolygonAttrs::RENDER_BACK)
+    } else {
+        // Always display line polygons.
+        true
+    }
 }

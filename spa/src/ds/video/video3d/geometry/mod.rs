@@ -328,6 +328,7 @@ impl GeometryEngine {
     }
 
     pub fn box_test(&mut self, args: &[u32]) -> isize {
+        println!("BOX TEST!");
         use crate::utils::bits::u8;
 
         let base_x = I4F12::from_bits(bytes::u32::lo(args[0]) as i16);
@@ -374,6 +375,7 @@ impl GeometryEngine {
     }
 
     pub fn position_test(&mut self, args: &[u32]) -> isize {
+        println!("POS TEST!");
         self.current_vertex[0] = I4F12::from_bits(bytes::u32::lo(args[0]) as i16);
         self.current_vertex[1] = I4F12::from_bits(bytes::u32::hi(args[0]) as i16);
         self.current_vertex[2] = I4F12::from_bits(bytes::u32::lo(args[1]) as i16);
@@ -503,74 +505,24 @@ impl GeometryEngine {
         }
     }
 
-    /// Test if this polygon should be output, and if so write it to buffers.
-    /// 
-    /// Test:
-    /// - If all vertices are off-screen
-    /// - Winding of vertices
-    /// - One-dot display
+    /// Test if this polygon should be output, and if so clip and write it to buffers.
     fn try_emit(&mut self) {
-        if !self.test_winding() {
-            return;
-        }
-
-        if !self.test_in_view() {
-            return;
+        if self.test_clip() {
+            self.clip_and_emit_polygon();
         }
 
         if !self.test_one_dot_display() {
             return;
         }
-        
-        self.clip_and_emit_polygon();
     }
 
-    /// Test winding for the current polygon.
-    /// This checks if the front or back face is showing,
-    /// and if that face should be displayed.
-    /// 
-    /// Returns true if the polygon should be shown.
-    fn test_winding(&self) -> bool {
-        let size = (0..self.stage_size).fold(N::ZERO, |acc, n| {
-            let current_index = self.output_order[n];
-            let next_index = self.output_order[(n + 1) % self.stage_size];
-
-            let stage_index_0 = (self.staged_index + current_index) % self.stage_size;
-            let stage_index_1 = (self.staged_index + next_index) % self.stage_size;
-
-            let v0 = &self.staged_polygon[stage_index_0];
-            let v1 = &self.staged_polygon[stage_index_1];
-            let segment_size = (v1.position.x() - v0.position.x()) * (v1.position.y() + v0.position.y());
-            acc + segment_size
-        });
-
-        if size < N::ZERO {
-            self.polygon_attrs.contains(PolygonAttrs::RENDER_FRONT)
-        } else if size > N::ZERO {
-            self.polygon_attrs.contains(PolygonAttrs::RENDER_BACK)
-        } else {
-            // Always display line polygons.
-            true
-        }
-    }
     
-    /// If any vertices are outside the view, mark them for clipping.
-    fn test_in_view(&mut self) -> bool {
+    /// Test if the polygon clips the far plane.
+    fn test_clip(&mut self) -> bool {
         let mut intersects_far_plane = false;
         
         for stage_idx in 0..self.stage_size {
             let vertex = &mut self.staged_polygon[stage_idx];
-            if vertex.needs_clip.is_none() {
-                // Calc if in view.
-                // TODO: optim: calc which planes it clips exactly.
-                let needs_clip = vertex.position.x() < N::ZERO ||
-                    vertex.position.x() > N::ONE ||
-                    vertex.position.y() < N::ZERO ||
-                    vertex.position.y() > N::ONE ||
-                    vertex.position.z() < N::ZERO ||
-                    vertex.position.z() > N::ONE;
-                vertex.needs_clip = Some(needs_clip);
-            };
 
             intersects_far_plane = intersects_far_plane || (
                 vertex.position.z() >= vertex.position.w()
@@ -578,6 +530,41 @@ impl GeometryEngine {
         }
 
         !(intersects_far_plane && !self.polygon_attrs.contains(PolygonAttrs::FAR_PLANE_CLIP))
+    }
+
+    /// Clip the vertices, producing 1 or 2 new vertices per clip.
+    /// 
+    /// It will only output the polygon if some of the vertices are inside the view frustrum.
+    fn clip_and_emit_polygon(&mut self) {
+        let output_polygon = Polygon {
+            attrs:          self.polygon_attrs,
+            tex:            self.texture_attrs,
+            palette:        self.tex_palette,
+            num_vertices:   0,
+            vertex_indices: [0; 8],
+        };
+
+        let mut out_vertices = Vec::new();
+        for current_index in self.output_order {
+            let stage_index = (self.staged_index + current_index) % self.stage_size;
+            out_vertices.push(self.staged_polygon[stage_index].clone());
+        }
+        let mut in_vertices = Vec::new();
+
+        // Clip against each plane.
+        // TODO: only test against planes that it clips
+        for plane in ClipPlane::all() {
+            std::mem::swap(&mut in_vertices, &mut out_vertices);
+            out_vertices.clear();
+
+            self.clipping_unit.clip(*plane, &in_vertices, &mut out_vertices);
+
+            if out_vertices.is_empty() {
+                return;
+            }
+        }
+
+        self.clipping_unit.add_polygon(output_polygon, &mut out_vertices);
     }
 
     /// Test one-dot display for the current polygon.
@@ -609,55 +596,5 @@ impl GeometryEngine {
         }*/
         //TODO...
         true
-    }
-
-    /// Clip the vertices, producing 1 or 2 new vertices per clip.
-    /// 
-    /// It will only output the polygon if some of the vertices are inside the view frustrum.
-    fn clip_and_emit_polygon(&mut self) {
-        let mut output_polygon = StagedPolygon {
-            polygon: Polygon {
-                attrs:          self.polygon_attrs,
-                tex:            self.texture_attrs,
-                palette:        self.tex_palette,
-                num_vertices:   0,
-                vertex_indices: [0; 8],
-            },
-            max_y: N::ZERO,
-            min_y: N::MAX
-        };
-
-        let mut out_polygon = Vec::new();
-        for n in 0..self.stage_size {
-            let current_index = self.output_order[n];
-            let stage_index = (self.staged_index + current_index) % self.stage_size;
-            out_polygon.push(self.staged_polygon[stage_index].clone());
-        }
-        let mut in_polygon = Vec::new();
-
-        // Clip against each plane.
-        // TODO: only test against planes that it clips
-        for plane in ClipPlane::all() {
-            std::mem::swap(&mut in_polygon, &mut out_polygon);
-            out_polygon.clear();
-
-            self.clipping_unit.clip(*plane, &in_polygon, &mut out_polygon);
-
-            if out_polygon.is_empty() {
-                /*if *plane == ClipPlane::Left {
-                    println!("Culling {:?}", plane);
-                    for p in &in_polygon {
-                        println!("  P: {:?}", p.position.elements);
-                    }
-                }*/
-                return;
-            }
-        }
-
-        for vertex in &mut out_polygon {
-            self.clipping_unit.add_vertex(&mut output_polygon, vertex);
-        }
-
-        self.clipping_unit.polygon_ram.insert_polygon(output_polygon.polygon, output_polygon.max_y, output_polygon.min_y);
     }
 }
