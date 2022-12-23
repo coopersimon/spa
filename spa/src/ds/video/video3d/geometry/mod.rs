@@ -328,7 +328,7 @@ impl GeometryEngine {
     }
 
     pub fn box_test(&mut self, args: &[u32]) -> isize {
-        println!("BOX TEST!");
+        //println!("BOX TEST!");
         use crate::utils::bits::u8;
 
         let base_x = I4F12::from_bits(bytes::u32::lo(args[0]) as i16);
@@ -339,9 +339,15 @@ impl GeometryEngine {
         let len_y = I4F12::from_bits(bytes::u32::lo(args[2]) as i16);
         let len_z = I4F12::from_bits(bytes::u32::hi(args[2]) as i16);
 
-        // We fail the test if ALL of the corners of the box are OUTSIDE the view.
+        // The box test passes if any of the faces of the box are inside the view.
+        // I.e. we fail only if the box is completely outside of the view.
+        // We also fail if the view is completely _inside_ the box.
+        // So we are checking for intersecting planes.
+        // We can do this by checking to see if any of the 12 edges of the box
+        // intersect with the view.
         let mut fail_test = true;
 
+        // TODO: test intersecting lines, not vertices.
         // Test to see if each vertex is outside view space.
         for vertex in 0..8_u8 {
             let x = if u8::test_bit(vertex, 0) { base_x + len_x } else { base_x };
@@ -369,13 +375,12 @@ impl GeometryEngine {
             fail_test = fail_test && (outside_x && outside_y && outside_z);
         }
 
-        self.box_test_res = !fail_test;
+        self.box_test_res = true; // !fail_test;
 
         103
     }
 
     pub fn position_test(&mut self, args: &[u32]) -> isize {
-        println!("POS TEST!");
         self.current_vertex[0] = I4F12::from_bits(bytes::u32::lo(args[0]) as i16);
         self.current_vertex[1] = I4F12::from_bits(bytes::u32::hi(args[0]) as i16);
         self.current_vertex[2] = I4F12::from_bits(bytes::u32::lo(args[1]) as i16);

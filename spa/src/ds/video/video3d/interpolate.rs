@@ -1,4 +1,5 @@
 use fixed::traits::ToFixed;
+use fixed::types::I40F24;
 use super::types::{
     Depth, TexCoords
 };
@@ -9,7 +10,13 @@ use crate::common::video::colour::Colour;
 
 #[inline]
 pub fn interpolate_depth(depth_a: Depth, depth_b: Depth, factor_a: N, factor_b: N) -> Depth {
-    ((depth_a.to_fixed::<N>() * factor_a) + (depth_b.to_fixed::<N>() * factor_b)).to_fixed()
+    (depth_a.to_fixed::<N>() * factor_a + depth_b.to_fixed::<N>() * factor_b).to_fixed()
+}
+
+#[inline]
+/// Perspective-correct depth interpolation.
+pub fn interpolate_depth_p(depth_a: Depth, depth_b: Depth, factor_a: N, factor_b: N) -> Depth {
+    ((depth_a.to_fixed::<I40F24>().recip() * factor_a.to_fixed::<I40F24>()) + (depth_b.to_fixed::<I40F24>().recip() * factor_b.to_fixed::<I40F24>())).recip().to_fixed()
 }
 
 #[inline]
@@ -29,4 +36,18 @@ pub fn interpolate_tex_coords(tex_coords_a: TexCoords, tex_coords_b: TexCoords, 
     let s = (tex_coords_a.s.to_fixed::<N>() * factor_a) + (tex_coords_b.s.to_fixed::<N>() * factor_b);
     let t = (tex_coords_a.t.to_fixed::<N>() * factor_a) + (tex_coords_b.t.to_fixed::<N>() * factor_b);
     TexCoords { s: s.to_fixed(), t: t.to_fixed() }
+}
+
+#[inline]
+/// Perspective-correct texture interpolation.
+pub fn interpolate_tex_coords_p(tex_coords_a: TexCoords, tex_coords_b: TexCoords, factor_a: N, factor_b: N, depth_a: Depth, depth_b: Depth) -> TexCoords {
+    let s_a = tex_coords_a.s.to_fixed::<I40F24>() / depth_a.to_fixed::<I40F24>();
+    let s_b = tex_coords_b.s.to_fixed::<I40F24>() / depth_b.to_fixed::<I40F24>();
+    let t_a = tex_coords_a.t.to_fixed::<I40F24>() / depth_a.to_fixed::<I40F24>();
+    let t_b = tex_coords_b.t.to_fixed::<I40F24>() / depth_b.to_fixed::<I40F24>();
+    let s = (s_a * factor_a.to_fixed::<I40F24>()) + (s_b * factor_b.to_fixed::<I40F24>());
+    let t = (t_a * factor_a.to_fixed::<I40F24>()) + (t_b * factor_b.to_fixed::<I40F24>());
+    let d = (depth_a.to_fixed::<I40F24>().recip() * factor_a.to_fixed::<I40F24>()) + (depth_b.to_fixed::<I40F24>().recip() * factor_b.to_fixed::<I40F24>());
+    let div = (d).recip();
+    TexCoords { s: (s * div).to_fixed(), t: (t * div).to_fixed() }
 }

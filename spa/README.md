@@ -64,6 +64,8 @@ DS:
 - Loads of unaligned memory accesses.
 
 ### DS Status of selected games:
+Note that most of these games have not been properly played for a longer duration. Currently the challenge for most games is to ensure they firstly boot, but also can navigate through intro menus and into gameplay.
+
 - Ace Attorney: Seems ok.
 - Age of Empires: Age of Kings: Works OK.
 - Animal Crossing Wild World: Works mostly OK.
@@ -71,44 +73,49 @@ DS:
 - Black Ops: Boots mostly OK, unable to find strings to display for some reason.
 - Civilization Revolution: Mostly OK, 3D precision issues
 - Chrono Trigger: Audio skips a little in intro, but mostly ok otherwise.
-- Dragon Quest IX: Shows intro cards and video. Shows broken screen and freezes. (Timing issues?)
-- Dragon Quest IV: Mostly OK, shows a strange counter in intro
+- Dragon Quest Monsters Joker: Seems OK.
+- Dragon Quest IX: Shows intro cards and video. Game starts mostly OK (3d model never updates?). Actual game has some untextured models
+- Dragon Quest IV: Mostly OK
 - Dragon Quest V: Mostly OK
-- Dragon Quest VI: Slow start, broken intro, mostly OK
-- Final Fantasy Tactics A2: Some flickering and precision issues with 3D stuff (presented as 2D)
+- Dragon Quest VI: Near/Far plane clipping masks everything, broken intro. Actual game is ok when near plane clipping is disabled.
+- Final Fantasy Tactics A2: Intro looks better but now crashes in menu with divide by 0 error
 - Final Fantasy III: Mostly OK, tries to use mode 6 on engine A and crashes.
 - Final Fantasy IV: Mostly OK.
 - Final Fantasy: 4 Heroes of Light: Mostly ok
-- Fire Emblem: Shadow Dragon: Intro missing some graphics. Also in-game intro. Otherwise looks and sounds fine.
-- GTA Chinatown Wars: Titles & menu looks OK, intro 3D is broken
+- Final Fantasy XII: Revenant Wings: Mostly ok, but general frame pacing is completely broken in both videos and (seemingly) gameplay
+- Fire Emblem: Shadow Dragon: Intro missing some graphics (less than before). Otherwise looks and sounds fine.
+- Front Mission: Mostly ok, some minor 2D-as-3D issues.
+- Ghost Trick: Mostly ok
+- GTA Chinatown Wars: Titles & menu looks OK, 3D near plane is clipping everything + looks broken underneath
 - Hotel Dusk: Room 215: Now crashes with an undefined instruction in ITCM.
-- Inazuma Eleven: Seems to work OK.
+- Inazuma Eleven: Mostly ok, text looks borked, also managed to crash with div/0
 - Kirby Super Star: Mostly ok, some audio stream issues when playing video.
-- Mario Kart DS: Titles + menu work ok, 3D visuals are ok but heavy warping + aggressive clipping near camera (perspective correct textures would help here)
-- Mario and Luigi: Bowser's Inside Story: Blank screen
-- Mario and Luigi: Partners in Time: Loads up mostly ok, menu title 3D is ok, intro has serious graphical issues
-- Mario Party DS: Mostly OK. Some precision issues with 3D.
-- Metroid Prime Hunters: Titles and menu mostly fine (aside from precision + stream audio), gameplay works but with near plane clipping issues
-- New Super Mario Bros: Mostly OK. precision issues with 3D graphics
 - LoZ Phantom Hourglass: Just white screen now.
 - LoZ Spirit Tracks: White screen.
-- LEGO Lord of the Rings: Loads up OK, some visibility issues in menus (2D issues?), now gameplay doesn't load
-- LEGO Star Wars II: Mostly OK, some near-plane clipping issues throughout, some graphics have missing pixels on 3D screen. Crashes due to reading beyond end of specular table
+- LEGO Lord of the Rings: Loads up OK, some minor menu issues (2D-as-3D), gameplay doesn't load
+- LEGO Star Wars II: Mostly OK, some graphics have missing pixels. Crashes due to reading beyond end of specular table
+- Mario Kart DS: Mostly ok, depth issues throughout
+- Mario and Luigi: Bowser's Inside Story: Blank screen
+- Mario and Luigi: Partners in Time: Loads up ok, menu title 3D is ok, intro has serious graphical issues
+- Mario Party DS: Mostly OK.
+- Metroid Prime Hunters: Mostly ok, some minor 3d issues in gameplay. Menus have text texturing issues
+- New Super Mario Bros: Mostly OK
 - Mario Slam Basketball (Hoops 3-on-3): Mostly OK.
-- Nintendogs (Labrador): Intro is mostly OK with clipping errors. Gameplay begins, crashes due to full GPU command fifo.
+- Nintendogs (Labrador): Intro is ok. Gameplay begins, crashes due to full GPU command fifo.
 - Pokemon Mystery Dungeon Explorers of Sky: Mostly OK.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
-- Pokemon Diamond: 2d elements of game work ok, 3D in intro looks good, 3D in title looks good
+- Pokemon Platinum: Mostly OK, 3D in menu is clipped away. Gameplay is fine. Does not load save correctly.
 - Pokemon Black: Black screen
-- Pokemon HeartGold: 2d elements of game work ok, 3D in intro good, 3D in title is quite broken
-- Pokemon Ranger: 2D components are rendered as 3D and there are some minor precision issues.
-- Shin Megami Tensei: Strange Journey: Titles OK, menu has visibility issues, freezes when gameplay begins.
-- Super Mario 64 DS: Loads up ok, star in intro looks wrong (specular lighting/texture issues). 3D in menu looks good. Actual game has polygons flying everywhere in front of scene + perspective issues
+- Pokemon HeartGold: 2d elements of game work ok, 3D in intro good (now crashes due to div/0 issue), 3D in title is clipped away.
+- Pokemon Ranger: Polygon/texture precision issues in 2D-as-3D game. Mostly OK though.
+- Resident Evil: Seems mostly ok. Frame pacing issues. Crash at end of intro cutscene, though if skipped gameplay seems ok.
+- Shin Megami Tensei: Strange Journey: Titles and menu OK, freezes when gameplay begins.
+- Super Mario 64 DS: Mostly ok, star in intro has shininess issues.
 - Super Princess Peach: Mostly OK.
 - Super Scribblenauts: Mostly fine, (3D as 2D precision issues)
 - Tony Hawk's Downhill Jam: Shows titles, then black screen
 - Tony Hawk's American Sk8land: Shows titles, menus, then gameplay crashes after matrix overflow
-- The World Ends With You: Initial titles, then freezes (some sort of sprite visible at bottom of screen)
+- The World Ends With You: Seems mostly ok.
 - Yoshi's Island DS: Mostly OK.
 
 #### NDS TODO
@@ -130,16 +137,19 @@ DS:
 
 ##### Bugs / Improvements:
 - 3D Video:
-    - Clip in 3D space?
-    - Rasterising precision improvement
+    - Rasterising precision improvement (especially noticeable for 2D)
     - Lighting issues (?)
-    - Post-processing (edge + anti-aliasing)
-    - Perspective correct tex mapping needed
-    - More precise tex mapping needed
+    - Post-processing (edge + fog + anti-aliasing)
+    - Fix perspective depth mapping while not breaking 2D
+    - Texture stack problems:
+        - Cause issue with shininess for SM64DS
+        - Overflow in TH:Sk8land
+        - Possible culprit for visibility issues with DQVI, GTA, Possibly pokemon intro
 - 2D main RAM video mode
 - Engine A video capture & blending fixes
 - Card loading still has issues sometimes
 - Audio stream bugs
+- Firmware issues
 - Performance
     - Memory
     - Threading

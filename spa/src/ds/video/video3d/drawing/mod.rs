@@ -117,7 +117,7 @@ impl Software3DRenderer {
             let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
             let mode = polygon.attrs.mode();
             
-            let (y_min, y_max) = (p.y_min.to_num::<u8>(), std::cmp::min(p.y_max.ceil().to_num::<u8>(), 191));
+            let (y_min, y_max) = (p.y_min.to_num::<u8>(), std::cmp::min(p.y_max.to_num::<u8>(), 191));
             for y_idx in y_min..=y_max {
 
                 let y = N::from_num(y_idx);
@@ -128,7 +128,7 @@ impl Software3DRenderer {
 
                 let vertical_edge = (y_idx == y_min) || (y_idx == y_max);
 
-                let (min, max) = (vtx_a.screen_p.x.floor().to_num::<i16>(), vtx_b.screen_p.x.ceil().to_num::<i16>());
+                let (min, max) = (vtx_a.screen_p.x.to_num::<i16>(), vtx_b.screen_p.x.to_num::<i16>());
                 let x_diff = (vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
 
                 let x_max = std::cmp::min(max, 255);
@@ -155,7 +155,7 @@ impl Software3DRenderer {
                         alpha: 0x1F
                     };
 
-                    let tex_coords = interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
+                    let tex_coords = interpolate_tex_coords_p(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b, vtx_a.depth, vtx_b.depth);
                     let tex_colour = self.lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
 
                     let frag_colour = if let Some(tex_colour) = tex_colour {
@@ -191,7 +191,7 @@ impl Software3DRenderer {
         let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
         let mode = polygon.attrs.mode();
         
-        let (y_min, y_max) = (p.y_min.to_num::<u8>(), std::cmp::min(p.y_max.ceil().to_num::<u8>(), 191));
+        let (y_min, y_max) = (p.y_min.to_num::<u8>(), std::cmp::min(p.y_max.to_num::<u8>(), 191));
         for y_idx in y_min..=y_max {
 
             let y = N::from_num(y_idx);
@@ -200,7 +200,7 @@ impl Software3DRenderer {
             let b = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max));
             let [vtx_a, vtx_b] = b.unwrap();
 
-            let (min, max) = (vtx_a.screen_p.x.floor().to_num::<i16>(), vtx_b.screen_p.x.ceil().to_num::<i16>());
+            let (min, max) = (vtx_a.screen_p.x.to_num::<i16>(), vtx_b.screen_p.x.to_num::<i16>());
             let x_diff = (vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
 
             for x_idx in min..=std::cmp::min(max, 255) {
@@ -239,7 +239,7 @@ impl Software3DRenderer {
                     alpha: polygon.attrs.alpha()
                 };
                 
-                let tex_coords = interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
+                let tex_coords = interpolate_tex_coords_p(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b, vtx_a.depth, vtx_b.depth);
                 let tex_colour = self.lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
 
                 let frag_colour = if let Some(tex_colour) = tex_colour {
@@ -252,8 +252,8 @@ impl Software3DRenderer {
                 } else if render_engine.control.contains(Display3DControl::ALPHA_TEST_ENABLE) && frag_colour.alpha < render_engine.alpha_test {
                     continue;
                 } else if frag_colour.alpha != 0x1F && self.attr_buffer[idx].trans_id == id {
-                    //target[idx] = ColourAlpha{ col: Colour{r: 0, g: 0, b: 0xFF}, alpha: 0x1F};
-                    continue;
+                    // TODO: fix the logic here.
+                    //continue;
                 }
 
                 // We are sure that we want to render this fragment.
@@ -377,7 +377,7 @@ impl Software3DRenderer {
             // Interpolate attributes
             let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
             let frag_colour = interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b);
-            let tex_coords = interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b);
+            let tex_coords = interpolate_tex_coords_p(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b, vtx_a.depth, vtx_b.depth);
 
             let vertex = Vertex {
                 screen_p:   Coords { x: intersect_x.to_fixed::<N>(), y: y },

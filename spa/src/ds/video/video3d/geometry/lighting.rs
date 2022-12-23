@@ -1,4 +1,7 @@
 
+use fixed::types::I40F24;
+use fixed::traits::ToFixed;
+
 use crate::{
     utils::{
         bits::u32,
@@ -58,19 +61,20 @@ impl LightingUnit {
             }
             let diffuse = N::max(N::ZERO, -normal.dot_product(&light.direction));
             let diffuse_weight = (diffuse.to_bits() >> 4) as u8;
-            let diffuse_colour = light.colour.mul(&self.diffuse_colour).weight(diffuse_weight);
+            let diffuse_colour = light.colour.weight(diffuse_weight).mul(&self.diffuse_colour);
 
             let ambient_colour = light.colour.mul(&self.ambient_colour);
 
-            let specular_angle_cos = N::max(N::ZERO, normal.dot_product(&light.half_angle));
-            let specular_angle_bits = specular_angle_cos.to_bits() >> 4;
+            let specular_angle_cos = I40F24::max(I40F24::ZERO, normal.dot_product(&light.half_angle).to_fixed::<I40F24>());
+            let f = specular_angle_cos * specular_angle_cos;
+            let specular_angle_bits = f.to_bits() >> 16;
             let specular_weight = if self.enable_table {
                 let table_idx = specular_angle_bits >> 1;
                 self.specular_table[table_idx as usize]
             } else {
                 specular_angle_bits as u8
             };
-            let specular_colour = light.colour.mul(&self.specular_colour).weight(specular_weight);
+            let specular_colour = light.colour.weight(specular_weight).mul(&self.specular_colour);
 
             self.vertex_colour.add(&diffuse_colour);
             self.vertex_colour.add(&ambient_colour);
@@ -91,9 +95,9 @@ impl LightingUnit {
         // Find normalised half-vector between light dir and line-of-sight (-Z)
         // Then negate it for specular calculations.
         self.lights[light].half_angle = Vector::new([
-            -direction.elements[0] >> 1,
-            -direction.elements[1] >> 1,
-            (N::ONE - direction.elements[2]) >> 1
+            -direction.x() >> 1,
+            -direction.y() >> 1,
+            (N::ONE - direction.z()) >> 1
         ]);
     }
 

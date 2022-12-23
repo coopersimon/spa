@@ -65,8 +65,8 @@ impl ClippingUnit {
         let bytes = u32::to_le_bytes(data);
         self.viewport_x = N::from_num(bytes[0]);
         self.viewport_y = N::from_num(bytes[1]);
-        self.viewport_width = N::from_num(1 + (bytes[2] as u16)) - self.viewport_x;
-        self.viewport_height = N::from_num(1 + (bytes[3] as u16)) - self.viewport_y;
+        self.viewport_width = N::from_num(bytes[2] as u16) - self.viewport_x;
+        self.viewport_height = N::from_num(bytes[3] as u16) - self.viewport_y;
     }
 
     pub fn set_w_buffer(&mut self, w_buffer: bool) {
@@ -156,9 +156,9 @@ impl ClippingUnit {
                 // B clips
                 let over = ((wb * val) - vtx_b.position.elements[dim]).to_fixed::<I40F24>();
                 let under = (vtx_a.position.elements[dim] - vtx_b.position.elements[dim] - (wa * val) + (wb * val)).to_fixed::<I40F24>();
-                let factor_a = (over / under).clamp(I40F24::ZERO, I40F24::ONE);
+                let factor_a = (over / under).to_fixed::<N>().clamp(N::ZERO, N::ONE);
 
-                let factor_b = I40F24::ONE - factor_a;
+                let factor_b = N::ONE - factor_a;
                 let position = interpolate_position(&vtx_a.position, &vtx_b.position, factor_a, factor_b);
                 
                 let clip_vtx_b = Self::interpolate(vtx_a, vtx_b, factor_a.to_fixed(), factor_b.to_fixed(), position);
@@ -169,9 +169,9 @@ impl ClippingUnit {
                 // A clips
                 let over = ((wb * val) - vtx_b.position.elements[dim]).to_fixed::<I40F24>();
                 let under = (vtx_a.position.elements[dim] - vtx_b.position.elements[dim] - (wa * val) + (wb * val)).to_fixed::<I40F24>();
-                let factor_a = (over / under).clamp(I40F24::ZERO, I40F24::ONE);
+                let factor_a = (over / under).to_fixed::<N>().clamp(N::ZERO, N::ONE);
 
-                let factor_b = I40F24::ONE - factor_a;
+                let factor_b = N::ONE - factor_a;
                 let position = interpolate_position(&vtx_a.position, &vtx_b.position, factor_a, factor_b);
                 
                 let clip_vtx_a = Self::interpolate(vtx_a, vtx_b, factor_a.to_fixed(), factor_b.to_fixed(), position);
@@ -193,11 +193,11 @@ impl ClippingUnit {
     }
 }
 
-fn interpolate_position(position_a: &Vector<4>, position_b: &Vector<4>, factor_a: I40F24, factor_b: I40F24) -> Vector<4> {
-    let x = factor_a * position_a.x().to_fixed::<I40F24>() + factor_b * position_b.x().to_fixed::<I40F24>();
-    let y = factor_a * position_a.y().to_fixed::<I40F24>() + factor_b * position_b.y().to_fixed::<I40F24>();
-    let z = factor_a * position_a.z().to_fixed::<I40F24>() + factor_b * position_b.z().to_fixed::<I40F24>();
-    let w = factor_a * position_a.w().to_fixed::<I40F24>() + factor_b * position_b.w().to_fixed::<I40F24>();
+fn interpolate_position(position_a: &Vector<4>, position_b: &Vector<4>, factor_a: N, factor_b: N) -> Vector<4> {
+    let x = factor_a * position_a.x() + factor_b * position_b.x();
+    let y = factor_a * position_a.y() + factor_b * position_b.y();
+    let z = factor_a * position_a.z() + factor_b * position_b.z();
+    let w = factor_a * position_a.w() + factor_b * position_b.w();
     Vector::new([
         x.to_fixed(),
         y.to_fixed(),
