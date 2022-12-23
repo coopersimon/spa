@@ -25,6 +25,9 @@ bitflags! {
         const ALPHA_TEST_ENABLE = u16::bit(2);
         const HIGHLIGHT_SHADING = u16::bit(1);
         const TEX_MAP_ENABLE    = u16::bit(0);
+
+        const WRITEABLE_BITS    = u16::bits(0, 11) | u16::bits(14, 15);
+        const ERROR_BITS        = u16::bits(12, 13);
     }
 }
 

@@ -467,11 +467,16 @@ impl Engine3DVRAM {
         }
     }
     
+    /// If the texture palette is dirty, load it in 6 chunks.
+    /// Each chunk is 16kB (8K colours).
+    /// Slot 0 can contain 4 16kB regions.
     pub fn ref_tex_palette<'a>(&'a mut self) -> [Option<&'a [u8]>; 6] {
         if self.tex_palette_dirty {
             self.tex_palette_dirty = false;
             [
+                // Slot 0
                 self.tex_palette_0.as_ref().map(|v| &v.ref_mem()[0..0x4000]),
+                // Slot 1
                 match self.tex_palette_1.as_ref() {
                     Some(vram) => Some(vram.ref_mem()),
                     None => self.tex_palette_0.as_ref().and_then(|v| if v.mask() > 0x3FFF {
@@ -480,17 +485,21 @@ impl Engine3DVRAM {
                         None
                     })
                 },
+                // Slot 2
                 self.tex_palette_0.as_ref().and_then(|v| if v.mask() > 0x3FFF {
                     Some(&v.ref_mem()[0x8000..0xC000])
                 } else {
                     None
                 }),
+                // Slot 3
                 self.tex_palette_0.as_ref().and_then(|v| if v.mask() > 0x3FFF {
                     Some(&v.ref_mem()[0xC000..0x10000])
                 } else {
                     None
                 }),
+                // Slot 4
                 self.tex_palette_4.as_ref().map(|v| v.ref_mem()),
+                // Slot 5
                 self.tex_palette_5.as_ref().map(|v| v.ref_mem())
             ]
         } else {

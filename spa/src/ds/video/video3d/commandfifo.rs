@@ -14,6 +14,7 @@ pub struct GeomCommandFifo {
     current_command_args:   usize,
 
     interrupt_cond:         CommandFifoInterruptCond,
+    status_bits:            GeometryEngineStatus,
 }
 
 impl GeomCommandFifo {
@@ -22,6 +23,7 @@ impl GeomCommandFifo {
             command_fifo:           VecDeque::with_capacity(COMMAND_FIFO_LEN),
             current_command_args:   0,
             interrupt_cond:         CommandFifoInterruptCond::Never,
+            status_bits:            GeometryEngineStatus::empty(),
         }
     }
 
@@ -80,11 +82,16 @@ impl GeomCommandFifo {
     }
 
     pub fn set_interrupt_cond(&mut self, val: GeometryEngineStatus) {
-        self.interrupt_cond = match (val & GeometryEngineStatus::CMD_FIFO_INT).bits() >> 30 {
+        self.status_bits = val & GeometryEngineStatus::CMD_FIFO_INT;
+        self.interrupt_cond = match self.status_bits.bits() >> 30 {
             0b01 => CommandFifoInterruptCond::UnderHalf,
             0b10 => CommandFifoInterruptCond::Empty,
             _ => CommandFifoInterruptCond::Never
         };
+    }
+
+    pub fn get_interrupt_cond(&self) -> GeometryEngineStatus {
+        self.status_bits
     }
 
     pub fn interrupt(&self) -> bool {

@@ -295,8 +295,9 @@ impl Video3D {
 
             0x50 => {
                 self.pending_swap = self.geom_command_fifo.pop();
-                // TODO: verify this is Some() ?
-                self.current_commands >>= 8;
+                if self.pending_swap.is_some() {
+                    self.current_commands >>= 8;
+                }
                 None
             },
             0x60 => self.geom_command_fifo.pop().map(|d| self.geometry_engine.set_viewport(d)),
@@ -316,7 +317,7 @@ impl Video3D {
     }
 
     fn is_busy(&self) -> bool {
-        !self.geom_command_fifo.is_empty() || self.current_commands != 0 || self.cycle_count < 0
+        !self.geom_command_fifo.is_empty() || self.current_commands != 0 || self.cycle_count < 0 || self.pending_swap.is_some()
     }
 
     fn get_geom_engine_status(&self) -> GeometryEngineStatus {
@@ -336,7 +337,7 @@ impl Video3D {
         status.set(GeometryEngineStatus::TEST_BOX_RESULT, self.geometry_engine.box_test_res);
         // TODO: test busy?
 
-        status
+        status | self.geom_command_fifo.get_interrupt_cond()
     }
     
     fn set_geom_engine_status(&mut self, data: u32) {

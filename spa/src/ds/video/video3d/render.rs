@@ -61,7 +61,14 @@ impl RenderingEngine {
     }
 
     pub fn write_control(&mut self, data: u16) {
-        self.control = Display3DControl::from_bits_truncate(data);
+        let control_in = Display3DControl::from_bits_truncate(data);
+        if control_in.contains(Display3DControl::LINE_UNDERFLOW) {
+            self.control.remove(Display3DControl::LINE_UNDERFLOW);
+        }
+        if control_in.contains(Display3DControl::LIST_RAM_OVERFLOW) {
+            self.control.remove(Display3DControl::LIST_RAM_OVERFLOW);
+        }
+        self.control = (self.control & Display3DControl::ERROR_BITS) | (control_in & Display3DControl::WRITEABLE_BITS);
     }
 }
 
