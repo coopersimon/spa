@@ -71,15 +71,15 @@ Note that most of these games have not been properly played for a longer duratio
 - Animal Crossing Wild World: Works mostly OK.
 - Brain Training (Brain Age): Seems to run OK.
 - Black Ops: Boots mostly OK, unable to find strings to display for some reason.
-- Civilization Revolution: Mostly OK, 3D precision issues
+- Civilization Revolution: Serious visibility issues on 2D-as-3D display.
 - Chrono Trigger: Audio skips a little in intro, but mostly ok otherwise.
 - Dragon Quest Monsters Joker: Seems OK.
 - Dragon Quest IX: Shows intro cards and video. Game starts mostly OK (3d model never updates?). Actual game has some untextured models
 - Dragon Quest IV: Mostly OK
 - Dragon Quest V: Mostly OK
 - Dragon Quest VI: Near/Far plane clipping masks everything, broken intro. Actual game is ok when near plane clipping is disabled.
-- Final Fantasy Tactics A2: Intro looks better but now crashes in menu with divide by 0 error
-- Final Fantasy III: Mostly OK, tries to use mode 6 on engine A and crashes.
+- Final Fantasy Tactics A2: Slight flickering in intro / menu, actual game looks nearly ok but has 2D-as-3D display issues.
+- Final Fantasy III: Mostly OK.
 - Final Fantasy IV: Mostly OK.
 - Final Fantasy: 4 Heroes of Light: Mostly ok
 - Final Fantasy XII: Revenant Wings: Mostly ok, but general frame pacing is completely broken in both videos and (seemingly) gameplay
@@ -104,11 +104,11 @@ Note that most of these games have not been properly played for a longer duratio
 - Nintendogs (Labrador): Intro is ok. Gameplay begins, crashes due to full GPU command fifo.
 - Pokemon Mystery Dungeon Explorers of Sky: Mostly OK.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
-- Pokemon Platinum: Mostly OK, 3D in menu is clipped away. Gameplay is fine. Does not load save correctly.
+- Pokemon Platinum: Mostly OK, 3D in title does not appear. Gameplay is fine. Does not load save correctly.
 - Pokemon Black: Black screen
-- Pokemon HeartGold: 2d elements of game work ok, 3D in intro good (now crashes due to div/0 issue), 3D in title is clipped away.
+- Pokemon HeartGold: 2d elements of game work ok, 3D in intro good, 3D in title does not appear
 - Pokemon Ranger: Polygon/texture precision issues in 2D-as-3D game. Mostly OK though.
-- Resident Evil: Seems mostly ok. Frame pacing issues. Crash at end of intro cutscene, though if skipped gameplay seems ok.
+- Resident Evil: Seems mostly ok. Frame pacing issues. Freezes during intro cutscene, though if skipped gameplay seems ok.
 - Shin Megami Tensei: Strange Journey: Titles and menu OK, freezes when gameplay begins.
 - Super Mario 64 DS: Mostly ok, star in intro has shininess issues.
 - Super Princess Peach: Mostly OK.
@@ -146,6 +146,7 @@ Note that most of these games have not been properly played for a longer duratio
         - Overflow in TH:Sk8land
         - Possible culprit for visibility issues with DQVI, GTA, Possibly pokemon intro
 - 2D main RAM video mode
+    - Still haven't found a game that actually uses this
 - Engine A video capture & blending fixes
 - Card loading still has issues sometimes
 - Audio stream bugs

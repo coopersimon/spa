@@ -41,13 +41,14 @@ pub fn interpolate_tex_coords(tex_coords_a: TexCoords, tex_coords_b: TexCoords, 
 #[inline]
 /// Perspective-correct texture interpolation.
 pub fn interpolate_tex_coords_p(tex_coords_a: TexCoords, tex_coords_b: TexCoords, factor_a: N, factor_b: N, depth_a: Depth, depth_b: Depth) -> TexCoords {
-    let s_a = tex_coords_a.s.to_fixed::<I40F24>() / depth_a.to_fixed::<I40F24>();
-    let s_b = tex_coords_b.s.to_fixed::<I40F24>() / depth_b.to_fixed::<I40F24>();
-    let t_a = tex_coords_a.t.to_fixed::<I40F24>() / depth_a.to_fixed::<I40F24>();
-    let t_b = tex_coords_b.t.to_fixed::<I40F24>() / depth_b.to_fixed::<I40F24>();
+    let s_a = tex_coords_a.s.to_fixed::<I40F24>().checked_div(depth_a.to_fixed::<I40F24>()).unwrap_or(N::MAX.to_fixed());
+    let s_b = tex_coords_b.s.to_fixed::<I40F24>().checked_div(depth_b.to_fixed::<I40F24>()).unwrap_or(N::MAX.to_fixed());
+    let t_a = tex_coords_a.t.to_fixed::<I40F24>().checked_div(depth_a.to_fixed::<I40F24>()).unwrap_or(N::MAX.to_fixed());
+    let t_b = tex_coords_b.t.to_fixed::<I40F24>().checked_div(depth_b.to_fixed::<I40F24>()).unwrap_or(N::MAX.to_fixed());
     let s = (s_a * factor_a.to_fixed::<I40F24>()) + (s_b * factor_b.to_fixed::<I40F24>());
     let t = (t_a * factor_a.to_fixed::<I40F24>()) + (t_b * factor_b.to_fixed::<I40F24>());
-    let d = (depth_a.to_fixed::<I40F24>().recip() * factor_a.to_fixed::<I40F24>()) + (depth_b.to_fixed::<I40F24>().recip() * factor_b.to_fixed::<I40F24>());
+    let d = factor_a.to_fixed::<I40F24>().checked_div(depth_a.to_fixed::<I40F24>()).unwrap_or(N::MAX.to_fixed()) +
+        factor_b.to_fixed::<I40F24>().checked_div(depth_b.to_fixed::<I40F24>()).unwrap_or(N::MAX.to_fixed());
     let div = (d).recip();
     TexCoords { s: (s * div).to_fixed(), t: (t * div).to_fixed() }
 }

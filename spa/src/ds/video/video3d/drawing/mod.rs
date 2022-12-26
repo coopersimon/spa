@@ -55,9 +55,9 @@ impl Software3DRenderer {
             self.mark_edges(render_engine, target);
         }
 
-        //if render_engine.control.contains(Display3DControl::FOG_ENABLE) {
-        //    self.draw_fog(render_engine, target);
-        //}
+        if render_engine.control.contains(Display3DControl::FOG_ENABLE) {
+            self.draw_fog(render_engine, target);
+        }
 
         // Anti-aliasing (after 2d-blend?)
 
@@ -117,16 +117,16 @@ impl Software3DRenderer {
             let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
             let mode = polygon.attrs.mode();
             
+            let (mut x_min_prev, mut x_max_prev) = (256, 0);
             let (y_min, y_max) = (p.y_min.to_num::<u8>(), std::cmp::min(p.y_max.to_num::<u8>(), 191));
             for y_idx in y_min..=y_max {
 
                 let y = N::from_num(y_idx);
                 let y_idx_base = (y_idx as usize) * 256;
 
-                let b = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max));
-                let [vtx_a, vtx_b] = b.unwrap();
-
-                let vertical_edge = (y_idx == y_min) || (y_idx == y_max);
+                let Some([vtx_a, vtx_b]) = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max)) else {
+                    continue;
+                };
 
                 let (min, max) = (vtx_a.screen_p.x.to_num::<i16>(), vtx_b.screen_p.x.to_num::<i16>());
                 let x_diff = (vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
@@ -144,7 +144,9 @@ impl Software3DRenderer {
                         continue;
                     }
 
-                    let edge = vertical_edge || (x_idx == min) || (x_idx == x_max);
+                    let top_edge = x_idx < x_min_prev || x_idx > x_max_prev;
+                    let bottom_edge = false; // TODO: compare with next line.
+                    let edge = top_edge || bottom_edge || (x_idx == min) || (x_idx == x_max);
                     if !edge && polygon.is_wireframe() {
                         continue;
                     }
@@ -172,6 +174,8 @@ impl Software3DRenderer {
                     }
                 }
 
+                x_min_prev = min;
+                x_max_prev = max;
             }
             
         }
@@ -197,8 +201,9 @@ impl Software3DRenderer {
             let y = N::from_num(y_idx);
             let y_idx_base = (y_idx as usize) * 256;
 
-            let b = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max));
-            let [vtx_a, vtx_b] = b.unwrap();
+            let Some([vtx_a, vtx_b]) = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max)) else {
+                continue;
+            };
 
             let (min, max) = (vtx_a.screen_p.x.to_num::<i16>(), vtx_b.screen_p.x.to_num::<i16>());
             let x_diff = (vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
@@ -342,8 +347,36 @@ impl Software3DRenderer {
     }
 
     fn mark_edges(&mut self, render_engine: &RenderingEngine, target: &mut [ColourAlpha]) {
+        for y in 0..=191 {
+            let offset = y * 256;
+            for x in 0..=255 {
+                let index = offset + x;
+                
+                if !self.attr_buffer[index].edge {
+                    continue;
+                }
+                let this = (self.attr_buffer[index].opaque_id, self.depth_buffer[index]);
+                let left = if x == 0 {
+                    (render_engine.clear_poly_id, render_engine.clear_depth)
+                } else {(self.attr_buffer[index - 1].opaque_id, self.depth_buffer[index - 1])};
+                let right = if x == 255 {
+                    (render_engine.clear_poly_id, render_engine.clear_depth)
+                } else {(self.attr_buffer[index + 1].opaque_id, self.depth_buffer[index + 1])};
+                let top = if y == 0 {
+                    (render_engine.clear_poly_id, render_engine.clear_depth)
+                } else {(self.attr_buffer[index - 256].opaque_id, self.depth_buffer[index - 256])};
+                let bottom = if y == 191 {
+                    (render_engine.clear_poly_id, render_engine.clear_depth)
+                } else {(self.attr_buffer[index + 256].opaque_id, self.depth_buffer[index + 256])};
 
+                if Self::check_edge(this, left, right, top, bottom) {
+                    let edge_index = (this.0 >> 3) as usize;
+                    target[index].col = render_engine.edge_colour[edge_index];
+                }
+            }
+        }
     }
+
 }
 
 // Static helpers.
@@ -362,14 +395,14 @@ impl Software3DRenderer {
             let vtx_a = &render_engine.polygon_ram.vertices[v_index_a as usize];
             let vtx_b = &render_engine.polygon_ram.vertices[v_index_b as usize];
 
-            if (y > vtx_a.screen_p.y && y > vtx_b.screen_p.y) || (y < vtx_a.screen_p.y && y < vtx_b.screen_p.y) {
+            if (y > vtx_a.screen_p.y && y > vtx_b.screen_p.y) || (y < vtx_a.screen_p.y && y < vtx_b.screen_p.y) || (vtx_a.screen_p.y == vtx_b.screen_p.y) {
                 // This line does not intersect the render line.
                 continue;
             }
 
             // Weight of point a (normalised between 0-1)
-            let factor_a = (y - vtx_b.screen_p.y).to_fixed::<I40F24>().checked_div((vtx_a.screen_p.y - vtx_b.screen_p.y).to_fixed::<I40F24>())
-                .unwrap_or(I40F24::ONE).to_fixed::<N>().clamp(N::ZERO, N::ONE);   // TODO: one dot polygon?
+            let factor_a = ((y - vtx_b.screen_p.y).to_fixed::<I40F24>() / (vtx_a.screen_p.y - vtx_b.screen_p.y).to_fixed::<I40F24>())
+                .to_fixed::<N>().clamp(N::ZERO, N::ONE);   // TODO: one dot polygon?
             // X coordinate where the render line intersects the polygon line.
             let intersect_x = factor_a.to_fixed::<I40F24>() * (vtx_a.screen_p.x - vtx_b.screen_p.x).to_fixed::<I40F24>() + vtx_b.screen_p.x.to_fixed::<I40F24>();
             let factor_b = N::ONE - factor_a;
@@ -799,5 +832,17 @@ impl Software3DRenderer {
                 alpha: a
             }
         }
+    }
+
+    /// Returns true if the edge provided should be drawn.
+    /// Provide an edge candidate with polygon ID and depth,
+    /// plus all of the surrounding pixels.
+    #[inline]
+    fn check_edge(this: (u8, Depth), left: (u8, Depth), right: (u8, Depth), top: (u8, Depth), bottom: (u8, Depth)) -> bool {
+        let compare_pix = |other: (u8, Depth)| {
+            // Ensure polygon IDs differ, and depth value of edge is less than surrounding pixel.
+            this.0 != other.0 && this.1 < other.1
+        };
+        compare_pix(left) || compare_pix(right) || compare_pix(top) || compare_pix(bottom)
     }
 }

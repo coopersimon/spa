@@ -155,6 +155,16 @@ impl BGControl {
             _ => unreachable!()
         }
     }
+
+    fn large_bitmap_size(self) -> (u32, u32) {
+        const TALL: u16 = 0 << 14;
+        const WIDE: u16 = 1 << 14;
+        match (self & BGControl::SCREEN_SIZE).bits() {
+            TALL => (512, 1024),
+            WIDE => (1024, 512),
+            _ => unreachable!()
+        }
+    }
 }
 
 bitflags! {
@@ -445,11 +455,12 @@ impl VideoRegisters {
             5 => {
                 insert(self.get_tiled_bg0());
                 insert(self.get_tiled_bg1());
-                insert(self.get_ext_bg2(false));
+                insert(self.get_ext_bg2());
                 insert(self.get_ext_bg3());
             },
             6 => {
-                unimplemented!()
+                insert(self.get_tiled_bg0());
+                insert(self.get_large_bitmap_bg2());
             },
             _ => unreachable!()
         }
@@ -691,7 +702,7 @@ impl VideoRegisters {
         }
     }
 
-    fn get_ext_bg2(&self, _large: bool) -> Option<BackgroundData> {
+    fn get_ext_bg2(&self) -> Option<BackgroundData> {
         if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
             let ext_data = if self.bg2_control.use_8_bpp() {
                 BackgroundTypeData::ExtBitmapAffine(BitmapAffineBackgroundData{
@@ -790,6 +801,41 @@ impl VideoRegisters {
                     self.colour_special.contains(ColourSpecialControl::BG3_TARGET_2)
                 ),
                 mosaic:     self.bg3_control.is_mosaic(),
+                type_data:  ext_data
+            })
+        } else {
+            None
+        }
+    }
+
+    fn get_large_bitmap_bg2(&self) -> Option<BackgroundData> {
+        if self.lcd_control.contains(LCDControl::DISPLAY_BG2) {
+            let ext_data = BackgroundTypeData::ExtBitmapAffine(BitmapAffineBackgroundData{
+                data_addr:      0,
+                use_15bpp:      false,
+            
+                bg_ref_point_x: self.bg2_internal_x,
+                bg_ref_point_y: self.bg2_internal_y,
+                matrix_a:       self.bg2_internal_a,
+                matrix_b:       self.bg2_internal_b,
+                matrix_c:       self.bg2_internal_c,
+                matrix_d:       self.bg2_internal_d,
+                wrap:           self.bg2_control.affine_wraparound(),
+                size:           self.bg2_control.large_bitmap_size(),
+            });
+            Some(BackgroundData {
+                priority:       self.bg2_control.priority(),
+                window_mask:    WindowMask::make(
+                    self.win0_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win1_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win_obj_inside.contains(WindowControl::BG2_ENABLE),
+                    self.win_outside.contains(WindowControl::BG2_ENABLE)
+                ),
+                blend_mask:     BlendMask::make(
+                    self.colour_special.contains(ColourSpecialControl::BG2_TARGET_1) && self.use_blend_layer_1(),
+                    self.colour_special.contains(ColourSpecialControl::BG2_TARGET_2)
+                ),
+                mosaic:     self.bg2_control.is_mosaic(),
                 type_data:  ext_data
             })
         } else {
