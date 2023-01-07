@@ -13,13 +13,3 @@ pub fn key_2_encrypt(data: u8, x: u64, y: u64) -> (u8, u64, u64) {
     let data_out = data ^ (x_out_lo as u8) ^ (y_out_lo as u8);
     (data_out, x_out, y_out)
 }
-
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-}

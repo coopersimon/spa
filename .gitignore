@@ -6,3 +6,4 @@ target/
 /spa-bin/saves
 *.bin
 .vscode
+*.ini
