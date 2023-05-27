@@ -25,6 +25,7 @@ bitflags! {
     pub struct AccessRights: u16 {
         const MAIN_RAM_PRIO = u16::bit(15);
         const MAIN_MEM_SYNC = u16::bit(14);
+        const NDS_SET       = u16::bit(13);
         const NDS_CARD      = u16::bit(11);
         const GBA_CART      = u16::bit(7);
     }
@@ -54,7 +55,7 @@ impl ExMemControl {
 impl MemInterface16 for ExMemControl {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
-            0x0400_0204 => self.gba_access.bits() | self.access_rights.load(Ordering::Acquire),
+            0x0400_0204 => self.gba_access.bits() | self.access_rights.load(Ordering::Acquire) | AccessRights::NDS_SET.bits(),
             _ => 0
         }
     }

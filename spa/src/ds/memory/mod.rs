@@ -3,6 +3,7 @@ mod main;
 mod shared;
 mod power;
 mod exmem;
+mod wifi;
 
 use arm::{Mem32, MemCycleType};
 use crossbeam_channel::{Sender, Receiver, bounded, unbounded};
@@ -50,6 +51,7 @@ use main::MainRAM;
 use shared::*;
 use power::*;
 use exmem::*;
+use wifi::*;
 
 /// How many cycles the ARM7 should run for before syncing.
 const ARM7_THREAD_SYNC_CYCLES: usize = 2000;
@@ -92,6 +94,7 @@ pub struct DS9MemoryBus<R: Renderer> {
     // sync
     inner_counter:      usize,
     counter:            usize,
+    timer_counter:      usize,
     barrier:            Arc<Barrier>,
     frame_sender:       FrameSender<UserInput>,
     input_send:         Sender<UserInput>
@@ -137,6 +140,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
             
             inner_counter:      0,
             counter:            0,
+            timer_counter:      0,
             barrier:            barrier.clone(),
             frame_sender:       frame_sender,
             input_send:         input_send
@@ -152,6 +156,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
             vram:               arm7_vram,
 
             audio:              DSAudio::new(),
+            wifi:               Wifi::new(),
 
             ipc:                ds7_ipc,
             timers:             Timers::new(),
@@ -199,7 +204,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
         // Autostart.
         self.main_ram.write_byte(0x3F_FE1F, 4);
 
-        self.card.fast_boot();
+        self.card.fast_boot(header.rom_ctrl());
 
         // Write additional data into RAM.
         self.main_ram.write_word(0x3F_F800, self.card.get_rom_id());
@@ -394,7 +399,9 @@ impl <R: Renderer> DS9MemoryBus<R> {
             self.dma.on_geom_fifo();
         }
 
-        let (timer_irq, _, _) = self.timers.clock(cycles);
+        self.timer_counter += cycles;
+        let (timer_irq, _, _) = self.timers.clock(self.timer_counter >> 1);
+        self.timer_counter = self.timer_counter & 1;
         let joypad_irq = if self.joypad.get_interrupt() {
             Interrupts::KEYPAD
         } else {
@@ -503,6 +510,8 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_byte_oam(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
 
             // TODO: GBA slot
+            0x0800_0000..=0x09FF_FFFF => (0xFF, 18),
+            0x0A00_0000..=0x0AFF_FFFF => (0xFF, 18),
 
             0xFFFF_0000..=0xFFFF_FFFF => (self.bios.read_byte(addr & 0xFFF), if cycle.is_non_seq() {8} else {2}),
 
@@ -572,6 +581,8 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_halfword_oam(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
 
             // TODO: GBA slot
+            0x0800_0000..=0x09FF_FFFF => (0xFFFF, 18),
+            0x0A00_0000..=0x0AFF_FFFF => (0xFFFF, 18),
 
             0xFFFF_0000..=0xFFFF_FFFF => (self.bios.read_halfword(addr & 0xFFF), if cycle.is_non_seq() {8} else {2}),
 
@@ -643,6 +654,8 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_word_oam(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
 
             // TODO: GBA slot
+            0x0800_0000..=0x09FF_FFFF => (0xFFFF_FFFF, 18),
+            0x0A00_0000..=0x0AFF_FFFF => (0xFFFF_FFFF, 18),
 
             0xFFFF_0000..=0xFFFF_FFFF => (self.bios.read_word(addr & 0xFFF), if cycle.is_non_seq() {8} else {2}),
 
@@ -726,6 +739,7 @@ pub struct DS7MemoryBus {
     vram:           ARM7VRAM,
 
     audio:          DSAudio,
+    wifi:           Wifi,
 
     ipc:    IPC,
 
@@ -987,6 +1001,8 @@ impl Mem32 for DS7MemoryBus {
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_byte(addr), 1),
 
             // TODO: GBA slot
+            0x0800_0000..=0x09FF_FFFF => (0xFF, 18),
+            0x0A00_0000..=0x0AFF_FFFF => (0xFF, 18),
 
             _ => (0, 1) // Unused
         }
@@ -1037,6 +1053,8 @@ impl Mem32 for DS7MemoryBus {
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_halfword(addr), 1),
 
             // TODO: GBA slot
+            0x0800_0000..=0x09FF_FFFF => (0xFFFF, 18),
+            0x0A00_0000..=0x0AFF_FFFF => (0xFFFF, 18),
 
             _ => (0, 1) // Unused
         }
@@ -1088,6 +1106,8 @@ impl Mem32 for DS7MemoryBus {
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_word(addr), 2),
 
             // TODO: GBA slot
+            0x0800_0000..=0x09FF_FFFF => (0xFFFF_FFFF, 18),
+            0x0A00_0000..=0x0AFF_FFFF => (0xFFFF_FFFF, 18),
 
             _ => (0, 1) // Unused
         }
@@ -1140,6 +1160,7 @@ impl DS7MemoryBus {
         (0x0400_0300, 0x0400_0307, power_control),
         (0x0400_0400, 0x0400_051F, audio),
         (0x0410_0000, 0x0410_0003, ipc),
-        (0x0410_0010, 0x0410_0013, card)
+        (0x0410_0010, 0x0410_0013, card),
+        (0x0480_0000, 0x0480_8FFF, wifi)
     }
 }

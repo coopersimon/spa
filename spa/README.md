@@ -74,7 +74,7 @@ Note that most of these games have not been properly played for a longer duratio
 - Civilization Revolution: Serious visibility issues on 2D-as-3D display.
 - Chrono Trigger: Audio skips a little in intro, but mostly ok otherwise.
 - Dragon Quest Monsters Joker: Seems OK.
-- Dragon Quest IX: Shows intro cards and video. Game starts mostly OK (3d model never updates?). Actual game has some untextured models
+- Dragon Quest IX: Shows intro cards and video. Game starts mostly OK (3d model never updates?). Actual game has some untextured models (could be bug with writing to multiple VRAM blocks at once..?)
 - Dragon Quest IV: Mostly OK
 - Dragon Quest V: Mostly OK
 - Dragon Quest VI: Near/Far plane clipping masks everything, broken intro. Actual game is ok when near plane clipping is disabled.

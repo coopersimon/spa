@@ -142,9 +142,7 @@ impl NDSAudioHandler {
     /// The format is PCM interleaved stereo.
     pub fn get_audio_packet(&mut self, buffer: &mut [f32]) {
         for (o_frame, i_frame) in buffer.chunks_exact_mut(2).zip(&mut self.resampler) {
-            for (o, i) in o_frame.iter_mut().zip(i_frame.iter()) {
-                *o = *i;
-            }
+            o_frame.copy_from_slice(&i_frame);
         }
     }
 }

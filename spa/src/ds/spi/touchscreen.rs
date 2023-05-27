@@ -15,11 +15,11 @@ bitflags! {
 enum Channel {
     Idle,
     Temp0,
-    TouchscreenY(bool),
+    TouchscreenY,
     Battery,
     TouchscreenZ1,
     TouchscreenZ2,
-    TouchscreenX(bool),
+    TouchscreenX,
     AUX,
     Temp1
 }
@@ -31,9 +31,13 @@ pub struct Touchscreen {
     control:    TSCControl,
     channel:    Channel,
     can_read:   bool,
+    // All values are 12-bit.
+    // This requires 2 byte-sized reads for each value.
+    read_lo:    bool,
 
-    x:  u16,
-    y:  u16,
+    x:      u16,
+    y:      u16,
+    aux:    u16,
 }
 
 impl Touchscreen {
@@ -42,9 +46,11 @@ impl Touchscreen {
             control:    TSCControl::default(),
             channel:    Channel::Temp0,
             can_read:   false,
+            read_lo:    true,
 
             x:          X_RELEASED,
             y:          Y_RELEASED,
+            aux:        0,
         }
     }
 
@@ -64,6 +70,11 @@ impl Touchscreen {
         }
     }
 
+    /// Write values from microphone input.
+    pub fn write_aux_value(&mut self, aux: u16) {
+        self.aux = aux;
+    }
+
     pub fn deselect(&mut self) {
         self.channel = Channel::Idle;
         self.can_read = false;
@@ -75,26 +86,12 @@ impl Touchscreen {
             match self.channel {
                 Idle => 0,
                 Temp0 => 0,
-                TouchscreenY(lo) => if lo {
-                    let out = (self.y << 3) as u8;
-                    self.channel = TouchscreenY(false);
-                    out
-                } else {
-                    let out = (self.y >> 5) as u8;
-                    out
-                },
+                TouchscreenY => self.read_12bit(self.y),
                 Battery => 0,
                 TouchscreenZ1 => 0,
                 TouchscreenZ2 => 0,
-                TouchscreenX(lo) => if lo {
-                    let out = (self.x << 3) as u8;
-                    self.channel = TouchscreenX(false);
-                    out
-                } else {
-                    let out = (self.x >> 5) as u8;
-                    out
-                },
-                AUX => 0,
+                TouchscreenX => self.read_12bit(self.x),
+                AUX => self.read_12bit(self.aux),
                 Temp1 => 0
             }
         } else {
@@ -109,16 +106,29 @@ impl Touchscreen {
             self.control = control;
             self.channel = match (control & TSCControl::CHANNEL_SEL).bits() >> 4 {
                 0 => Temp0,
-                1 => TouchscreenY(true),
+                1 => TouchscreenY,
                 2 => Battery,
                 3 => TouchscreenZ1,
                 4 => TouchscreenZ2,
-                5 => TouchscreenX(true),
+                5 => TouchscreenX,
                 6 => AUX,
                 7 => Temp1,
                 _ => unreachable!()
-            }
+            };
+            self.read_lo = true;
         }
         self.can_read = true;
+    }
+}
+
+impl Touchscreen {
+    // Read the upper or lower section of a 12-bit value.
+    fn read_12bit(&mut self, value: u16) -> u8 {
+        if self.read_lo {
+            self.read_lo = false;
+            (value << 3) as u8
+        } else {
+            (value >> 5) as u8
+        }
     }
 }
