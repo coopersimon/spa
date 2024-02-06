@@ -37,26 +37,30 @@ impl Iterator for Resampler {
         if let Some(source_sample_rate) = self.source_rate_recv.as_ref().and_then(|r| r.try_recv().ok()) {
             self.converter.set_hz_to_hz(source_sample_rate, self.target_rate);
         }
-        while self.converter.is_exhausted() {}
+        while self.converter.is_exhausted() {
+            println!("dropping audio.");
+        }
         Some(self.converter.next())
     }
 }
 
 // TODO: replace this with an async stream?
 struct Source {
-    receiver:   Receiver<SamplePacket>,
+    receiver:    Receiver<SamplePacket>,
 
-    current:    SamplePacket,
-    n:          usize,
+    current:     SamplePacket,
+    n:           usize,
+    damp_factor: f32,
 }
 
 impl Source {
     fn new(receiver: Receiver<SamplePacket>) -> Self {
         Source {
-            receiver:   receiver,
+            receiver:    receiver,
 
-            current:    Box::new([]),
-            n:          0,
+            current:     Box::new([]),
+            n:           0,
+            damp_factor: 1.0,
         }
     }
 }
@@ -70,9 +74,19 @@ impl Signal for Source {
             self.n += 1;
             out
         } else {
-            self.current = self.receiver.recv().unwrap();
-            self.n = 1;
-            self.current[0]
+            if let Ok(result) = self.receiver.try_recv() {
+                self.damp_factor = 1.0;
+                self.current = result;
+                self.n = 1;
+                self.current[0]
+            } else {
+                let out = self.current[self.n - 1];
+                self.damp_factor = self.damp_factor - 0.001;
+                if self.damp_factor < 0.0 {
+                    self.damp_factor = 0.0;
+                }
+                [out[0] * self.damp_factor, out[1] * self.damp_factor]
+            }
         }
     }
 }
