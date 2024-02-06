@@ -47,6 +47,7 @@ impl RAM {
     #[inline]
     pub fn read_halfword(&self, addr: u32) -> u16 {
         if cfg!(feature = "fast") {
+            // Read 2 bytes in little-endian order.
             unsafe {
                 let buffer_ptr = self.0.as_ptr();
                 let src = buffer_ptr.offset(addr as isize);
@@ -62,6 +63,7 @@ impl RAM {
     #[inline]
     pub fn write_halfword(&mut self, addr: u32, data: u16) {
         if cfg!(feature = "fast") {
+            // Write 2 bytes in little-endian order.
             unsafe {
                 let buffer_ptr = self.0.as_mut_ptr();
                 let dest = buffer_ptr.offset(addr as isize);
@@ -79,6 +81,7 @@ impl RAM {
     #[inline]
     pub fn read_word(&self, addr: u32) -> u32 {
         if cfg!(feature = "fast") {
+            // Read 4 bytes in little-endian order.
             unsafe {
                 let buffer_ptr = self.0.as_ptr();
                 let src = buffer_ptr.offset(addr as isize);
@@ -94,6 +97,7 @@ impl RAM {
     #[inline]
     pub fn write_word(&mut self, addr: u32, data: u32) {
         if cfg!(feature = "fast") {
+            // Write 4 bytes in little-endian order.
             unsafe {
                 let buffer_ptr = self.0.as_mut_ptr();
                 let dest = buffer_ptr.offset(addr as isize);
