@@ -9,10 +9,12 @@ use spa::{gba, ds};
 use std::path::PathBuf;
 
 fn main() {
+    //env_logger::init();
+
     let app = clap_app!(spa =>
         (version: crate_version!())
         (author: "Simon Cooper")
-        (about: "Gameboy Advance emulator.")
+        (about: "Gameboy Advance and DS emulator.")
         (@arg ROM: "The path to the game ROM to use.")
         (@arg debug: -d +takes_value "Enter debug mode.")
         (@arg mute: -m "Mute all audio.")

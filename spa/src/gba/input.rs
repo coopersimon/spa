@@ -1,21 +1,8 @@
 use crate::common::peripheral::joypad::Buttons;
 
-pub enum Button {
-    A,
-    B,
-    Start,
-    Select,
-    Left,
-    Right,
-    Up,
-    Down,
-    L,
-    R
-}
-
-impl From<crate::gba::Button> for Buttons {
-    fn from(b: crate::gba::Button) -> Buttons {
-        use crate::gba::Button::*;
+impl From<crate::Button> for Buttons {
+    fn from(b: crate::Button) -> Buttons {
+        use crate::Button::*;
         match b {
             A       => Buttons::A,
             B       => Buttons::B,
@@ -26,7 +13,8 @@ impl From<crate::gba::Button> for Buttons {
             Left    => Buttons::LEFT,
             Right   => Buttons::RIGHT,
             Up      => Buttons::UP,
-            Down    => Buttons::DOWN
+            Down    => Buttons::DOWN,
+            _       => Buttons::empty()
         }
     }
 }

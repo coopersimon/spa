@@ -30,7 +30,10 @@ use input::UserInput;
 use audio::REAL_BASE_SAMPLE_RATE;
 
 pub use memory::MemoryConfig;
-pub use input::Button;
+
+use crate::{
+    Device, Button, AudioHandler, Coords
+};
 
 type RendererType = video::ProceduralRenderer;
 
@@ -89,36 +92,29 @@ impl NDS {
             current_input:  UserInput::default()
         }
     }
+}
 
-    /// Drives the emulator and returns a pair of frames.
-    /// 
-    /// This should be called at 60fps.
-    /// The frames are in the format R8G8B8A8.
-    pub fn frame(&mut self, upper_frame: &mut [u8], lower_frame: &mut [u8]) {
+impl Device for NDS {
+    fn frame(&mut self, upper_frame: &mut [u8], lower_frame: &mut [u8]) {
         self.frame_receiver.get_frame(&mut [upper_frame, lower_frame], self.current_input.clone());
     }
 
-    pub fn render_size(&mut self) -> (usize, usize) {
-        RendererType::render_size()
+    fn render_size(&self) -> [Coords<usize>; 2] {
+        let render_size = RendererType::render_size();
+        [Coords {x: render_size.0, y: render_size.1}, Coords {x: render_size.0, y: render_size.1}]
     }
 
-    pub fn set_button(&mut self, button: Button, pressed: bool) {
+    fn set_button(&mut self, button: Button, pressed: bool) {
         self.current_input.set_button(button, pressed);
     }
 
-    /// Call with Some((x, y)) when the touchscreen is pressed.
-    /// Coordinates should be between 0.0 and 1.0.
-    /// 
-    /// Call with None when the touchscreen is released.
-    pub fn touchscreen_pressed(&mut self, coords: Option<(f64, f64)>) {
-        self.current_input.set_touchscreen(coords);
+    fn touchscreen_pressed(&mut self, coords: Option<Coords<f64>>) {
+        self.current_input.set_touchscreen(coords.map(|c| (c.x, c.y)));
     }
 
-    /// Call this at the start to enable audio.
-    /// It creates a NDSAudioHandler that can be sent to the audio thread.
-    pub fn enable_audio(&mut self, sample_rate: f64) -> Option<NDSAudioHandler> {
+    fn enable_audio(&mut self, sample_rate: f64) -> Option<AudioHandler> {
         if let Some(sample_rx) = self.audio_channel.take() {
-            Some(NDSAudioHandler {
+            Some(AudioHandler {
                 resampler: Resampler::new(
                     sample_rx,
                     None,
@@ -128,21 +124,6 @@ impl NDS {
             })
         } else {
             None
-        }
-    }
-}
-
-/// Created by NDS.
-pub struct NDSAudioHandler {
-    resampler:    Resampler,
-}
-
-impl NDSAudioHandler {
-    /// Fill the provided buffer with samples.
-    /// The format is PCM interleaved stereo.
-    pub fn get_audio_packet(&mut self, buffer: &mut [f32]) {
-        for (o_frame, i_frame) in buffer.chunks_exact_mut(2).zip(&mut self.resampler) {
-            o_frame.copy_from_slice(&i_frame);
         }
     }
 }

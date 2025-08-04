@@ -3,21 +3,6 @@
 use crate::common::peripheral::joypad::Buttons;
 use super::joypad::DSButtons;
 
-pub enum Button {
-    A,
-    B,
-    X,
-    Y,
-    Start,
-    Select,
-    Left,
-    Right,
-    Up,
-    Down,
-    L,
-    R
-}
-
 #[derive(Clone)]
 pub struct UserInput {
     pub buttons:    Buttons,
@@ -38,8 +23,8 @@ impl Default for UserInput {
 }
 
 impl UserInput {
-    pub fn set_button(&mut self, button: Button, pressed: bool) {
-        use Button::*;
+    pub fn set_button(&mut self, button: crate::Button, pressed: bool) {
+        use crate::Button::*;
         match button {
             A => self.buttons.set(Buttons::A, !pressed),
             B => self.buttons.set(Buttons::B, !pressed),

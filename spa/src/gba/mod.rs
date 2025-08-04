@@ -22,9 +22,11 @@ use memory::{
 };
 use video::Renderer;
 use audio::REAL_BASE_SAMPLE_RATE;
+use super::{
+    AudioHandler, Device, Button, Coords
+};
 
 pub use memory::MemoryConfig;
-pub use input::Button;
 
 type RendererType = video::ProceduralRenderer;
 
@@ -61,24 +63,21 @@ impl GBA {
             buttons_pressed: Buttons::from_bits_truncate(0xFFFF),
         }
     }
+}
 
-    /// Drives the emulator and returns a frame.
-    /// 
-    /// This should be called at 60fps.
-    /// The frame is in the format R8G8B8A8.
-    pub fn frame(&mut self, frame: &mut [u8]) {
-        self.frame_receiver.get_frame(&mut [frame], self.buttons_pressed);
+impl Device for GBA {
+    fn frame(&mut self, upper_frame: &mut [u8], _lower_frame: &mut [u8]) {
+        self.frame_receiver.get_frame(&mut [upper_frame], self.buttons_pressed);
     }
 
-    pub fn render_size(&mut self) -> (usize, usize) {
-        RendererType::render_size()
+    fn render_size(&self) -> [Coords<usize>; 2] {
+        let render_size = RendererType::render_size();
+        [Coords {x: render_size.0, y: render_size.1}, Coords {x: 0, y: 0}]
     }
 
-    /// Call this at the start to enable audio.
-    /// It creates a GBAAudioHandler that can be sent to the audio thread.
-    pub fn enable_audio(&mut self, sample_rate: f64) -> Option<GBAAudioHandler> {
+    fn enable_audio(&mut self, sample_rate: f64) -> Option<AudioHandler> {
         if let Some((sample_rx, rate_rx)) = self.audio_channels.take() {
-            Some(GBAAudioHandler {
+            Some(AudioHandler {
                 resampler: Resampler::new(
                     sample_rx,
                     Some(rate_rx),
@@ -91,23 +90,12 @@ impl GBA {
         }
     }
 
-    pub fn set_button(&mut self, button: Button, pressed: bool) {
+    fn set_button(&mut self, button: Button, pressed: bool) {
         self.buttons_pressed.set(button.into(), !pressed);
     }
-}
 
-/// Created by a GBA.
-pub struct GBAAudioHandler {
-    resampler:    Resampler,
-}
-
-impl GBAAudioHandler {
-    /// Fill the provided buffer with samples.
-    /// The format is PCM interleaved stereo.
-    pub fn get_audio_packet(&mut self, buffer: &mut [f32]) {
-        for (o_frame, i_frame) in buffer.chunks_exact_mut(2).zip(&mut self.resampler) {
-            o_frame.copy_from_slice(&i_frame);
-        }
+    fn touchscreen_pressed(&mut self, _coords: Option<Coords<f64>>) {
+        // No effect on GBA.
     }
 }
 

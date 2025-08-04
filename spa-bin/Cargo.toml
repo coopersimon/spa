@@ -1,6 +1,6 @@
 [package]
 name = "spa-bin"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Simon Cooper <simon.d.cooper@hotmail.co.uk>"]
 edition = "2021"
 
@@ -11,12 +11,13 @@ clap = "2.33"
 chrono = "0.4"
 bytemuck = "1.2.0"
 futures = "0.3.5"
-wgpu = { version = "0.11.0", features = ["spirv"] }
-winit = "0.25"
+wgpu = "26.0"
+winit = "0.30"
 cpal = "0.13"
-imgui = "0.8"
-imgui-winit-support = "0.8"
-imgui-wgpu = "0.18"
+#imgui = "0.8"
+#imgui-winit-support = "0.8"
+#imgui-wgpu = "0.18"
+env_logger = "0.9.0"
 
 [dependencies.spa]
 path = "../spa"
