@@ -2302,7 +2302,6 @@ dependencies = [
 name = "spa-bin"
 version = "0.2.1"
 dependencies = [
- "bytemuck",
  "chrono",
  "clap",
  "cpal",

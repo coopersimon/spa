@@ -1,13 +1,5 @@
-
-/*mod gba;
-mod nds;
-
-pub use gba::run_gba;
-pub use nds::run_nds;*/
-
 use spa::{ds, gba, Coords, Device};
 
-use wgpu::util::DeviceExt;
 use winit::{
     application::ApplicationHandler, dpi::{
         LogicalSize, Size, PhysicalSize
@@ -19,16 +11,6 @@ use winit::{
 };
 
 use cpal::traits::StreamTrait;
-
-#[repr(C)]
-#[derive(Default, Debug, Clone, Copy)]
-struct Vertex {
-    position:   [f32; 2],
-    tex_coord:  [f32; 2]
-}
-
-unsafe impl bytemuck::Zeroable for Vertex {}
-unsafe impl bytemuck::Pod for Vertex {}
 
 const FRAME_TIME: chrono::Duration = chrono::Duration::nanoseconds(1_000_000_000 / 60);
 
@@ -58,7 +40,6 @@ struct App {
     texture_extent:  wgpu::Extent3d,
     texture:         wgpu::Texture,
     bind_group:      wgpu::BindGroup,
-    vertex_buffer:   wgpu::Buffer,
     render_pipeline: wgpu::RenderPipeline,
 
     upper_screen_buffer: Vec<u8>,
@@ -159,19 +140,6 @@ impl App {
             label: None
         });
 
-        let vertices = vec![
-            Vertex{position: [-1.0, -1.0], tex_coord: [0.0, 1.0]},
-            Vertex{position: [1.0, -1.0], tex_coord: [1.0, 1.0]},
-            Vertex{position: [-1.0, 1.0], tex_coord: [0.0, 0.0]},
-            Vertex{position: [1.0, 1.0], tex_coord: [1.0, 0.0]},
-        ];
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX
-        });
-
         let shader_module = device.create_shader_module(wgpu::include_wgsl!("./shaders/shader.wgsl"));
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -180,22 +148,7 @@ impl App {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: Some("vs_main"),
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &[
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float32x2,
-                            offset: 0,
-                            shader_location: 0,
-                        },
-                        wgpu::VertexAttribute {
-                            format: wgpu::VertexFormat::Float32x2,
-                            offset: 4 * 2,
-                            shader_location: 1,
-                        },
-                    ]
-                }],
+                buffers: &[],
                 compilation_options: Default::default()
             },
             primitive: wgpu::PrimitiveState {
@@ -236,7 +189,6 @@ impl App {
             texture_extent,
             texture,
             bind_group,
-            vertex_buffer,
             render_pipeline,
 
             upper_screen_buffer: vec![0_u8; upper_screen_tex_size],
@@ -337,7 +289,6 @@ impl ApplicationHandler for App {
                         });
                         rpass.set_pipeline(&self.render_pipeline);
                         rpass.set_bind_group(0, &self.bind_group, &[]);
-                        rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
                         rpass.draw(0..4, 0..1);
                     }
     

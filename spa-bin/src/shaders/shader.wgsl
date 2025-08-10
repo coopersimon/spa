@@ -1,20 +1,27 @@
-
-struct VertexInput {
-    @location(0) position: vec2<f32>,
-    @location(1) tex_coords: vec2<f32>,
-}
-
 struct VertexOutput {
     @builtin(position) pos: vec4<f32>,
     @location(0) tex_coords: vec2<f32>,
 }
 
 @vertex fn vs_main(
-    input: VertexInput
+    @builtin(vertex_index) vertex_index: u32
 ) -> VertexOutput {
+    var position = array<vec2<f32>, 4>(
+        vec2<f32>(-1.0, -1.0),
+        vec2<f32>( 1.0, -1.0),
+        vec2<f32>(-1.0,  1.0),
+        vec2<f32>( 1.0,  1.0)
+    );
+    var tex_coord = array<vec2<f32>, 4>(
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 1.0),
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(1.0, 0.0)
+    );
+
     var out: VertexOutput;
-    out.pos = vec4<f32>(input.position, 0.0, 1.0);
-    out.tex_coords = input.tex_coords;
+    out.pos = vec4<f32>(position[vertex_index], 0.0, 1.0);
+    out.tex_coords = tex_coord[vertex_index];
     return out;
 }
 
