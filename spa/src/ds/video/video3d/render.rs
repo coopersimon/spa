@@ -1,5 +1,5 @@
 // This file contains the Rendering Engine struct.
-// It doesn't contain the actual logic for rendering 3D - see drawing.rs for that.
+// It doesn't contain the actual logic for rendering 3D - see drawing/mod.rs for that.
 
 use crate::common::video::colour::Colour;
 use crate::utils::{

@@ -39,6 +39,23 @@ pub enum RendererMode {
     NDSB
 }
 
+#[derive(Clone)]
+struct ObjectPixelWindow {
+    /// Object data for this pixel.
+    pixel: Option<ObjectPixel>,
+    /// `true` if this pixel is inside the object window.
+    window: bool,
+}
+
+impl ObjectPixelWindow {
+    pub fn new() -> Self {
+        Self {
+            pixel: None,
+            window: false
+        }
+    }
+}
+
 pub struct SoftwareRenderer {
     mode:           RendererMode,
     h_res:          usize,
@@ -104,14 +121,13 @@ impl SoftwareRenderer {
             RendererMode::NDSB => mem.registers.nds_bg_data_for_mode(), // TODO: disallow mode 6
         };
 
-        // TODO: don't alloc these every time
-        let mut obj_line = vec![None; self.h_res];
-        let mut obj_window = vec![false; self.h_res];
+        // TODO: don't alloc this every time
+        let mut obj_line = vec![ObjectPixelWindow::new(); self.h_res];
         if mem.registers.is_obj_enabled() {
-            self.draw_obj_line(mem, &mut obj_line, &mut obj_window, line);
+            self.draw_obj_line(mem, &mut obj_line, line);
         }
         for x in 0..self.h_res {
-            target[x] = self.eval_pixel(mem, obj_line[x], obj_window[x], &bg_data, x as u8, line);
+            target[x] = self.eval_pixel(mem, &obj_line[x], &bg_data, x as u8, line);
         }
     }
 
@@ -166,7 +182,7 @@ impl SoftwareRenderer {
 // Internal: draw layers
 impl SoftwareRenderer {
     /// Draw object pixels to a target line.
-    fn draw_obj_line<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [Option<ObjectPixel>], obj_window: &mut [bool], y: u8) {
+    fn draw_obj_line<V: VRAM2D>(&self, mem: &VideoMemory<V>, target: &mut [ObjectPixelWindow], y: u8) {
         // Global settings
         let use_1d_tile_mapping = self.obj_1d_tile_mapping(&mem.registers);
         let tile_1d_start_shift = self.obj_1d_tile_shift(&mem.registers);
@@ -214,7 +230,7 @@ impl SoftwareRenderer {
                     continue;
                 }
                 if !in_obj_window {
-                    if let Some(existing_pixel) = &target[x as usize] {
+                    if let Some(existing_pixel) = &target[x as usize].pixel {
                         if existing_pixel.priority <= priority {
                             continue;
                         }
@@ -306,7 +322,7 @@ impl SoftwareRenderer {
                 };
 
                 if in_obj_window {
-                    obj_window[x as usize] = true;
+                    target[x as usize].window = true;
                 } else {
                     let obj_type = if bitmap {
                         BlendType::Bitmap((object.palette_bank() + 1) as u16)
@@ -315,7 +331,7 @@ impl SoftwareRenderer {
                     } else {
                         BlendType::None
                     };
-                    target[x as usize] = Some(ObjectPixel{
+                    target[x as usize].pixel = Some(ObjectPixel{
                         colour, priority, obj_type
                     });
                 }
@@ -592,22 +608,22 @@ impl SoftwareRenderer {
 // Internal: draw modes
 impl SoftwareRenderer {
 
-    fn eval_pixel<V: VRAM2D>(&self, mem: &VideoMemory<V>, obj_pixel: Option<ObjectPixel>, obj_window: bool, bg_data: &[BackgroundData], x: u8, y: u8) -> Colour {
+    fn eval_pixel<V: VRAM2D>(&self, mem: &VideoMemory<V>, obj: &ObjectPixelWindow, bg_data: &[BackgroundData], x: u8, y: u8) -> Colour {
         let colour_window = || {
-            Self::window_pixel(&mem.registers, mem.registers.colour_window_mask(), obj_window, x, y)
+            Self::window_pixel(&mem.registers, mem.registers.colour_window_mask(), obj.window, x, y)
         };
         let mut target_1: Option<BlendTarget1> = None;
         for priority in 0..4 {
-            if let Some(obj) = obj_pixel {
-                if obj.priority == priority {
-                    if Self::window_pixel(&mem.registers, mem.registers.obj_window_mask(), obj_window, x, y) {
-                        let col = match obj.colour {
+            if let Some(obj_pixel) = obj.pixel {
+                if obj_pixel.priority == priority {
+                    if Self::window_pixel(&mem.registers, mem.registers.obj_window_mask(), obj.window, x, y) {
+                        let col = match obj_pixel.colour {
                             ColType::Palette(c) => self.palette_cache.get_obj(c),
                             ColType::Extended(c) => self.palette_cache.get_ext_obj(c),
                             ColType::Direct(c) => Colour::from_555(c),
                         };
                         if colour_window() {
-                            match Self::colour_effect(&mem.registers, mem.registers.obj_blend_mask(), col, target_1, obj.obj_type) {
+                            match Self::colour_effect(&mem.registers, mem.registers.obj_blend_mask(), col, target_1, obj_pixel.obj_type) {
                                 Blended::Colour(c) => return c,
                                 Blended::AlphaTarget1(a) => target_1 = Some(a),
                             }
@@ -619,7 +635,7 @@ impl SoftwareRenderer {
             }
             for bg in bg_data {
                 if bg.priority == priority {
-                    match self.bg_pixel(mem, bg, obj_window, x, y) {
+                    match self.bg_pixel(mem, bg, obj.window, x, y) {
                         BGPixel::_2D(col) => if colour_window() {
                             match Self::colour_effect(&mem.registers, bg.blend_mask, col, target_1, BlendType::None) {
                                 Blended::Colour(c) => return c,

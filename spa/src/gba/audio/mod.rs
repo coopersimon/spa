@@ -554,14 +554,8 @@ impl GBAAudio {
 }
 
 #[inline]
-const fn clamp(n: i16, low: i16, high: i16) -> i16 {
-    if n < low {
-        low
-    } else if n > high {
-        high
-    } else {
-        n
-    }
+fn clamp(n: i16, low: i16, high: i16) -> i16 {
+    std::cmp::max(low, std::cmp::min(n, high))
 }
 
 #[inline]
