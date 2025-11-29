@@ -363,10 +363,10 @@ impl ApplicationHandler for App {
     }
 }
 
-pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
+pub fn run_nds(config: ds::MemoryConfig, mute: bool) {
     let mut nds: Box<dyn Device> = Box::new(ds::NDS::new(config));
 
-    let audio_stream = make_audio_stream(&mut nds);
+    let audio_stream = make_audio_stream(&mut nds, mute);
 
     let event_loop = EventLoop::new().expect("Failed to create event loop");
 
@@ -375,10 +375,10 @@ pub fn run_nds(config: ds::MemoryConfig, _mute: bool) {
     event_loop.run_app(&mut app).unwrap();
 }
 
-pub fn run_gba(config: gba::MemoryConfig, _mute: bool) {
+pub fn run_gba(config: gba::MemoryConfig, mute: bool) {
     let mut gba: Box<dyn Device> = Box::new(gba::GBA::new(config));
 
-    let audio_stream = make_audio_stream(&mut gba);
+    let audio_stream = make_audio_stream(&mut gba, mute);
 
     let event_loop = EventLoop::new().expect("Failed to create event loop");
 
@@ -387,7 +387,7 @@ pub fn run_gba(config: gba::MemoryConfig, _mute: bool) {
     event_loop.run_app(&mut app).unwrap();
 }
 
-fn make_audio_stream(console: &mut Box<dyn Device>) -> cpal::Stream {
+fn make_audio_stream(console: &mut Box<dyn Device>, mute: bool) -> cpal::Stream {
     use cpal::traits::{
         DeviceTrait,
         HostTrait
@@ -405,6 +405,11 @@ fn make_audio_stream(console: &mut Box<dyn Device>) -> cpal::Stream {
         &config.into(),
         move |data: &mut [f32], _| {
             audio_handler.get_audio_packet(data);
+            if mute {
+                for d in data.iter_mut() {
+                    *d = 0.0;
+                }
+            }
         },
         move |err| {
             println!("Error occurred: {}", err);
