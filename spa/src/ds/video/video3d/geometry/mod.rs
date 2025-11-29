@@ -512,29 +512,11 @@ impl GeometryEngine {
 
     /// Test if this polygon should be output, and if so clip and write it to buffers.
     fn try_emit(&mut self) {
-        if self.test_clip() {
-            self.clip_and_emit_polygon();
-        }
-
         if !self.test_one_dot_display() {
             return;
         }
-    }
 
-    
-    /// Test if the polygon clips the far plane.
-    fn test_clip(&mut self) -> bool {
-        let mut intersects_far_plane = false;
-        
-        for stage_idx in 0..self.stage_size {
-            let vertex = &mut self.staged_polygon[stage_idx];
-
-            intersects_far_plane = intersects_far_plane || (
-                vertex.position.z() >= vertex.position.w()
-            );
-        }
-
-        !(intersects_far_plane && !self.polygon_attrs.contains(PolygonAttrs::FAR_PLANE_CLIP))
+        self.clip_and_emit_polygon();
     }
 
     /// Clip the vertices, producing 1 or 2 new vertices per clip.
@@ -558,11 +540,15 @@ impl GeometryEngine {
 
         // Clip against each plane.
         // TODO: only test against planes that it clips
-        for plane in ClipPlane::all() {
+        for &plane in ClipPlane::all() {
             std::mem::swap(&mut in_vertices, &mut out_vertices);
             out_vertices.clear();
 
-            self.clipping_unit.clip(*plane, &in_vertices, &mut out_vertices);
+            let clip = self.clipping_unit.clip(plane, &in_vertices, &mut out_vertices);
+            // Test if far plane clipping is allowed.
+            if (plane == ClipPlane::Far) && clip && !output_polygon.attrs.contains(PolygonAttrs::FAR_PLANE_CLIP) {
+                return;
+            }
 
             if out_vertices.is_empty() {
                 return;

@@ -104,9 +104,9 @@ Note that most of these games have not been properly played for a longer duratio
 - Nintendogs (Labrador): Intro is ok. Gameplay begins, crashes due to full GPU command fifo.
 - Pokemon Mystery Dungeon Explorers of Sky: Mostly OK.
 - Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
-- Pokemon Platinum: Mostly OK, 3D in title does not appear. Gameplay is fine. Does not load save correctly.
+- Pokemon Platinum: Mostly OK. Gameplay is fine. Does not load save correctly.
 - Pokemon Black: Black screen
-- Pokemon HeartGold: 2d elements of game work ok, 3D in intro good, 3D in title does not appear
+- Pokemon HeartGold: 2d elements of game work ok, 3D in intro good.
 - Pokemon Ranger: Polygon/texture precision issues in 2D-as-3D game. Mostly OK though.
 - Resident Evil: Seems mostly ok. Frame pacing issues. Freezes during intro cutscene, though if skipped gameplay seems ok.
 - Shin Megami Tensei: Strange Journey: Titles and menu OK, freezes when gameplay begins.

@@ -126,7 +126,8 @@ impl ClippingUnit {
         Coords { x: screen_x, y: screen_y }
     }
 
-    pub fn clip(&mut self, plane: ClipPlane, in_polygon: &[StagedVertex], out_polygon: &mut Vec<StagedVertex>) {
+    /// Returns true if clip occurred.
+    pub fn clip(&mut self, plane: ClipPlane, in_polygon: &[StagedVertex], out_polygon: &mut Vec<StagedVertex>) -> bool {
         use ClipPlane::*;
         const X: usize = 0;
         const Y: usize = 1;
@@ -141,7 +142,8 @@ impl ClippingUnit {
         }
     }
 
-    fn clip_polygon(&mut self, in_polygon: &[StagedVertex], out_polygon: &mut Vec<StagedVertex>, dim: usize, val: N, clips: fn(N, N) -> bool) {
+    fn clip_polygon(&mut self, in_polygon: &[StagedVertex], out_polygon: &mut Vec<StagedVertex>, dim: usize, val: N, clips: fn(N, N) -> bool) -> bool {
+        let mut clip = false;
         for n in 0..in_polygon.len() {
             let vtx_a = &in_polygon[n];
             let vtx_b = &in_polygon[(n+1) % in_polygon.len()];
@@ -165,6 +167,7 @@ impl ClippingUnit {
 
                 out_polygon.push(vtx_a.clone());
                 out_polygon.push(clip_vtx_b);
+                clip = true;
             } else if clips(vtx_a.position.elements[dim], wa) && !clips(vtx_b.position.elements[dim], wb) {
                 // A clips
                 let over = ((wb * val) - vtx_b.position.elements[dim]).to_fixed::<I40F24>();
@@ -177,9 +180,13 @@ impl ClippingUnit {
                 let clip_vtx_a = Self::interpolate(vtx_a, vtx_b, factor_a.to_fixed(), factor_b.to_fixed(), position);
 
                 out_polygon.push(clip_vtx_a);
+                clip = true
+            } else {
+                // both points clip.
+                clip = true
             }
-            // else: both points clip.
         }
+        clip
     }
 
     fn interpolate(vtx_a: &StagedVertex, vtx_b: &StagedVertex, factor_a: N, factor_b: N, position: Vector<4>) -> StagedVertex {
