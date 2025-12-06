@@ -162,199 +162,91 @@ impl DSVideoMemory {
 // Mem interface: VRAM
 impl DSVideoMemory {
 
-    pub fn read_byte_vram(&mut self, addr: u32) -> u8 {
-        (match addr {
+    fn lookup_vram<T, F: Fn(u32, &Box<RAM>) -> T>(&mut self, addr: u32, read_fn: F) -> Option<T> {
+        match addr {
             0x0600_0000..=0x061F_FFFF => {
                 let addr = addr & 0x7_FFFF;
                 let engine_a = self.engine_a_mem.lock();
                 engine_a.vram.lookup_bg(addr)
-                    .map(|(mask, vram)| vram.read_byte(addr & mask))
+                    .map(|(mask, vram)| read_fn(addr & mask, vram))
             },
             0x0620_0000..=0x063F_FFFF => {
                 let addr = addr & 0x1_FFFF;
                 let engine_b = self.engine_b_mem.lock();
                 engine_b.vram.lookup_bg(addr)
-                    .map(|(mask, vram)| vram.read_byte(addr & mask))
+                    .map(|(mask, vram)| read_fn(addr & mask, vram))
             },
             0x0640_0000..=0x065F_FFFF => {
                 let addr = addr & 0x3_FFFF;
                 let engine_a = self.engine_a_mem.lock();
                 engine_a.vram.lookup_obj(addr)
-                    .map(|(mask, vram)| vram.read_byte(addr & mask))
+                    .map(|(mask, vram)| read_fn(addr & mask, vram))
             },
             0x0660_0000..=0x067F_FFFF => {
                 let addr = addr & 0x1_FFFF;
                 let mut engine_b = self.engine_b_mem.lock();
-                engine_b.vram.obj_slot.as_mut().map(|v| v.read_byte(addr & v.mask()))
+                engine_b.vram.obj_slot.as_mut().map(|v| read_fn(addr & v.mask(), v))
             },
             _ => {
                 let mut lcdc = self.lcdc_vram.lock();
                 let (vram, offset) = lcdc.mut_lcdc(addr);
-                vram.map(|v| v.read_byte(addr - offset))
+                vram.map(|v| read_fn(addr - offset, v))
             }
-        }).unwrap_or(0)
+        }
     }
-    pub fn write_byte_vram(&mut self, addr: u32, data: u8) {
+
+    fn lookup_vram_mut<F: Fn(u32, &mut Box<RAM>)>(&mut self, addr: u32, write_fn: F) {
         match addr {
             0x0600_0000..=0x061F_FFFF => {
                 let addr = addr & 0x7_FFFF;
                 let mut engine_a = self.engine_a_mem.lock();
                 engine_a.vram.lookup_bg_mut(addr)
-                    .map(|(mask, vram)| vram.write_byte(addr & mask, data));
+                    .map(|(mask, vram)| write_fn(addr & mask, vram));
             },
             0x0620_0000..=0x063F_FFFF => {
                 let addr = addr & 0x1_FFFF;
                 let mut engine_b = self.engine_b_mem.lock();
                 engine_b.vram.lookup_bg_mut(addr)
-                    .map(|(mask, vram)| vram.write_byte(addr & mask, data));
+                    .map(|(mask, vram)| write_fn(addr & mask, vram));
             },
             0x0640_0000..=0x065F_FFFF => {
                 let addr = addr & 0x3_FFFF;
                 let mut engine_a = self.engine_a_mem.lock();
                 engine_a.vram.lookup_obj_mut(addr)
-                    .map(|(mask, vram)| vram.write_byte(addr & mask, data));
+                    .map(|(mask, vram)| write_fn(addr & mask, vram));
             },
             0x0660_0000..=0x067F_FFFF => {
                 let addr = addr & 0x1_FFFF;
                 let mut engine_b = self.engine_b_mem.lock();
-                engine_b.vram.obj_slot.as_mut().map(|v| v.write_byte(addr & v.mask(), data));
+                engine_b.vram.obj_slot.as_mut().map(|v| write_fn(addr & v.mask(), v));
             },
             _ => {
                 let mut lcdc = self.lcdc_vram.lock();
                 let (vram, offset) = lcdc.mut_lcdc(addr);
-                vram.map(|v| v.write_byte(addr - offset, data));
+                vram.map(|v| write_fn(addr - offset, v));
             }
         }
+    }
+
+    pub fn read_byte_vram(&mut self, addr: u32) -> u8 {
+        self.lookup_vram(addr, |addr, vram| vram.read_byte(addr)).unwrap_or(0)
+    }
+    pub fn write_byte_vram(&mut self, addr: u32, data: u8) {
+        self.lookup_vram_mut(addr, |addr, vram| vram.write_byte(addr, data));
     }
 
     pub fn read_halfword_vram(&mut self, addr: u32) -> u16 {
-        (match addr {
-            0x0600_0000..=0x061F_FFFF => {
-                let addr = addr & 0x7_FFFF;
-                let engine_a = self.engine_a_mem.lock();
-                engine_a.vram.lookup_bg(addr)
-                    .map(|(mask, vram)| vram.read_halfword(addr & mask))
-            },
-            0x0620_0000..=0x063F_FFFF => {
-                let addr = addr & 0x1_FFFF;
-                let engine_b = self.engine_b_mem.lock();
-                engine_b.vram.lookup_bg(addr)
-                    .map(|(mask, vram)| vram.read_halfword(addr & mask))
-            },
-            0x0640_0000..=0x065F_FFFF => {
-                let addr = addr & 0x3_FFFF;
-                let engine_a = self.engine_a_mem.lock();
-                engine_a.vram.lookup_obj(addr)
-                    .map(|(mask, vram)| vram.read_halfword(addr & mask))
-            },
-            0x0660_0000..=0x067F_FFFF => {
-                let addr = addr & 0x1_FFFF;
-                let mut engine_b = self.engine_b_mem.lock();
-                engine_b.vram.obj_slot.as_mut().map(|v| v.read_halfword(addr & v.mask()))
-            },
-            _ => {
-                let mut lcdc = self.lcdc_vram.lock();
-                let (vram, offset) = lcdc.mut_lcdc(addr);
-                vram.map(|v| v.read_halfword(addr - offset))
-            }
-        }).unwrap_or(0)
+        self.lookup_vram(addr, |addr, vram| vram.read_halfword(addr)).unwrap_or(0)
     }
     pub fn write_halfword_vram(&mut self, addr: u32, data: u16) {
-        match addr {
-            0x0600_0000..=0x061F_FFFF => {
-                let addr = addr & 0x7_FFFF;
-                let mut engine_a = self.engine_a_mem.lock();
-                engine_a.vram.lookup_bg_mut(addr)
-                    .map(|(mask, vram)| vram.write_halfword(addr & mask, data));
-            },
-            0x0620_0000..=0x063F_FFFF => {
-                let addr = addr & 0x1_FFFF;
-                let mut engine_b = self.engine_b_mem.lock();
-                engine_b.vram.lookup_bg_mut(addr)
-                    .map(|(mask, vram)| vram.write_halfword(addr & mask, data));
-            },
-            0x0640_0000..=0x065F_FFFF => {
-                let addr = addr & 0x3_FFFF;
-                let mut engine_a = self.engine_a_mem.lock();
-                engine_a.vram.lookup_obj_mut(addr)
-                    .map(|(mask, vram)| vram.write_halfword(addr & mask, data));
-            },
-            0x0660_0000..=0x067F_FFFF => {
-                let addr = addr & 0x1_FFFF;
-                let mut engine_b = self.engine_b_mem.lock();
-                engine_b.vram.obj_slot.as_mut().map(|v| v.write_halfword(addr & v.mask(), data));
-            },
-            _ => {
-                let mut lcdc = self.lcdc_vram.lock();
-                let (vram, offset) = lcdc.mut_lcdc(addr);
-                vram.map(|v| v.write_halfword(addr - offset, data));
-            }
-        }
+        self.lookup_vram_mut(addr, |addr, vram| vram.write_halfword(addr, data));
     }
 
     pub fn read_word_vram(&mut self, addr: u32) -> u32 {
-        (match addr {
-            0x0600_0000..=0x061F_FFFF => {
-                let addr = addr & 0x7_FFFF;
-                let engine_a = self.engine_a_mem.lock();
-                engine_a.vram.lookup_bg(addr)
-                    .map(|(mask ,vram)| vram.read_word(addr & mask))
-            },
-            0x0620_0000..=0x063F_FFFF => {
-                let addr = addr & 0x1_FFFF;
-                let engine_b = self.engine_b_mem.lock();
-                engine_b.vram.lookup_bg(addr)
-                    .map(|(mask ,vram)| vram.read_word(addr & mask))
-            },
-            0x0640_0000..=0x065F_FFFF => {
-                let addr = addr & 0x3_FFFF;
-                let engine_a = self.engine_a_mem.lock();
-                engine_a.vram.lookup_obj(addr)
-                    .map(|(mask ,vram)| vram.read_word(addr & mask))
-            },
-            0x0660_0000..=0x067F_FFFF => {
-                let addr = addr & 0x1_FFFF;
-                let mut engine_b = self.engine_b_mem.lock();
-                engine_b.vram.obj_slot.as_mut().map(|v| v.read_word(addr & v.mask()))
-            },
-            _ => {
-                let mut lcdc = self.lcdc_vram.lock();
-                let (vram, offset) = lcdc.mut_lcdc(addr);
-                vram.map(|v| v.read_word(addr - offset))
-            }
-        }).unwrap_or(0)
+        self.lookup_vram(addr, |addr, vram| vram.read_word(addr)).unwrap_or(0)
     }
     pub fn write_word_vram(&mut self, addr: u32, data: u32) {
-        match addr {
-            0x0600_0000..=0x061F_FFFF => {
-                let addr = addr & 0x7_FFFF;
-                let mut engine_a = self.engine_a_mem.lock();
-                engine_a.vram.lookup_bg_mut(addr)
-                    .map(|(mask, vram)| vram.write_word(addr & mask, data));
-            },
-            0x0620_0000..=0x063F_FFFF => {
-                let addr = addr & 0x1_FFFF;
-                let mut engine_b = self.engine_b_mem.lock();
-                engine_b.vram.lookup_bg_mut(addr)
-                    .map(|(mask, vram)| vram.write_word(addr & mask, data));
-            },
-            0x0640_0000..=0x065F_FFFF => {
-                let addr = addr & 0x3_FFFF;
-                let mut engine_a = self.engine_a_mem.lock();
-                engine_a.vram.lookup_obj_mut(addr)
-                    .map(|(mask, vram)| vram.write_word(addr & mask, data));
-            },
-            0x0660_0000..=0x067F_FFFF => {
-                let addr = addr & 0x1_FFFF;
-                let mut engine_b = self.engine_b_mem.lock();
-                engine_b.vram.obj_slot.as_mut().map(|v| v.write_word(addr & v.mask(), data));
-            },
-            _ => {
-                let mut lcdc = self.lcdc_vram.lock();
-                let (vram, offset) = lcdc.mut_lcdc(addr);
-                vram.map(|v| v.write_word(addr - offset, data));
-            }
-        }
+        self.lookup_vram_mut(addr, |addr, vram| vram.write_word(addr, data));
     }
 }
 

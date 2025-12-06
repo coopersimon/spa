@@ -63,8 +63,8 @@ impl Accelerators {
     pub fn start_div(&mut self) {
         match (self.div_control & DivisionControl::MODE).bits() {
             0 => {
-                let numerator = self.div_numerator as i32;
-                let denominator = self.div_denominator as i32;
+                let numerator = (self.div_numerator & 0xFFFF_FFFF) as i32;
+                let denominator = (self.div_denominator & 0xFFFF_FFFF) as i32;
                 if denominator == 0 {
                     self.div_control.insert(DivisionControl::DIV_BY_ZERO);
                     return;
@@ -73,7 +73,7 @@ impl Accelerators {
                 self.mod_result = (numerator % denominator) as i64;
             },
             1 => {
-                let denominator = self.div_denominator as i32 as i64;
+                let denominator = (self.div_denominator & 0xFFFF_FFFF) as i32 as i64;
                 if denominator == 0 {
                     self.div_control.insert(DivisionControl::DIV_BY_ZERO);
                     return;
