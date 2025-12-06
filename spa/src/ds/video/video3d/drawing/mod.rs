@@ -2,12 +2,12 @@ mod palette;
 
 use super::{
     render::RenderingEngine,
-    types::*, geometry::N, interpolate::*
+    types::*, geometry::N
 };
-use fixed::types::I40F24;
+use fixed::types::{I40F24, I46F18, I24F8, I12F4, I16F0};
 use fixed::traits::ToFixed;
 use crate::{
-    ds::video::{memory::Engine3DVRAM, video3d::types::Vertex},
+    ds::video::memory::Engine3DVRAM,
     common::video::colour::*,
     utils::bits::u16, utils::bytes
 };
@@ -20,6 +20,47 @@ struct Attributes {
     trans_id:   u8,
     fog:        bool,
     edge:       bool,
+}
+
+#[derive(Clone)]
+struct VertexStep {
+    x:          I12F4,
+    depth:      Depth,
+    colour_r:   I12F4,
+    colour_g:   I12F4,
+    colour_b:   I12F4,
+    tex_s:      I24F8,
+    tex_t:      I24F8,
+}
+
+impl VertexStep {
+    fn add(&mut self, other: &Self) {
+        self.x += other.x;
+        self.depth += other.depth;
+        self.colour_r += other.colour_r;
+        self.colour_g += other.colour_g;
+        self.colour_b += other.colour_b;
+        self.tex_s += other.tex_s;
+        self.tex_t += other.tex_t;
+    }
+
+    fn mul(&self, n: i16) -> Self {
+        Self {
+            x:          self.x * n.to_fixed::<I12F4>(),
+            depth:      self.depth * n.to_fixed::<Depth>(),
+            colour_r:   self.colour_r * n.to_fixed::<I12F4>(),
+            colour_g:   self.colour_g * n.to_fixed::<I12F4>(),
+            colour_b:   self.colour_b * n.to_fixed::<I12F4>(),
+            tex_s:      self.tex_s * n.to_fixed::<I24F8>(),
+            tex_t:      self.tex_t * n.to_fixed::<I24F8>(),
+        }
+    }
+}
+
+struct InterpolatedLine {
+    max_y:      u8,
+    current_values: VertexStep,
+    step: VertexStep
 }
 
 /// Render NDS 3D graphics.
@@ -112,70 +153,136 @@ impl Software3DRenderer {
     }
     
     fn draw_opaque_polygons(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha]) {
-        for p in render_engine.polygon_ram.opaque_polygons.iter() {
+        //use std::hash::{Hash, Hasher};
+        for (_, p) in render_engine.polygon_ram.opaque_polygons.iter().enumerate() {
+            /*let mut hash_state = std::hash::DefaultHasher::new();
+            (n as u32).hash(&mut hash_state);
+            let hash = hash_state.finish();
+            let r = (hash & 0xFF) as u8;
+            let g = ((hash >> 8) & 0xFF) as u8;
+            let b = ((hash >> 16) & 0xFF) as u8;
+            let poly_colour = ColourAlpha { col: Colour { r, g, b }, alpha: 0x1F };*/
 
             let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
             let mode = polygon.attrs.mode();
+
+            /*for vtx_idx in polygon.vertex_indices.iter().take(polygon.num_vertices as usize) {
+                let vertex = &render_engine.polygon_ram.vertices[*vtx_idx as usize];
+                println!("{} VTX: {:X}, {:X} TEX: {:X}, {:X}", n, vertex.screen_p.x, vertex.screen_p.y, vertex.tex_coords.s, vertex.tex_coords.t);
+            }*/
             
             let (mut x_min_prev, mut x_max_prev) = (256, 0);
-            let (y_min, y_max) = (p.y_min.to_num::<u8>(), std::cmp::min(p.y_max.to_num::<u8>(), 191));
-            for y_idx in y_min..=y_max {
+            let (y_min, y_max) = (p.y_min.round().to_num::<u8>(), std::cmp::min(p.y_max.round().to_num::<u8>(), 192));
 
-                let y = N::from_num(y_idx);
+            let Some([mut line_a, mut line_b]) = Self::find_intersect_points(render_engine, polygon, y_min.to_fixed()) else {
+                continue;
+            };
+
+            for y_idx in y_min..y_max {
+
+                if y_idx > line_a.max_y || y_idx > line_b.max_y {
+                    if let Some([new_line_a, new_line_b]) = Self::find_intersect_points(render_engine, polygon, y_idx.to_fixed()) {
+                        line_a = new_line_a;
+                        line_b = new_line_b;
+                    }
+                }
+
+                //let half = I16F0::ONE / 2;
+                //let y = I16F0::from_num(y_idx);// + half;
                 let y_idx_base = (y_idx as usize) * 256;
 
-                let Some([vtx_a, vtx_b]) = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max)) else {
+                //println!("Draw line {:X}", y);
+                /*let Some([vtx_a, vtx_b]) = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max)) else {
                     continue;
+                };*/
+                let x_a = line_a.current_values.x;
+                let x_b = line_b.current_values.x;
+
+                if x_a == x_b {
+                    // Should this ever happen?
+                    line_a.current_values.add(&line_a.step);
+                    line_b.current_values.add(&line_b.step);
+                    continue;
+                }
+
+                let (right, left) = if x_a > x_b {
+                    (&line_a.current_values, &line_b.current_values)
+                } else {
+                    (&line_b.current_values, &line_a.current_values)
                 };
 
-                let (min, max) = (vtx_a.screen_p.x.to_num::<i16>(), vtx_b.screen_p.x.to_num::<i16>());
-                let x_diff = (vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
+                let width = right.x - left.x;
+                let depth_step = (right.depth - left.depth).to_fixed::<I46F18>() / width.to_fixed::<I46F18>();
+                let r_step = (right.colour_r.to_fixed::<I24F8>() - left.colour_r.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+                let g_step = (right.colour_g.to_fixed::<I24F8>() - left.colour_g.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+                let b_step = (right.colour_b.to_fixed::<I24F8>() - left.colour_b.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+                let tex_s_step = (right.tex_s.to_fixed::<I24F8>() - left.tex_s.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+                let tex_t_step = (right.tex_t.to_fixed::<I24F8>() - left.tex_t.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
 
-                let x_max = std::cmp::min(max, 255);
-                for x_idx in min..=x_max {
-                    let x = N::from_num(x_idx);
-                    let factor_b = ((x - vtx_a.screen_p.x).to_fixed::<I40F24>() * x_diff).to_fixed::<N>().clamp(N::ZERO, N::ONE);
-                    let factor_a = N::ONE - factor_b;
+                let step = VertexStep {
+                    x: I12F4::ONE,
+                    depth: depth_step.to_fixed(),
+                    colour_r: r_step.to_fixed(),
+                    colour_g: g_step.to_fixed(),
+                    colour_b: b_step.to_fixed(),
+                    tex_s: tex_s_step,
+                    tex_t: tex_t_step,
+                };
+                let mut line = InterpolatedLine {
+                    max_y: 0,
+                    current_values: left.clone(),
+                    step: step
+                };
 
-                    let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
+                let x_min = left.x.round().to_num::<i16>();
+                let x_max = right.x.round().to_num::<i16>();
+
+                //println!("Line {:X} | x: {:X} to {:X} | tex ({:X}, {:X}) to ({:X}, {:X}) ({:X}, {:X})", y_idx, x_min, x_max, left.tex_s, left.tex_t, right.tex_s, right.tex_t, line.step.tex_s, line.step.tex_t);
+
+                for x_idx in x_min..x_max {
+                    let current = line.current_values.clone();
+                    line.current_values.add(&line.step);
 
                     let idx = y_idx_base + (x_idx as usize);
-                    if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[idx], depth) {
+                    if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[idx], current.depth) {
                         continue;
                     }
 
                     let top_edge = x_idx < x_min_prev || x_idx > x_max_prev;
                     let bottom_edge = false; // TODO: compare with next line.
-                    let edge = top_edge || bottom_edge || (x_idx == min) || (x_idx == x_max);
+                    let edge = top_edge || bottom_edge || (x_idx == x_min) || (x_idx == x_max);
                     if !edge && polygon.is_wireframe() {
                         continue;
                     }
 
-                    // Interpolate vertex colour
                     let vtx_colour = ColourAlpha {
-                        col: interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b),
+                        col: Colour { r: current.colour_r.to_num(), g: current.colour_g.to_num(), b: current.colour_b.to_num() },
                         alpha: 0x1F
                     };
 
-                    let tex_coords = interpolate_tex_coords_p(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b, vtx_a.depth, vtx_b.depth);
-                    let tex_colour = self.lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
+                    let tex_colour = self.lookup_tex_colour(TexCoords { s: current.tex_s.to_fixed(), t: current.tex_t.to_fixed() }, polygon.tex, polygon.palette, vram);
+                    //let tex_colour = Some(poly_colour);
 
                     let frag_colour = if let Some(tex_colour) = tex_colour {
                         Self::blend_frag_tex_colour(render_engine, mode, vtx_colour, tex_colour)
                     } else {
                         Self::blend_fragment_colour(render_engine, mode, vtx_colour)
                     };
+                    //let frag_colour = poly_colour;
                     if frag_colour.alpha > 0 {
                         target[idx] = frag_colour;
-                        self.depth_buffer[idx] = depth;
+                        self.depth_buffer[idx] = current.depth;
                         self.attr_buffer[idx].opaque_id = polygon.attrs.id();
                         self.attr_buffer[idx].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
                         self.attr_buffer[idx].edge = edge;
                     }
                 }
 
-                x_min_prev = min;
-                x_max_prev = max;
+                x_min_prev = x_min;
+                x_max_prev = x_max;
+
+                line_a.current_values.add(&line_a.step);
+                line_b.current_values.add(&line_b.step);
             }
             
         }
@@ -195,20 +302,82 @@ impl Software3DRenderer {
         let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
         let mode = polygon.attrs.mode();
         
-        let (y_min, y_max) = (p.y_min.to_num::<u8>(), std::cmp::min(p.y_max.to_num::<u8>(), 191));
-        for y_idx in y_min..=y_max {
+        /*println!("poly");
+        for vtx_idx in polygon.vertex_indices.iter().take(polygon.num_vertices as usize) {
+            let vertex = &render_engine.polygon_ram.vertices[*vtx_idx as usize];
+            println!("  VTX: {:X}, {:X} TEX: {:X}, {:X}", vertex.screen_p.x, vertex.screen_p.y, vertex.tex_coords.s, vertex.tex_coords.t);
+        }*/
 
-            let y = N::from_num(y_idx);
+        //let (mut x_min_prev, mut x_max_prev) = (256, 0);
+        let (y_min, y_max) = (p.y_min.round().to_num::<u8>(), std::cmp::min(p.y_max.round().to_num::<u8>(), 192));
+
+        let Some([mut line_a, mut line_b]) = Self::find_intersect_points(render_engine, polygon, y_min.to_fixed()) else {
+            //println!("Skip.");
+            return;
+        };
+
+        for y_idx in y_min..y_max {
+
+            if y_idx > line_a.max_y || y_idx > line_b.max_y {
+                if let Some([new_line_a, new_line_b]) = Self::find_intersect_points(render_engine, polygon, y_idx.to_fixed()) {
+                    line_a = new_line_a;
+                    line_b = new_line_b;
+                }
+            }
+
+            //let half = I16F0::ONE / 2;
+            //let y = I16F0::from_num(y_idx);// + half;
             let y_idx_base = (y_idx as usize) * 256;
 
-            let Some([vtx_a, vtx_b]) = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max)) else {
+            //println!("Draw line {:X}", y);
+            /*let Some([vtx_a, vtx_b]) = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max)) else {
                 continue;
+            };*/
+            let x_a = line_a.current_values.x;
+            let x_b = line_b.current_values.x;
+
+            if x_a == x_b {
+                // Should this ever happen?
+                    line_a.current_values.add(&line_a.step);
+                    line_b.current_values.add(&line_b.step);
+                continue;
+            }
+
+            let (right, left) = if x_a > x_b {
+                (&line_a.current_values, &line_b.current_values)
+            } else {
+                (&line_b.current_values, &line_a.current_values)
             };
 
-            let (min, max) = (vtx_a.screen_p.x.to_num::<i16>(), vtx_b.screen_p.x.to_num::<i16>());
-            let x_diff = (vtx_b.screen_p.x - vtx_a.screen_p.x).to_fixed::<I40F24>().checked_recip().unwrap_or(I40F24::ZERO);
+            let width = right.x - left.x;
+            let depth_step = (right.depth - left.depth).to_fixed::<I46F18>() / width.to_fixed::<I46F18>();
+            let r_step = (right.colour_r.to_fixed::<I24F8>() - left.colour_r.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+            let g_step = (right.colour_g.to_fixed::<I24F8>() - left.colour_g.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+            let b_step = (right.colour_b.to_fixed::<I24F8>() - left.colour_b.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+            let tex_s_step = (right.tex_s.to_fixed::<I24F8>() - left.tex_s.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+            let tex_t_step = (right.tex_t.to_fixed::<I24F8>() - left.tex_t.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
 
-            for x_idx in min..=std::cmp::min(max, 255) {
+            let step = VertexStep {
+                x: I12F4::ONE,
+                depth: depth_step.to_fixed(),
+                colour_r: r_step.to_fixed(),
+                colour_g: g_step.to_fixed(),
+                colour_b: b_step.to_fixed(),
+                tex_s: tex_s_step,
+                tex_t: tex_t_step,
+            };
+            let mut line = InterpolatedLine {
+                max_y: 0,
+                current_values: left.clone(),
+                step: step
+            };
+
+            let x_min = left.x.round().to_num::<i16>();
+            let x_max = right.x.round().to_num::<i16>();
+
+            //println!("Line {:X} | x: {:X} to {:X} | tex ({:X}, {:X}) to ({:X}, {:X}) ({:X}, {:X})", y_idx, x_min, x_max, left.tex_s, left.tex_t, right.tex_s, right.tex_t, line.step.tex_s, line.step.tex_t);
+
+            for x_idx in x_min..x_max {
                 let id = polygon.attrs.id();
                 let idx = y_idx_base + (x_idx as usize);
                 // TODO: only extract for shadow polygons?
@@ -217,13 +386,10 @@ impl Software3DRenderer {
                     continue;
                 }
 
-                let x = N::from_num(x_idx);
-                let factor_b = ((x - vtx_a.screen_p.x).to_fixed::<I40F24>() * x_diff).to_fixed::<N>().clamp(N::ZERO, N::ONE);
-                let factor_a = N::ONE - factor_b;
+                let current = line.current_values.clone();
+                line.current_values.add(&line.step);
 
-                let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
-
-                if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[idx], depth) {
+                if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[idx], current.depth) {
                     if id == 0 && mode == PolygonMode::Shadow {
                         // Shadow polygon mask
                         self.stencil_buffer[idx] = true;
@@ -238,14 +404,14 @@ impl Software3DRenderer {
                     continue;
                 }
 
-                // Interpolate vertex colour
+                // TODO: edge marking.
+
                 let vtx_colour = ColourAlpha {
-                    col: interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b),
-                    alpha: polygon.attrs.alpha()
+                    col: Colour { r: current.colour_r.to_num(), g: current.colour_g.to_num(), b: current.colour_b.to_num() },
+                    alpha: 0x1F
                 };
-                
-                let tex_coords = interpolate_tex_coords_p(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b, vtx_a.depth, vtx_b.depth);
-                let tex_colour = self.lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
+
+                let tex_colour = self.lookup_tex_colour(TexCoords { s: current.tex_s.to_fixed(), t: current.tex_t.to_fixed() }, polygon.tex, polygon.palette, vram);
 
                 let frag_colour = if let Some(tex_colour) = tex_colour {
                     Self::blend_frag_tex_colour(render_engine, mode, vtx_colour, tex_colour)
@@ -273,16 +439,19 @@ impl Software3DRenderer {
 
                 if frag_colour.alpha != 0x1F {
                     if polygon.attrs.contains(PolygonAttrs::ALPHA_DEPTH) {
-                        self.depth_buffer[idx] = depth;
+                        self.depth_buffer[idx] = current.depth;
                     }
                     self.attr_buffer[idx].trans_id = id;
                     self.attr_buffer[idx].fog = self.attr_buffer[idx].fog && polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
                 } else {
-                    self.depth_buffer[idx] = depth;
+                    self.depth_buffer[idx] = current.depth;
                     self.attr_buffer[idx].opaque_id = id;
                     self.attr_buffer[idx].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
                 }
             }
+
+            line_a.current_values.add(&line_a.step);
+            line_b.current_values.add(&line_b.step);
         }
         
     }
@@ -384,7 +553,7 @@ impl Software3DRenderer {
     /// Find the first two points where this polygon intersects the render line.
     /// 
     /// Returns the two points with interpolated attributes, in order of x position.
-    fn find_intersect_points(render_engine: &RenderingEngine, polygon: &Polygon, y: N) -> Option<[Vertex; 2]> {
+    fn find_intersect_points(render_engine: &RenderingEngine, polygon: &Polygon, y: I16F0) -> Option<[InterpolatedLine; 2]> {
         // Find start and end points.
         let mut lines = [None, None];
         for i in 0..polygon.num_vertices {
@@ -400,41 +569,65 @@ impl Software3DRenderer {
                 continue;
             }
 
-            // Weight of point a (normalised between 0-1)
-            let factor_a = ((y - vtx_b.screen_p.y).to_fixed::<I40F24>() / (vtx_a.screen_p.y - vtx_b.screen_p.y).to_fixed::<I40F24>())
-                .to_fixed::<N>().clamp(N::ZERO, N::ONE);   // TODO: one dot polygon?
-            // X coordinate where the render line intersects the polygon line.
-            let intersect_x = factor_a.to_fixed::<I40F24>() * (vtx_a.screen_p.x - vtx_b.screen_p.x).to_fixed::<I40F24>() + vtx_b.screen_p.x.to_fixed::<I40F24>();
-            let factor_b = N::ONE - factor_a;
+            // Bottom = higher Y value
+            let (top, bottom) = if vtx_a.screen_p.y > vtx_b.screen_p.y {
+                (&vtx_b, &vtx_a)
+            } else {
+                (&vtx_a, &vtx_b)
+            };
 
-            // Interpolate attributes
-            let depth = interpolate_depth(vtx_a.depth, vtx_b.depth, factor_a, factor_b);
-            let frag_colour = interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b);
-            let tex_coords = interpolate_tex_coords_p(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b, vtx_a.depth, vtx_b.depth);
+            // TODO: special case for single-pixel point...
 
-            let vertex = Vertex {
-                screen_p:   Coords { x: intersect_x.to_fixed::<N>(), y: y },
-                depth:      depth,
-                colour:     frag_colour,
-                tex_coords: tex_coords
+            let height = bottom.screen_p.y - top.screen_p.y;
+            let x_step = (bottom.screen_p.x - top.screen_p.x).to_fixed::<I24F8>() / height.to_fixed::<I24F8>(); // TODO: is this enough precision? Try 12.12?
+            let depth_step = (bottom.depth - top.depth).to_fixed::<I46F18>() / height.to_fixed::<I46F18>();
+            let r_step = (bottom.colour.r.to_fixed::<I24F8>() - top.colour.r.to_fixed::<I24F8>()) / height.to_fixed::<I24F8>();
+            let g_step = (bottom.colour.g.to_fixed::<I24F8>() - top.colour.g.to_fixed::<I24F8>()) / height.to_fixed::<I24F8>();
+            let b_step = (bottom.colour.b.to_fixed::<I24F8>() - top.colour.b.to_fixed::<I24F8>()) / height.to_fixed::<I24F8>();
+            let tex_s_step = (bottom.tex_coords.s.to_fixed::<I24F8>() - top.tex_coords.s.to_fixed::<I24F8>()) / height.to_fixed::<I24F8>();
+            let tex_t_step = (bottom.tex_coords.t.to_fixed::<I24F8>() - top.tex_coords.t.to_fixed::<I24F8>()) / height.to_fixed::<I24F8>();
+
+            let base = VertexStep {
+                x: top.screen_p.x.to_fixed(),
+                depth: top.depth,
+                colour_r: top.colour.r.to_fixed(),
+                colour_g: top.colour.g.to_fixed(),
+                colour_b: top.colour.b.to_fixed(),
+                tex_s: top.tex_coords.s.to_fixed(),
+                tex_t: top.tex_coords.t.to_fixed(),
+            };
+
+            let step = VertexStep {
+                x: x_step.to_fixed(),
+                depth: depth_step.to_fixed(),
+                colour_r: r_step.to_fixed(),
+                colour_g: g_step.to_fixed(),
+                colour_b: b_step.to_fixed(),
+                tex_s: tex_s_step,
+                tex_t: tex_t_step,
+            };
+            let step_count = (y - top.screen_p.y).to_num::<i16>();
+            let mut current_values = step.mul(step_count);
+            current_values.add(&base);
+
+            let poly_line = InterpolatedLine {
+                max_y: bottom.screen_p.y.to_num(),
+                current_values,
+                step,
             };
 
             if lines[0].is_none() {
                 // First line.
-                lines[0] = Some(vertex);
+                lines[0] = Some(poly_line);
             } else if lines[1].is_none() {
                 // Second line - we are done.
-                lines[1] = Some(vertex);
+                lines[1] = Some(poly_line);
                 break;
             }
         }
 
         if let [Some(vtx_a), Some(vtx_b)] = lines {
-            if vtx_a.screen_p.x < vtx_b.screen_p.x {
-                Some([vtx_a, vtx_b])
-            } else {
-                Some([vtx_b, vtx_a])
-            }
+            Some([vtx_a, vtx_b])
         } else {
             None
         }

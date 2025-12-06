@@ -71,20 +71,20 @@ Note that most of these games have not been properly played for a longer duratio
 - Animal Crossing Wild World: Works mostly OK.
 - Brain Training (Brain Age): Seems to run OK.
 - Black Ops: Boots mostly OK, unable to find strings to display for some reason.
-- Civilization Revolution: Serious visibility issues on 2D-as-3D display.
+- Civilization Revolution: Mostly OK, some issues early in game.
 - Chrono Trigger: Audio skips a little in intro, but mostly ok otherwise.
 - Dragon Quest Monsters Joker: Seems OK.
-- Dragon Quest IX: Shows intro cards and video. Game starts mostly OK (3d model never updates?). Actual game has some untextured models (could be bug with writing to multiple VRAM blocks at once..?)
+- Dragon Quest IX: Shows intro cards and video. Game starts mostly OK (3d model never updates?). Actual game has some untextured models (could be bug with writing to multiple VRAM blocks at once..?) (now freezes after character creation: though character creation seems OK)
 - Dragon Quest IV: Mostly OK
 - Dragon Quest V: Mostly OK
 - Dragon Quest VI: Near/Far plane clipping masks everything, broken intro. Actual game is ok when near plane clipping is disabled.
-- Final Fantasy Tactics A2: Slight flickering in intro / menu, actual game looks nearly ok but has 2D-as-3D display issues.
+- Final Fantasy Tactics A2: Slight flickering in intro / menu, actual game looks ok.
 - Final Fantasy III: Mostly OK.
-- Final Fantasy IV: Mostly OK.
+- Final Fantasy IV: Mostly OK - (wait doesn't display anything now?)
 - Final Fantasy: 4 Heroes of Light: Mostly ok
 - Final Fantasy XII: Revenant Wings: Mostly ok, but general frame pacing is completely broken in both videos and (seemingly) gameplay
 - Fire Emblem: Shadow Dragon: Intro missing some graphics (less than before). Otherwise looks and sounds fine.
-- Front Mission: Mostly ok, some minor 2D-as-3D issues.
+- Front Mission: Mostly ok, some weird layering issues.
 - Ghost Trick: Mostly ok
 - GTA Chinatown Wars: Titles & menu looks OK, 3D near plane is clipping everything + looks broken underneath
 - Hotel Dusk: Room 215: Now crashes with an undefined instruction in ITCM.
@@ -92,7 +92,7 @@ Note that most of these games have not been properly played for a longer duratio
 - Kirby Super Star: Mostly ok, some audio stream issues when playing video.
 - LoZ Phantom Hourglass: Just white screen now.
 - LoZ Spirit Tracks: White screen.
-- LEGO Lord of the Rings: Loads up OK, some minor menu issues (2D-as-3D), gameplay doesn't load
+- LEGO Lord of the Rings: Loads up OK, gameplay doesn't load
 - LEGO Star Wars II: Mostly OK, some graphics have missing pixels. Crashes due to reading beyond end of specular table
 - Mario Kart DS: Mostly ok, depth issues throughout
 - Mario and Luigi: Bowser's Inside Story: Blank screen
@@ -107,12 +107,12 @@ Note that most of these games have not been properly played for a longer duratio
 - Pokemon Platinum: Mostly OK. Gameplay is fine. Does not load save correctly.
 - Pokemon Black: Black screen
 - Pokemon HeartGold: 2d elements of game work ok, 3D in intro good.
-- Pokemon Ranger: Polygon/texture precision issues in 2D-as-3D game. Mostly OK though.
+- Pokemon Ranger: Issues with chunky outlines, intro has a few issues. Mostly OK in game
 - Resident Evil: Seems mostly ok. Frame pacing issues. Freezes during intro cutscene, though if skipped gameplay seems ok.
 - Shin Megami Tensei: Strange Journey: Titles and menu OK, freezes when gameplay begins.
 - Super Mario 64 DS: Mostly ok, star in intro has shininess issues.
 - Super Princess Peach: Mostly OK.
-- Super Scribblenauts: Mostly fine, (3D as 2D precision issues)
+- Super Scribblenauts: Mostly fine.
 - Tony Hawk's Downhill Jam: Shows titles, then black screen
 - Tony Hawk's American Sk8land: Shows titles, menus, then gameplay crashes after matrix overflow
 - The World Ends With You: Seems mostly ok.
@@ -137,7 +137,7 @@ Note that most of these games have not been properly played for a longer duratio
 
 ##### Bugs / Improvements:
 - 3D Video:
-    - Rasterising precision improvement (especially noticeable for 2D)
+    - Rasterising precision improvement: clipping
     - Lighting issues (?)
     - Post-processing (edge + fog + anti-aliasing)
     - Fix perspective depth mapping while not breaking 2D

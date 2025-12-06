@@ -1,5 +1,5 @@
 
-use fixed::types::I40F24;
+use fixed::types::{I16F0, I40F24};
 use fixed::traits::ToFixed;
 use crate::common::video::colour::Colour;
 use super::{
@@ -65,8 +65,8 @@ impl ClippingUnit {
         let bytes = u32::to_le_bytes(data);
         self.viewport_x = N::from_num(bytes[0]);
         self.viewport_y = N::from_num(bytes[1]);
-        self.viewport_width = N::from_num(bytes[2] as u16) - self.viewport_x;
-        self.viewport_height = N::from_num(bytes[3] as u16) - self.viewport_y;
+        self.viewport_width = N::ONE + N::from_num(bytes[2] as u16) - self.viewport_x;
+        self.viewport_height = N::ONE + N::from_num(bytes[3] as u16) - self.viewport_y;
     }
 
     pub fn set_w_buffer(&mut self, w_buffer: bool) {
@@ -77,17 +77,17 @@ impl ClippingUnit {
     /// 
     /// Also make a note of its index in the current polygon.
     pub fn add_polygon(&mut self, mut staged_polygon: Polygon, vertices: &mut [StagedVertex]) {
-        let (mut min_y, mut max_y) = (N::MAX, N::ZERO);
+        let (mut min_y, mut max_y) = (I16F0::MAX, I16F0::ZERO);
 
         let vertices_out = vertices.iter().map(|vertex| {
 
             let w = vertex.position.w().to_fixed::<I40F24>();
             let w2 = (w * 2).checked_recip().unwrap_or(I40F24::MAX);
             let x = (vertex.position.x().to_fixed::<I40F24>() + w) * w2;
-            let y = I40F24::ONE - (vertex.position.y().to_fixed::<I40F24>() + w) * w2;
+            let y = (vertex.position.y().to_fixed::<I40F24>() + w) * w2;
             let z = (vertex.position.z().to_fixed::<I40F24>() + w) * w2;
 
-            let screen_p = self.get_screen_coords(x.to_fixed(), y.to_fixed());
+            let screen_p = self.get_screen_coords(x.to_fixed(), N::ONE - y.to_fixed::<N>());
             max_y = std::cmp::max(max_y, screen_p.y);
             min_y = std::cmp::min(min_y, screen_p.y);
             // TODO: re-use vertices...
@@ -123,7 +123,7 @@ impl ClippingUnit {
         let clamped_y = y.clamp(N::ZERO, N::ONE);
         let screen_x = self.viewport_x + (clamped_x * self.viewport_width);
         let screen_y = self.viewport_y + (clamped_y * self.viewport_height);
-        Coords { x: screen_x, y: screen_y }
+        Coords { x: screen_x.to_fixed(), y: screen_y.to_fixed() }
     }
 
     /// Returns true if clip occurred.
@@ -219,7 +219,7 @@ fn interpolate_position(position_a: &Vector<4>, position_b: &Vector<4>, factor_a
 /// 
 /// Returns true if the polygon should be shown.
 fn test_winding(polygon: &Polygon, vertices: &[Vertex]) -> bool {
-    let size = (0..vertices.len()).fold(N::ZERO, |acc, n| {
+    let size = (0..vertices.len()).fold(I16F0::ZERO, |acc, n| {
         let current_index = n;
         let next_index = (n + 1) % vertices.len();
 
@@ -229,9 +229,9 @@ fn test_winding(polygon: &Polygon, vertices: &[Vertex]) -> bool {
         acc + segment_size
     });
 
-    if size > N::ZERO {
+    if size > I16F0::ZERO {
         polygon.attrs.contains(PolygonAttrs::RENDER_FRONT)
-    } else if size < N::ZERO {
+    } else if size < I16F0::ZERO {
         polygon.attrs.contains(PolygonAttrs::RENDER_BACK)
     } else {
         // Always display line polygons.

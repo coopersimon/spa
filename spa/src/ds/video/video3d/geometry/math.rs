@@ -294,3 +294,12 @@ impl Matrix {
         ])
     }
 }
+
+impl std::fmt::Display for Matrix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "{:<10X}{:<10X}{:<10X}{:<10X}", self.elements[0], self.elements[1], self.elements[2], self.elements[3])?;
+        writeln!(f, "{:<10X}{:<10X}{:<10X}{:<10X}", self.elements[4], self.elements[5], self.elements[6], self.elements[7])?;
+        writeln!(f, "{:<10X}{:<10X}{:<10X}{:<10X}", self.elements[8], self.elements[9], self.elements[10], self.elements[11])?;
+        writeln!(f, "{:<10X}{:<10X}{:<10X}{:<10X}", self.elements[12], self.elements[13], self.elements[14], self.elements[15])
+    }
+}

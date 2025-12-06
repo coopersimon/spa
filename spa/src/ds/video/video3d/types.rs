@@ -3,7 +3,7 @@ use std::{
     cmp::Ordering
 };
 use bitflags::bitflags;
-use fixed::types::{I12F4, I23F9};
+use fixed::types::{I12F4, I16F0, I23F9};
 use super::geometry::N;
 use crate::{
     utils::bits::{u16, u32},
@@ -134,8 +134,8 @@ impl TextureAttrs {
 
 #[derive(Eq)]
 pub struct PolygonOrder {
-    pub y_max:    N, // In screen space (0: top, 191: bottom)
-    pub y_min:    N, // In screen space (0: top, 191: bottom)
+    pub y_max:    I16F0, // In screen space (0: top, 191: bottom)
+    pub y_min:    I16F0, // In screen space (0: top, 191: bottom)
     pub polygon_index:  usize,
 }
 
@@ -214,12 +214,12 @@ impl Polygon {
 /// Coordinates for a point in screen-space.
 #[derive(Default, Clone, Copy)]
 pub struct Coords {
-    pub x: N,
-    pub y: N
+    pub x: I16F0,
+    pub y: I16F0
 }
 
 /// Coordinates for a texture point.
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
 pub struct TexCoords {
     pub s: I12F4,
     pub t: I12F4
@@ -290,7 +290,7 @@ impl PolygonRAM {
     }
 
     /// Insert a polygon.
-    pub fn insert_polygon(&mut self, polygon: Polygon, y_max: N, y_min: N) {
+    pub fn insert_polygon(&mut self, polygon: Polygon, y_max: I16F0, y_min: I16F0) {
         let polygon_index = self.polygons.len();
 
         let polygon_order = PolygonOrder {
