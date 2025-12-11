@@ -1,9 +1,8 @@
 
-use fixed::types::{I16F0, I40F24};
+use fixed::types::{I16F0, I40F24, I12F4};
 use fixed::traits::ToFixed;
 use crate::common::video::colour::Colour;
 use super::{
-    super::interpolate::*,
     super::types::*,
     math::{N, Vector},
 };
@@ -123,7 +122,7 @@ impl ClippingUnit {
         let clamped_y = y.clamp(N::ZERO, N::ONE);
         let screen_x = self.viewport_x + (clamped_x * self.viewport_width);
         let screen_y = self.viewport_y + (clamped_y * self.viewport_height);
-        Coords { x: screen_x.to_fixed(), y: screen_y.to_fixed() }
+        Coords { x: screen_x.round().to_fixed(), y: screen_y.round().to_fixed() }
     }
 
     /// Returns true if clip occurred.
@@ -156,31 +155,23 @@ impl ClippingUnit {
                 out_polygon.push(vtx_a.clone());
             } else if !clips(vtx_a.position.elements[dim], wa) && clips(vtx_b.position.elements[dim], wb) {
                 // B clips
-                let over = ((wb * val) - vtx_b.position.elements[dim]).to_fixed::<I40F24>();
-                let under = (vtx_a.position.elements[dim] - vtx_b.position.elements[dim] - (wa * val) + (wb * val)).to_fixed::<I40F24>();
-                let factor_a = (over / under).to_fixed::<N>().clamp(N::ZERO, N::ONE);
+                let over = vtx_a.position.elements[dim] - (wa * val);
+                let under = (wb * val) - vtx_b.position.elements[dim] + over;
+                let factor = over.to_fixed::<I40F24>() / under.to_fixed::<I40F24>();
 
-                let factor_b = N::ONE - factor_a;
-                let position = interpolate_position(&vtx_a.position, &vtx_b.position, factor_a, factor_b);
-                
-                let clip_vtx_b = Self::interpolate(vtx_a, vtx_b, factor_a.to_fixed(), factor_b.to_fixed(), position);
-
+                let clip_vtx_b = Self::interpolate(vtx_a, vtx_b, factor);
                 out_polygon.push(vtx_a.clone());
                 out_polygon.push(clip_vtx_b);
                 clip = true;
             } else if clips(vtx_a.position.elements[dim], wa) && !clips(vtx_b.position.elements[dim], wb) {
                 // A clips
-                let over = ((wb * val) - vtx_b.position.elements[dim]).to_fixed::<I40F24>();
-                let under = (vtx_a.position.elements[dim] - vtx_b.position.elements[dim] - (wa * val) + (wb * val)).to_fixed::<I40F24>();
-                let factor_a = (over / under).to_fixed::<N>().clamp(N::ZERO, N::ONE);
+                let over = vtx_a.position.elements[dim] - (wa * val);
+                let under = (wb * val) - vtx_b.position.elements[dim] + over;
+                let factor = over.to_fixed::<I40F24>() / under.to_fixed::<I40F24>();
 
-                let factor_b = N::ONE - factor_a;
-                let position = interpolate_position(&vtx_a.position, &vtx_b.position, factor_a, factor_b);
-                
-                let clip_vtx_a = Self::interpolate(vtx_a, vtx_b, factor_a.to_fixed(), factor_b.to_fixed(), position);
-
+                let clip_vtx_a = Self::interpolate(vtx_a, vtx_b, factor);
                 out_polygon.push(clip_vtx_a);
-                clip = true
+                clip = true;
             } else {
                 // both points clip.
                 clip = true
@@ -189,28 +180,36 @@ impl ClippingUnit {
         clip
     }
 
-    fn interpolate(vtx_a: &StagedVertex, vtx_b: &StagedVertex, factor_a: N, factor_b: N, position: Vector<4>) -> StagedVertex {
+    fn interpolate(vtx_a: &StagedVertex, vtx_b: &StagedVertex, factor: I40F24) -> StagedVertex {
+        let x_offset = (vtx_b.position.x() - vtx_a.position.x()).to_fixed::<I40F24>() * factor;
+        let y_offset = (vtx_b.position.y() - vtx_a.position.y()).to_fixed::<I40F24>() * factor;
+        let z_offset = (vtx_b.position.z() - vtx_a.position.z()).to_fixed::<I40F24>() * factor;
+        let w_offset = (vtx_b.position.w() - vtx_a.position.w()).to_fixed::<I40F24>() * factor;
+        let r_offset = (vtx_b.colour.r.to_fixed::<I40F24>() - vtx_a.colour.r.to_fixed::<I40F24>()) * factor;
+        let g_offset = (vtx_b.colour.g.to_fixed::<I40F24>() - vtx_a.colour.g.to_fixed::<I40F24>()) * factor;
+        let b_offset = (vtx_b.colour.b.to_fixed::<I40F24>() - vtx_a.colour.b.to_fixed::<I40F24>()) * factor;
+        let tex_s_offset = (vtx_b.tex_coords.s - vtx_a.tex_coords.s).to_fixed::<I40F24>() * factor;
+        let tex_t_offset = (vtx_b.tex_coords.t - vtx_a.tex_coords.t).to_fixed::<I40F24>() * factor;
         StagedVertex {
-            position: position,
-            colour: interpolate_vertex_colour(vtx_a.colour, vtx_b.colour, factor_a, factor_b),
-            tex_coords: interpolate_tex_coords(vtx_a.tex_coords, vtx_b.tex_coords, factor_a, factor_b),
+            position: Vector::new([
+                vtx_a.position.x() + x_offset.to_fixed::<N>(),
+                vtx_a.position.y() + y_offset.to_fixed::<N>(),
+                vtx_a.position.z() + z_offset.to_fixed::<N>(),
+                vtx_a.position.w() + w_offset.to_fixed::<N>()
+            ]),
+            colour: Colour {
+                r: (vtx_a.colour.r.to_fixed::<I40F24>() + r_offset).to_num(),
+                g: (vtx_a.colour.g.to_fixed::<I40F24>() + g_offset).to_num(),
+                b: (vtx_a.colour.b.to_fixed::<I40F24>() + b_offset).to_num()
+            },
+            tex_coords: TexCoords {
+                s: vtx_a.tex_coords.s + tex_s_offset.to_fixed::<I12F4>(),
+                t: vtx_a.tex_coords.t + tex_t_offset.to_fixed::<I12F4>()
+            },
             needs_clip: None,
             idx: None
         }
     }
-}
-
-fn interpolate_position(position_a: &Vector<4>, position_b: &Vector<4>, factor_a: N, factor_b: N) -> Vector<4> {
-    let x = factor_a * position_a.x() + factor_b * position_b.x();
-    let y = factor_a * position_a.y() + factor_b * position_b.y();
-    let z = factor_a * position_a.z() + factor_b * position_b.z();
-    let w = factor_a * position_a.w() + factor_b * position_b.w();
-    Vector::new([
-        x.to_fixed(),
-        y.to_fixed(),
-        z.to_fixed(),
-        w.to_fixed(),
-    ])
 }
 
 /// Test winding for the current polygon.

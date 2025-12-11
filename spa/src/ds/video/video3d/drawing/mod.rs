@@ -4,7 +4,7 @@ use super::{
     render::RenderingEngine,
     types::*, geometry::N
 };
-use fixed::types::{I40F24, I46F18, I24F8, I12F4, I16F0};
+use fixed::types::{I12F4, I16F0, I23F9, I24F8, I46F18};
 use fixed::traits::ToFixed;
 use crate::{
     ds::video::memory::Engine3DVRAM,
@@ -22,6 +22,7 @@ struct Attributes {
     edge:       bool,
 }
 
+// TODO: move.
 #[derive(Clone)]
 struct VertexStep {
     x:          I12F4,
@@ -43,22 +44,9 @@ impl VertexStep {
         self.tex_s += other.tex_s;
         self.tex_t += other.tex_t;
     }
-
-    fn mul(&self, n: i16) -> Self {
-        Self {
-            x:          self.x * n.to_fixed::<I12F4>(),
-            depth:      self.depth * n.to_fixed::<Depth>(),
-            colour_r:   self.colour_r * n.to_fixed::<I12F4>(),
-            colour_g:   self.colour_g * n.to_fixed::<I12F4>(),
-            colour_b:   self.colour_b * n.to_fixed::<I12F4>(),
-            tex_s:      self.tex_s * n.to_fixed::<I24F8>(),
-            tex_t:      self.tex_t * n.to_fixed::<I24F8>(),
-        }
-    }
 }
 
 struct InterpolatedLine {
-    max_y:      u8,
     current_values: VertexStep,
     step: VertexStep
 }
@@ -172,52 +160,30 @@ impl Software3DRenderer {
             }*/
             
             let (mut x_min_prev, mut x_max_prev) = (256, 0);
-            let (y_min, y_max) = (p.y_min.round().to_num::<u8>(), std::cmp::min(p.y_max.round().to_num::<u8>(), 192));
-
-            let Some([mut line_a, mut line_b]) = Self::find_intersect_points(render_engine, polygon, y_min.to_fixed()) else {
-                continue;
-            };
+            let (y_min, y_max) = (p.y_min.to_num::<u8>(), p.y_max.to_num::<u8>());
 
             for y_idx in y_min..y_max {
-
-                if y_idx > line_a.max_y || y_idx > line_b.max_y {
-                    if let Some([new_line_a, new_line_b]) = Self::find_intersect_points(render_engine, polygon, y_idx.to_fixed()) {
-                        line_a = new_line_a;
-                        line_b = new_line_b;
-                    }
-                }
+                let Some([left, right]) = Self::find_intersect_points(render_engine, polygon, y_idx.to_fixed()) else {
+                    continue;
+                };
 
                 //let half = I16F0::ONE / 2;
                 //let y = I16F0::from_num(y_idx);// + half;
                 let y_idx_base = (y_idx as usize) * 256;
 
                 //println!("Draw line {:X}", y);
-                /*let Some([vtx_a, vtx_b]) = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max)) else {
-                    continue;
-                };*/
-                let x_a = line_a.current_values.x;
-                let x_b = line_b.current_values.x;
-
-                if x_a == x_b {
+                if left.screen_p.x == right.screen_p.x {
                     // Should this ever happen?
-                    line_a.current_values.add(&line_a.step);
-                    line_b.current_values.add(&line_b.step);
                     continue;
                 }
 
-                let (right, left) = if x_a > x_b {
-                    (&line_a.current_values, &line_b.current_values)
-                } else {
-                    (&line_b.current_values, &line_a.current_values)
-                };
-
-                let width = right.x - left.x;
+                let width = right.screen_p.x - left.screen_p.x;
                 let depth_step = (right.depth - left.depth).to_fixed::<I46F18>() / width.to_fixed::<I46F18>();
-                let r_step = (right.colour_r.to_fixed::<I24F8>() - left.colour_r.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
-                let g_step = (right.colour_g.to_fixed::<I24F8>() - left.colour_g.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
-                let b_step = (right.colour_b.to_fixed::<I24F8>() - left.colour_b.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
-                let tex_s_step = (right.tex_s.to_fixed::<I24F8>() - left.tex_s.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
-                let tex_t_step = (right.tex_t.to_fixed::<I24F8>() - left.tex_t.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+                let r_step = (right.colour.r.to_fixed::<I24F8>() - left.colour.r.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+                let g_step = (right.colour.g.to_fixed::<I24F8>() - left.colour.g.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+                let b_step = (right.colour.b.to_fixed::<I24F8>() - left.colour.b.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+                let tex_s_step = (right.tex_coords.s.to_fixed::<I24F8>() - left.tex_coords.s.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+                let tex_t_step = (right.tex_coords.t.to_fixed::<I24F8>() - left.tex_coords.t.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
 
                 let step = VertexStep {
                     x: I12F4::ONE,
@@ -229,13 +195,20 @@ impl Software3DRenderer {
                     tex_t: tex_t_step,
                 };
                 let mut line = InterpolatedLine {
-                    max_y: 0,
-                    current_values: left.clone(),
+                    current_values: VertexStep {
+                        x: I12F4::ONE,
+                        depth: left.depth,
+                        colour_r: left.colour.r.to_fixed(),
+                        colour_g: left.colour.g.to_fixed(),
+                        colour_b: left.colour.b.to_fixed(),
+                        tex_s: left.tex_coords.s.to_fixed(),
+                        tex_t: left.tex_coords.t.to_fixed()
+                    },
                     step: step
                 };
 
-                let x_min = left.x.round().to_num::<i16>();
-                let x_max = right.x.round().to_num::<i16>();
+                let x_min = left.screen_p.x.round().to_num::<i16>();
+                let x_max = right.screen_p.x.round().to_num::<i16>();
 
                 //println!("Line {:X} | x: {:X} to {:X} | tex ({:X}, {:X}) to ({:X}, {:X}) ({:X}, {:X})", y_idx, x_min, x_max, left.tex_s, left.tex_t, right.tex_s, right.tex_t, line.step.tex_s, line.step.tex_t);
 
@@ -280,9 +253,6 @@ impl Software3DRenderer {
 
                 x_min_prev = x_min;
                 x_max_prev = x_max;
-
-                line_a.current_values.add(&line_a.step);
-                line_b.current_values.add(&line_b.step);
             }
             
         }
@@ -309,53 +279,32 @@ impl Software3DRenderer {
         }*/
 
         //let (mut x_min_prev, mut x_max_prev) = (256, 0);
-        let (y_min, y_max) = (p.y_min.round().to_num::<u8>(), std::cmp::min(p.y_max.round().to_num::<u8>(), 192));
-
-        let Some([mut line_a, mut line_b]) = Self::find_intersect_points(render_engine, polygon, y_min.to_fixed()) else {
-            //println!("Skip.");
-            return;
-        };
+        let (y_min, y_max) = (p.y_min.to_num::<u8>(), p.y_max.to_num::<u8>());
 
         for y_idx in y_min..y_max {
 
-            if y_idx > line_a.max_y || y_idx > line_b.max_y {
-                if let Some([new_line_a, new_line_b]) = Self::find_intersect_points(render_engine, polygon, y_idx.to_fixed()) {
-                    line_a = new_line_a;
-                    line_b = new_line_b;
-                }
-            }
+            let Some([left, right]) = Self::find_intersect_points(render_engine, polygon, y_idx.to_fixed()) else {
+                continue;
+            };
 
             //let half = I16F0::ONE / 2;
             //let y = I16F0::from_num(y_idx);// + half;
             let y_idx_base = (y_idx as usize) * 256;
 
             //println!("Draw line {:X}", y);
-            /*let Some([vtx_a, vtx_b]) = Self::find_intersect_points(render_engine, polygon, y.clamp(p.y_min, p.y_max)) else {
-                continue;
-            };*/
-            let x_a = line_a.current_values.x;
-            let x_b = line_b.current_values.x;
 
-            if x_a == x_b {
+            if left.screen_p.x == right.screen_p.x {
                 // Should this ever happen?
-                    line_a.current_values.add(&line_a.step);
-                    line_b.current_values.add(&line_b.step);
                 continue;
             }
 
-            let (right, left) = if x_a > x_b {
-                (&line_a.current_values, &line_b.current_values)
-            } else {
-                (&line_b.current_values, &line_a.current_values)
-            };
-
-            let width = right.x - left.x;
+            let width = right.screen_p.x - left.screen_p.x;
             let depth_step = (right.depth - left.depth).to_fixed::<I46F18>() / width.to_fixed::<I46F18>();
-            let r_step = (right.colour_r.to_fixed::<I24F8>() - left.colour_r.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
-            let g_step = (right.colour_g.to_fixed::<I24F8>() - left.colour_g.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
-            let b_step = (right.colour_b.to_fixed::<I24F8>() - left.colour_b.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
-            let tex_s_step = (right.tex_s.to_fixed::<I24F8>() - left.tex_s.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
-            let tex_t_step = (right.tex_t.to_fixed::<I24F8>() - left.tex_t.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+            let r_step = (right.colour.r.to_fixed::<I24F8>() - left.colour.r.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+            let g_step = (right.colour.g.to_fixed::<I24F8>() - left.colour.g.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+            let b_step = (right.colour.b.to_fixed::<I24F8>() - left.colour.b.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+            let tex_s_step = (right.tex_coords.s.to_fixed::<I24F8>() - left.tex_coords.s.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
+            let tex_t_step = (right.tex_coords.t.to_fixed::<I24F8>() - left.tex_coords.t.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
 
             let step = VertexStep {
                 x: I12F4::ONE,
@@ -367,13 +316,20 @@ impl Software3DRenderer {
                 tex_t: tex_t_step,
             };
             let mut line = InterpolatedLine {
-                max_y: 0,
-                current_values: left.clone(),
+                current_values: VertexStep {
+                    x: I12F4::ONE,
+                    depth: left.depth,
+                    colour_r: left.colour.r.to_fixed(),
+                    colour_g: left.colour.g.to_fixed(),
+                    colour_b: left.colour.b.to_fixed(),
+                    tex_s: left.tex_coords.s.to_fixed(),
+                    tex_t: left.tex_coords.t.to_fixed()
+                },
                 step: step
             };
 
-            let x_min = left.x.round().to_num::<i16>();
-            let x_max = right.x.round().to_num::<i16>();
+            let x_min = left.screen_p.x.round().to_num::<i16>();
+            let x_max = right.screen_p.x.round().to_num::<i16>();
 
             //println!("Line {:X} | x: {:X} to {:X} | tex ({:X}, {:X}) to ({:X}, {:X}) ({:X}, {:X})", y_idx, x_min, x_max, left.tex_s, left.tex_t, right.tex_s, right.tex_t, line.step.tex_s, line.step.tex_t);
 
@@ -449,9 +405,6 @@ impl Software3DRenderer {
                     self.attr_buffer[idx].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
                 }
             }
-
-            line_a.current_values.add(&line_a.step);
-            line_b.current_values.add(&line_b.step);
         }
         
     }
@@ -553,9 +506,10 @@ impl Software3DRenderer {
     /// Find the first two points where this polygon intersects the render line.
     /// 
     /// Returns the two points with interpolated attributes, in order of x position.
-    fn find_intersect_points(render_engine: &RenderingEngine, polygon: &Polygon, y: I16F0) -> Option<[InterpolatedLine; 2]> {
+    fn find_intersect_points(render_engine: &RenderingEngine, polygon: &Polygon, y: I16F0) -> Option<[Vertex; 2]> {
         // Find start and end points.
-        let mut lines = [None, None];
+        let mut points = [None, None];
+        let mut line_a_points = None;
         for i in 0..polygon.num_vertices {
             // Find where render line intersects polygon lines.
             let v_index_a = polygon.vertex_indices[i as usize];
@@ -576,58 +530,61 @@ impl Software3DRenderer {
                 (&vtx_a, &vtx_b)
             };
 
+            if let Some((top_a, bottom_a)) = line_a_points {
+                if top.screen_p.y == bottom_a || bottom.screen_p.y == top_a {
+                    continue;
+                }
+            } else {
+                line_a_points = Some((top.screen_p.y, bottom.screen_p.y));
+            }
+
             // TODO: special case for single-pixel point...
 
-            let height = bottom.screen_p.y - top.screen_p.y;
-            let x_step = (bottom.screen_p.x - top.screen_p.x).to_fixed::<I24F8>() / height.to_fixed::<I24F8>(); // TODO: is this enough precision? Try 12.12?
-            let depth_step = (bottom.depth - top.depth).to_fixed::<I46F18>() / height.to_fixed::<I46F18>();
-            let r_step = (bottom.colour.r.to_fixed::<I24F8>() - top.colour.r.to_fixed::<I24F8>()) / height.to_fixed::<I24F8>();
-            let g_step = (bottom.colour.g.to_fixed::<I24F8>() - top.colour.g.to_fixed::<I24F8>()) / height.to_fixed::<I24F8>();
-            let b_step = (bottom.colour.b.to_fixed::<I24F8>() - top.colour.b.to_fixed::<I24F8>()) / height.to_fixed::<I24F8>();
-            let tex_s_step = (bottom.tex_coords.s.to_fixed::<I24F8>() - top.tex_coords.s.to_fixed::<I24F8>()) / height.to_fixed::<I24F8>();
-            let tex_t_step = (bottom.tex_coords.t.to_fixed::<I24F8>() - top.tex_coords.t.to_fixed::<I24F8>()) / height.to_fixed::<I24F8>();
+            let factor_over = (y - top.screen_p.y).to_fixed::<I23F9>() * top.depth;
+            let factor_under = (bottom.screen_p.y - y).to_fixed::<I23F9>() * bottom.depth + factor_over;
+            let factor = factor_over / factor_under;
 
-            let base = VertexStep {
-                x: top.screen_p.x.to_fixed(),
-                depth: top.depth,
-                colour_r: top.colour.r.to_fixed(),
-                colour_g: top.colour.g.to_fixed(),
-                colour_b: top.colour.b.to_fixed(),
-                tex_s: top.tex_coords.s.to_fixed(),
-                tex_t: top.tex_coords.t.to_fixed(),
+            let x_offset = (bottom.screen_p.x - top.screen_p.x).to_fixed::<Depth>() * factor;
+            let depth_offset = (bottom.depth - top.depth) * factor;
+            let r_offset = (bottom.colour.r.to_fixed::<Depth>() - top.colour.r.to_fixed::<Depth>()) * factor;
+            let g_offset = (bottom.colour.g.to_fixed::<Depth>() - top.colour.g.to_fixed::<Depth>()) * factor;
+            let b_offset = (bottom.colour.b.to_fixed::<Depth>() - top.colour.b.to_fixed::<Depth>()) * factor;
+            let tex_s_offset = (bottom.tex_coords.s.to_fixed::<Depth>() - top.tex_coords.s.to_fixed::<Depth>()) * factor;
+            let tex_t_offset = (bottom.tex_coords.t.to_fixed::<Depth>() - top.tex_coords.t.to_fixed::<Depth>()) * factor;
+
+            let vertex = Vertex {
+                screen_p: Coords {
+                    x: (top.screen_p.x.to_fixed::<Depth>() + x_offset).to_fixed(),
+                    y
+                },
+                depth: top.depth + depth_offset,
+                colour: Colour {
+                    r: (top.colour.r.to_fixed::<Depth>() + r_offset).to_num(),
+                    g: (top.colour.g.to_fixed::<Depth>() + g_offset).to_num(),
+                    b: (top.colour.b.to_fixed::<Depth>() + b_offset).to_num(),
+                },
+                tex_coords: TexCoords {
+                    s: (top.tex_coords.s.to_fixed::<Depth>() + tex_s_offset).to_fixed(),
+                    t: (top.tex_coords.t.to_fixed::<Depth>() + tex_t_offset).to_fixed()
+                },
             };
 
-            let step = VertexStep {
-                x: x_step.to_fixed(),
-                depth: depth_step.to_fixed(),
-                colour_r: r_step.to_fixed(),
-                colour_g: g_step.to_fixed(),
-                colour_b: b_step.to_fixed(),
-                tex_s: tex_s_step,
-                tex_t: tex_t_step,
-            };
-            let step_count = (y - top.screen_p.y).to_num::<i16>();
-            let mut current_values = step.mul(step_count);
-            current_values.add(&base);
-
-            let poly_line = InterpolatedLine {
-                max_y: bottom.screen_p.y.to_num(),
-                current_values,
-                step,
-            };
-
-            if lines[0].is_none() {
+            if points[0].is_none() {
                 // First line.
-                lines[0] = Some(poly_line);
-            } else if lines[1].is_none() {
+                points[0] = Some(vertex);
+            } else if points[1].is_none() {
                 // Second line - we are done.
-                lines[1] = Some(poly_line);
+                points[1] = Some(vertex);
                 break;
             }
         }
 
-        if let [Some(vtx_a), Some(vtx_b)] = lines {
-            Some([vtx_a, vtx_b])
+        if let [Some(vtx_a), Some(vtx_b)] = points {
+            if vtx_a.screen_p.x < vtx_b.screen_p.x {
+                Some([vtx_a, vtx_b])
+            } else {
+                Some([vtx_b, vtx_a])
+            }
         } else {
             None
         }

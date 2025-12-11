@@ -74,10 +74,10 @@ Note that most of these games have not been properly played for a longer duratio
 - Civilization Revolution: Mostly OK, some issues early in game.
 - Chrono Trigger: Audio skips a little in intro, but mostly ok otherwise.
 - Dragon Quest Monsters Joker: Seems OK.
-- Dragon Quest IX: Shows intro cards and video. Game starts mostly OK (3d model never updates?). Actual game has some untextured models (could be bug with writing to multiple VRAM blocks at once..?) (now freezes after character creation: though character creation seems OK)
+- Dragon Quest IX: Shows intro cards and video. Game starts mostly OK (3d model never updates: issue with writing to multiple VRAM blocks at once?). (now freezes after character creation: though character creation seems OK)
 - Dragon Quest IV: Mostly OK
 - Dragon Quest V: Mostly OK
-- Dragon Quest VI: Near/Far plane clipping masks everything, broken intro. Actual game is ok when near plane clipping is disabled.
+- Dragon Quest VI: Near/Far plane clipping masks everything, broken intro. Actual game is ok when near plane clipping is disabled (not anymore)
 - Final Fantasy Tactics A2: Slight flickering in intro / menu, actual game looks ok.
 - Final Fantasy III: Mostly OK.
 - Final Fantasy IV: Mostly OK - (wait doesn't display anything now?)
@@ -96,18 +96,18 @@ Note that most of these games have not been properly played for a longer duratio
 - LEGO Star Wars II: Mostly OK, some graphics have missing pixels. Crashes due to reading beyond end of specular table
 - Mario Kart DS: Mostly ok, depth issues throughout
 - Mario and Luigi: Bowser's Inside Story: Blank screen
-- Mario and Luigi: Partners in Time: Loads up ok, menu title 3D is ok, intro has serious graphical issues
+- Mario and Luigi: Partners in Time: Mostly OK.
 - Mario Party DS: Mostly OK.
-- Metroid Prime Hunters: Mostly ok, some minor 3d issues in gameplay. Menus have text texturing issues
+- Metroid Prime Hunters: Intro and menus have severe blending issues (colour overflow?) gameplay is mostly OK (near clip plane issues)
 - New Super Mario Bros: Mostly OK
 - Mario Slam Basketball (Hoops 3-on-3): Mostly OK.
 - Nintendogs (Labrador): Intro is ok. Gameplay begins, crashes due to full GPU command fifo.
 - Pokemon Mystery Dungeon Explorers of Sky: Mostly OK.
-- Pokemon Mystery Dungeon Blue Rescue Team: Intro plays, without sprites. Menu text is blocked out. Black screen when game begins.
+- Pokemon Mystery Dungeon Blue Rescue Team: Mostly OK, flickering at bottom of text boxes.
 - Pokemon Platinum: Mostly OK. Gameplay is fine. Does not load save correctly.
 - Pokemon Black: Black screen
-- Pokemon HeartGold: 2d elements of game work ok, 3D in intro good.
-- Pokemon Ranger: Issues with chunky outlines, intro has a few issues. Mostly OK in game
+- Pokemon HeartGold: Mostly OK, some gaps in geometry, outlines incorrect, shadows are too strong
+- Pokemon Ranger: Issues with chunky outlines, intro has a few issues. Mostly OK in game, some missing sprites + shadow blending issues
 - Resident Evil: Seems mostly ok. Frame pacing issues. Freezes during intro cutscene, though if skipped gameplay seems ok.
 - Shin Megami Tensei: Strange Journey: Titles and menu OK, freezes when gameplay begins.
 - Super Mario 64 DS: Mostly ok, star in intro has shininess issues.
@@ -137,14 +137,15 @@ Note that most of these games have not been properly played for a longer duratio
 
 ##### Bugs / Improvements:
 - 3D Video:
-    - Rasterising precision improvement: clipping
     - Lighting issues (?)
     - Post-processing (edge + fog + anti-aliasing)
     - Fix perspective depth mapping while not breaking 2D
+        - Special mode
     - Texture stack problems:
         - Cause issue with shininess for SM64DS
         - Overflow in TH:Sk8land
         - Possible culprit for visibility issues with DQVI, GTA, Possibly pokemon intro
+    - Shadows
 - 2D main RAM video mode
     - Still haven't found a game that actually uses this
 - Engine A video capture & blending fixes
