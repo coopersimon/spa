@@ -429,9 +429,10 @@ impl <R: Renderer> DS9MemoryBus<R> {
 
     /// Called when vblank occurs. Halts emulation until the next frame.
     fn frame_end(&mut self) {
-        let input = self.frame_sender.sync_frame();
-        self.joypad.set_all_buttons(input.buttons);
-        self.input_send.send(input).unwrap();
+        if let Some(input) = self.frame_sender.sync_frame() {
+            self.joypad.set_all_buttons(input.buttons);
+            self.input_send.send(input).unwrap();
+        }
     }
 }
 

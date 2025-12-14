@@ -91,8 +91,8 @@ impl<I> FrameSender<I> {
     /// Then block until the main thread indicates that processing for the next frame set can begin.
     /// 
     /// Returns any input changed since last time.
-    pub fn sync_frame(&mut self) -> I {
-        self.tx.send(()).expect("couldn't send to main thread");
-        self.rx.recv().expect("couldn't get from main thread")
+    pub fn sync_frame(&mut self) -> Option<I> {
+        self.tx.send(()).ok()?;
+        self.rx.recv().ok()
     }
 }

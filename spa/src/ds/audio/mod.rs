@@ -116,7 +116,7 @@ impl DSAudio {
             if self.sample_buffer.len() > SAMPLE_PACKET_SIZE {
                 let sample_packet = self.sample_buffer.drain(..).collect::<SamplePacket>();
                 if let Some(s) = &self.sample_sender {
-                    s.send(sample_packet).expect("Error sending!");
+                    let _ = s.send(sample_packet);
                 }
             }
         }

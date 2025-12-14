@@ -223,8 +223,9 @@ impl<R: Renderer> MemoryBus<R> {
     fn frame_end(&mut self) {
         self.game_pak.flush_save();
 
-        let buttons = self.frame_sender.sync_frame();
-        self.joypad.set_all_buttons(buttons);
+        if let Some(buttons) = self.frame_sender.sync_frame() {
+            self.joypad.set_all_buttons(buttons);
+        }
     }
 }
 
