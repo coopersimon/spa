@@ -91,4 +91,11 @@ pub mod u64 {
     pub const fn set_hi(val: u64, hi: u32) -> u64 {
         (val & 0xFFFF_FFFF) | ((hi as u64) << 32)
     }
+
+    #[inline(always)]
+    pub const fn set_halfword(val: u64, halfword: u16, halfword_num: u32) -> u64 {
+        let shift = halfword_num * 16;
+        let mask = 0xFFFF_FFFF_FFFF_0000_u64.rotate_left(shift);
+        (val & mask) | ((halfword as u64) << shift)
+    }
 }

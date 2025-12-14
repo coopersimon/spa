@@ -116,6 +116,11 @@ impl<R: Renderer> DS9MemoryBus<R> {
         let key1 = (0..0x412).map(|n| arm7_bios.read_word(0x30 + (n*4))).collect::<Vec<_>>();
         let (card_9, card_7) = DSCardIO::new(&config.rom_path, config.save_path.clone(), key1).unwrap();
 
+        let mut arm7_wifi = Wifi::new();
+        if config.fast_boot {
+            arm7_wifi.fast_boot();
+        }
+
         let barrier = Arc::new(Barrier::new(2));
         let (input_send, input_recv) = bounded(1);
 
@@ -156,7 +161,7 @@ impl<R: Renderer> DS9MemoryBus<R> {
             vram:               arm7_vram,
 
             audio:              DSAudio::new(),
-            wifi:               Wifi::new(),
+            wifi:               arm7_wifi,
 
             ipc:                ds7_ipc,
             timers:             Timers::new(),
@@ -924,13 +929,20 @@ impl DS7MemoryBus {
             Interrupts::empty()
         };
 
+        let wifi_irq = if self.wifi.clock(cycles) {
+            Interrupts::WIFI
+        } else {
+            Interrupts::empty()
+        };
+
         self.interrupt_control.interrupt_request(
             joypad_irq |
             Interrupts::from_bits_truncate(timer_irq.into()) |
             self.ipc.get_interrupts() |
             self.card.get_interrupt() |
             v_count_irq |
-            vblank
+            vblank |
+            wifi_irq
         );
     }
 

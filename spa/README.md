@@ -104,7 +104,7 @@ Note that most of these games have not been properly played for a longer duratio
 - Nintendogs (Labrador): Intro is ok. Gameplay begins, crashes due to full GPU command fifo.
 - Pokemon Mystery Dungeon Explorers of Sky: Mostly OK.
 - Pokemon Mystery Dungeon Blue Rescue Team: Mostly OK, flickering at bottom of text boxes.
-- Pokemon Platinum: Mostly OK. Gameplay is fine. Does not load save correctly.
+- Pokemon Platinum: Mostly OK. Gameplay is fine.
 - Pokemon Black: Black screen
 - Pokemon HeartGold: Mostly OK, some gaps in geometry, outlines incorrect, shadows are too strong
 - Pokemon Ranger: Issues with chunky outlines, intro has a few issues. Mostly OK in game, some missing sprites + shadow blending issues
