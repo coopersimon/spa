@@ -21,6 +21,7 @@ fn main() {
         (@arg save: -s +takes_value "Save file path.")
         (@arg biosrom: -r +takes_value "BIOS ROM path. Needed for certain games.")
         (@arg dsbios: -b +takes_value "BIOS folder for NDS. Inside should be [bios7.bin, bios9.bin, firmware.bin]. Needed for certain games.")
+        (@arg fastboot: -f "Skip the firmware screen and boot directly.")
     );
 
     let cmd_args = app.get_matches();
@@ -33,6 +34,8 @@ fn main() {
     let save_path = cmd_args.value_of("save").map(|s| PathBuf::from(s));
     let bios_path = cmd_args.value_of("biosrom").map(|s| PathBuf::from(s));
     let ds_bios_path = cmd_args.value_of("dsbios").map(|s| PathBuf::from(s));
+
+    let fast_boot = cmd_args.is_present("fastboot");
 
     if let Some(value) = cmd_args.value_of("debug") {
         if value == "gba" {
@@ -54,7 +57,7 @@ fn main() {
                 p
             });
             let config = ds::MemoryConfig{
-                rom_path, save_path, ds7_bios_path, ds9_bios_path, firmware_path, fast_boot: true
+                rom_path, save_path, ds7_bios_path, ds9_bios_path, firmware_path, fast_boot
             };
             if value == "ds7" {
                 let debug_interface = ds::NDS::new_debug_7(config);
@@ -88,7 +91,7 @@ fn main() {
                     p
                 });
                 let config = ds::MemoryConfig{
-                    rom_path, save_path, ds7_bios_path, ds9_bios_path, firmware_path, fast_boot: true
+                    rom_path, save_path, ds7_bios_path, ds9_bios_path, firmware_path, fast_boot
                 };
                 run::run_nds(config, cmd_args.is_present("mute"))
             },

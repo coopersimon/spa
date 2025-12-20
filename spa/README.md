@@ -80,7 +80,7 @@ Note that most of these games have not been properly played for a longer duratio
 - Dragon Quest VI: Near/Far plane clipping masks everything, broken intro. Actual game is ok when near plane clipping is disabled (not anymore)
 - Final Fantasy Tactics A2: Slight flickering in intro / menu, actual game looks ok.
 - Final Fantasy III: Mostly OK.
-- Final Fantasy IV: Mostly OK - (wait doesn't display anything now?)
+- Final Fantasy IV: Mostly OK.
 - Final Fantasy: 4 Heroes of Light: Mostly ok
 - Final Fantasy XII: Revenant Wings: Mostly ok, but general frame pacing is completely broken in both videos and (seemingly) gameplay
 - Fire Emblem: Shadow Dragon: Intro missing some graphics (less than before). Otherwise looks and sounds fine.

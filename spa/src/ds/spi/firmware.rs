@@ -24,7 +24,7 @@ pub struct Firmware {
     addr:       u32,
 
     data:       Vec<u8>,
-    can_read:   bool,
+    read_buffer: u8,
     can_write:  bool,
 }
 
@@ -47,7 +47,7 @@ impl Firmware {
             addr:       0,
 
             data:       data,
-            can_read:   false,
+            read_buffer: 0,
             can_write:  false,
         })
     }
@@ -55,21 +55,10 @@ impl Firmware {
     pub fn deselect(&mut self) {
         self.instr = Instruction::None;
         self.addr = 0;
-        self.can_read = false;
     }
 
     pub fn read(&mut self) -> u8 {
-        use Instruction::*;
-        match self.instr {
-            Read(_) if self.can_read => {
-                self.can_read = false;
-                let data = self.data[self.addr as usize];
-                self.addr += 1;
-                data
-            },
-            ReadStatus => 0,
-            _ => 0,
-        }
+        self.read_buffer
     }
 
     pub fn write(&mut self, data: u8) {
@@ -82,15 +71,18 @@ impl Firmware {
                 0x04 => self.can_write = false,
                 _ => panic!("unsupported instr {:X}", data),
             },
-            Read(0) => { // Dummy write
-                self.can_read = true;
+            ReadStatus => {
+                self.read_buffer = if self.can_write {1} else {0};
+            },
+            Read(0) => { // Strobe
+                self.read_buffer = self.data[self.addr as usize];
+                self.addr += 1;
             },
             Read(n) => {
                 // Addr written in MSB first
                 self.addr |= (data as u32) << ((n - 1) * 8);
                 self.instr = Read(n-1);
             },
-            _ => {}
         }
     }
 }

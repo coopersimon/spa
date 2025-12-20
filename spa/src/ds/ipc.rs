@@ -35,6 +35,7 @@ bitflags! {
 
 pub struct IPC {
     send:       Sender<u32>,
+    send_recv:  Receiver<u32>,
     recv:       Receiver<u32>,
     last_word:  u32,    // Last word received.
 
@@ -66,7 +67,8 @@ impl IPC {
 
         (Self{
             send:               send_a,
-            recv:               recv_b,
+            send_recv:          recv_a.clone(),
+            recv:               recv_b.clone(),
             last_word:          0,
             atomic_write:       atomic_a.clone(),
             atomic_read:        atomic_b.clone(),
@@ -79,6 +81,7 @@ impl IPC {
             name:               "ARM9".to_string(),
         }, Self{
             send:               send_b,
+            send_recv:          recv_b.clone(),
             recv:               recv_a,
             last_word:          0,
             atomic_write:       atomic_b,
@@ -109,7 +112,7 @@ impl IPC {
             }
             self.was_recv_empty = is_recv_empty;
         }
-        if self.irq_enable && self.irq_req_in.swap(false, Ordering::AcqRel) {
+        if self.irq_enable && self.irq_req_in.swap(false, Ordering::SeqCst) {
             interrupts.insert(Interrupts::IPC_SYNC);
         }
         interrupts
@@ -118,21 +121,27 @@ impl IPC {
 
 impl IPC {
     fn read_sync_reg(&self) -> u32 {
-        let mut out = self.atomic_read.load(Ordering::Acquire) as u32;
-        out |= (self.atomic_write.load(Ordering::Acquire) as u32) << 8;
+        let mut out = self.atomic_read.load(Ordering::SeqCst) as u32;
+        out |= (self.atomic_write.load(Ordering::SeqCst) as u32) << 8;
         if self.irq_enable {
             out |= u32::bit(14);
+        }
+        if self.name == "ARM9" {
+            log::debug!("SYNC IPC read {:X} (to {})", out, self.name);
         }
         out
     }
 
     fn write_sync_reg(&mut self, data: u32) {
         let to_write = ((data >> 8) & 0xF) as u8;
-        self.atomic_write.store(to_write, Ordering::Release);
+        self.atomic_write.store(to_write, Ordering::SeqCst);
         if u32::test_bit(data, 13) {
-            self.irq_req_out.store(true, Ordering::Release);
+            self.irq_req_out.store(true, Ordering::SeqCst);
         }
         self.irq_enable = u32::test_bit(data, 14);
+        if self.name == "ARM9" {
+            log::debug!("SYNC IPC {:X} (from {})", data, self.name);
+        }
     }
 
     fn read_control_reg(&self) -> u32 {
@@ -151,6 +160,10 @@ impl IPC {
         }
         if control_data.contains(IPCFifoControl::SEND_FIFO_FLUSH) {
             log::warn!("FLUSH {}", self.name);
+            while let Ok(_) = self.send_recv.try_recv() {
+                println!("flushing");
+            }
+            self.last_word = 0;
         }
         self.ipc_fifo_control = (control_data & IPCFifoControl::WRITE_BITS) | (self.ipc_fifo_control & IPCFifoControl::ERROR);
     }
@@ -159,7 +172,10 @@ impl IPC {
         if self.ipc_fifo_control.contains(IPCFifoControl::ENABLE_FIFO) {
             match self.recv.try_recv() {
                 Ok(word) => self.last_word = word,
-                Err(TryRecvError::Empty) => self.ipc_fifo_control.insert(IPCFifoControl::ERROR),
+                Err(TryRecvError::Empty) => {
+                    self.ipc_fifo_control.insert(IPCFifoControl::ERROR);
+                    self.last_word = 0;
+                },
                 err => panic!("{:?}", err),
             }
         }

@@ -12,6 +12,7 @@ bitflags! {
     }
 }
 
+#[derive(Debug)]
 enum Channel {
     Idle,
     Temp0,
@@ -30,10 +31,7 @@ const Y_RELEASED: u16 = 0xFFF;
 pub struct Touchscreen {
     control:    TSCControl,
     channel:    Channel,
-    can_read:   bool,
-    // All values are 12-bit.
-    // This requires 2 byte-sized reads for each value.
-    read_lo:    bool,
+    read_buffer: u16,
 
     x:      u16,
     y:      u16,
@@ -45,12 +43,11 @@ impl Touchscreen {
         Self {
             control:    TSCControl::default(),
             channel:    Channel::Temp0,
-            can_read:   false,
-            read_lo:    true,
+            read_buffer: 0,
 
             x:          X_RELEASED,
             y:          Y_RELEASED,
-            aux:        0,
+            aux:        255, // 0
         }
     }
 
@@ -77,32 +74,19 @@ impl Touchscreen {
 
     pub fn deselect(&mut self) {
         self.channel = Channel::Idle;
-        self.can_read = false;
+        //self.can_read = false;
     }
 
     pub fn read(&mut self) -> u8 {
-        use Channel::*;
-        if self.can_read {
-            match self.channel {
-                Idle => 0,
-                Temp0 => 0,
-                TouchscreenY => self.read_12bit(self.y),
-                Battery => 0,
-                TouchscreenZ1 => 0,
-                TouchscreenZ2 => 0,
-                TouchscreenX => self.read_12bit(self.x),
-                AUX => self.read_12bit(self.aux),
-                Temp1 => 0
-            }
-        } else {
-            0
-        }
+        let data = self.read_buffer as u8;
+        self.read_buffer >>= 8;
+        data
     }
 
     pub fn write(&mut self, data: u8) {
+        use Channel::*;
         let control = TSCControl::from_bits_truncate(data);
         if control.contains(TSCControl::START) {
-            use Channel::*;
             self.control = control;
             self.channel = match (control & TSCControl::CHANNEL_SEL).bits() >> 4 {
                 0 => Temp0,
@@ -115,20 +99,22 @@ impl Touchscreen {
                 7 => Temp1,
                 _ => unreachable!()
             };
-            self.read_lo = true;
-        }
-        self.can_read = true;
-    }
-}
-
-impl Touchscreen {
-    // Read the upper or lower section of a 12-bit value.
-    fn read_12bit(&mut self, value: u16) -> u8 {
-        if self.read_lo {
-            self.read_lo = false;
-            (value << 3) as u8
-        } else {
-            (value >> 5) as u8
+            // Just load straight away.
+            self.read_buffer = match self.channel {
+                Idle => 0,
+                Temp0 => 0x22,
+                TouchscreenY => self.y << 3,
+                Battery => 0,
+                TouchscreenZ1 => 0,
+                TouchscreenZ2 => 0,
+                TouchscreenX => self.x << 3,
+                AUX => if self.control.contains(TSCControl::CONV_MODE) {
+                    self.aux << 7
+                } else {
+                    self.aux << 3
+                },
+                Temp1 => 0
+            };
         }
     }
 }

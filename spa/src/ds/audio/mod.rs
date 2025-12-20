@@ -170,6 +170,7 @@ impl MemInterface32 for DSAudio {
                 self.capture[1].control.bits(),
                 0, 0
             ]),
+            0x0400_050C => 0,
             0x0400_0510 => self.capture[0].dst_addr,
             0x0400_0514 => self.capture[0].len,
             0x0400_0518 => self.capture[1].dst_addr,
@@ -204,12 +205,13 @@ impl MemInterface32 for DSAudio {
                 self.capture[0].write_control(bytes[0]);
                 self.capture[1].write_control(bytes[1]);
             },
+            0x0400_050C => {},
             0x0400_0510 => self.capture[0].write_dest(data),
             0x0400_0514 => self.capture[0].write_len(data),
             0x0400_0518 => self.capture[1].write_dest(data),
             0x0400_051C => self.capture[1].write_len(data),
 
-            _ => panic!("reading from invalid sound addr {:X}", addr),
+            _ => panic!("writing to invalid sound addr {:X}", addr),
         }
     }
 }

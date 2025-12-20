@@ -50,6 +50,16 @@ impl ExMemControl {
             access_rights:  access_rights
         })
     }
+
+    pub fn has_gba_access(&self) -> bool {
+        let access = AccessRights::from_bits_truncate(self.access_rights.load(Ordering::Acquire));
+        !access.contains(AccessRights::GBA_CART)
+    }
+
+    pub fn has_nds_access(&self) -> bool {
+        let access = AccessRights::from_bits_truncate(self.access_rights.load(Ordering::Acquire));
+        !access.contains(AccessRights::NDS_CARD)
+    }
 }
 
 impl MemInterface16 for ExMemControl {
@@ -76,6 +86,18 @@ impl MemInterface16 for ExMemControl {
 pub struct ExMemStatus {
     gba_access:     GBAAccess,
     access_rights:  Arc<AtomicU16>,
+}
+
+impl ExMemStatus {
+    pub fn has_gba_access(&self) -> bool {
+        let access = AccessRights::from_bits_truncate(self.access_rights.load(Ordering::Acquire));
+        access.contains(AccessRights::GBA_CART)
+    }
+
+    pub fn has_nds_access(&self) -> bool {
+        let access = AccessRights::from_bits_truncate(self.access_rights.load(Ordering::Acquire));
+        access.contains(AccessRights::NDS_CARD)
+    }
 }
 
 impl MemInterface16 for ExMemStatus {

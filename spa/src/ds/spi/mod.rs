@@ -34,6 +34,8 @@ pub struct SPI {
     power_man:      PowerManager,
     firmware:       Firmware,
     touchscreen:    Touchscreen,
+
+    countdown: usize,
 }
 
 impl SPI {
@@ -44,6 +46,8 @@ impl SPI {
             power_man:      PowerManager::new(),
             firmware:       Firmware::new(firmware_path).unwrap(),
             touchscreen:    Touchscreen::new(),
+
+            countdown: 0,
         }
     }
 
@@ -54,8 +58,9 @@ impl SPI {
 
 impl MemInterface16 for SPI {
     fn read_halfword(&mut self, addr: u32) -> u16 {
+        self.countdown = self.countdown.saturating_sub(1);
         match addr {
-            0x0400_01C0 => self.control.bits(),
+            0x0400_01C0 => (self.control | if self.countdown == 0 {SPIControl::empty()} else {SPIControl::BUSY}).bits(),
             0x0400_01C2 => match (self.control & SPIControl::DEVICE).bits() >> 8 {
                 0 => {
                     let data = self.power_man.read();
@@ -86,8 +91,9 @@ impl MemInterface16 for SPI {
     }
 
     fn read_word(&mut self, addr: u32) -> u32 {
+        self.countdown = self.countdown.saturating_sub(1);
         match addr {
-            0x0400_01C0 => self.control.bits() as u32,
+            0x0400_01C0 => (self.control | if self.countdown == 0 {SPIControl::empty()} else {SPIControl::BUSY}).bits() as u32,
             _ => unreachable!()
         }
     }
@@ -95,12 +101,30 @@ impl MemInterface16 for SPI {
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
             0x0400_01C0 => self.control = SPIControl::from_bits_truncate(data),
-            0x0400_01C2 => match (self.control & SPIControl::DEVICE).bits() >> 8 {
-                0 => self.power_man.write(bytes::u16::lo(data)),
-                1 => self.firmware.write(bytes::u16::lo(data)),
-                2 => self.touchscreen.write(bytes::u16::lo(data)),
-                3 => {}, // Reserved
-                _ => unreachable!(),
+            0x0400_01C2 => {
+                match (self.control & SPIControl::DEVICE).bits() >> 8 {
+                    0 => {
+                        self.power_man.write(bytes::u16::lo(data));
+                        if !self.control.contains(SPIControl::CHIP_HOLD) {
+                            self.power_man.deselect();
+                        }
+                    },
+                    1 => {
+                        self.firmware.write(bytes::u16::lo(data));
+                        if !self.control.contains(SPIControl::CHIP_HOLD) {
+                            self.firmware.deselect();
+                        }
+                    },
+                    2 => {
+                        self.touchscreen.write(bytes::u16::lo(data));
+                        if !self.control.contains(SPIControl::CHIP_HOLD) {
+                            self.touchscreen.deselect();
+                        }
+                    },
+                    3 => {}, // Reserved
+                    _ => unreachable!(),
+                }
+                self.countdown = 2;
             },
             _ => unreachable!()
         }

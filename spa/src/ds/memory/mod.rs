@@ -214,11 +214,13 @@ impl<R: Renderer> DS9MemoryBus<R> {
         // Write additional data into RAM.
         self.main_ram.write_word(0x3F_F800, self.card.get_rom_id());
         self.main_ram.write_word(0x3F_F804, self.card.get_rom_id());
+        self.main_ram.write_halfword(0x3F_F850, 0x5835); // BIOS CRC
         self.main_ram.write_word(0x3F_F880, 7); // NDS9-7 msg
         self.main_ram.write_word(0x3F_F884, 6); // NDS7 status
         self.main_ram.write_word(0x3F_F890, 0xB0002A22); // Boot flags
         self.main_ram.write_word(0x3F_FC00, self.card.get_rom_id());
         self.main_ram.write_word(0x3F_FC04, self.card.get_rom_id());
+        self.main_ram.write_halfword(0x3F_FC10, 0x5835); // BIOS CRC
         self.main_ram.write_word(0x3F_FC40, 1); // Boot flag
 
         // Write user settings into RAM.
@@ -276,8 +278,8 @@ impl <R: Renderer> DS9MemoryBus<R> {
     fn read_mem_control_halfword(&self, addr: u32) -> u16 {
         use crate::utils::bytes::u16;
         u16::make(
-            self.read_mem_control_byte(addr),
             self.read_mem_control_byte(addr + 1),
+            self.read_mem_control_byte(addr),
         )
     }
 
@@ -388,6 +390,8 @@ impl <R: Renderer> DS9MemoryBus<R> {
             self.barrier.wait();
         }
 
+        self.accelerators.clock(cycles);
+
         let (video_signal, video_irq, geom_fifo_dma) = self.video.clock(cycles);
         let vblank = match video_signal {
             Signal::VBlank => {
@@ -413,15 +417,21 @@ impl <R: Renderer> DS9MemoryBus<R> {
             Interrupts::empty()
         };
 
-        if self.card.check_card_dma() {
-            self.dma.on_card();
-        }
+        let card_interrupt = if self.ex_mem_control.has_nds_access() {
+            let (card_interrupt, card_dma) = self.card.clock(cycles);
+            if card_dma {
+                self.dma.on_card();
+            }
+            card_interrupt
+        } else {
+            Interrupts::empty()
+        };
 
         self.interrupt_control.interrupt_request(
             joypad_irq |
             Interrupts::from_bits_truncate(timer_irq.into()) |
             self.ipc.get_interrupts() |
-            self.card.get_interrupt() |
+            card_interrupt |
             video_irq
         );
 
@@ -476,6 +486,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
         self.inner_counter += cycles;
         if self.inner_counter < 16 {
             if self.check_irq() {
+                self.halt = false;
                 return Some(arm::ExternalException::IRQ);
             }
             return None;
@@ -495,7 +506,7 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
     }
 
     fn load_byte(&mut self, cycle: MemCycleType, addr: Self::Addr) -> (u8, usize) {
-        match addr {
+       match addr {
             0x0200_0000..=0x02FF_FFFF => (
                 self.main_ram.read_byte(addr & 0x3F_FFFF),
                 if cycle.is_non_seq() {DS9_MAIN_RAM_N} else {DS9_MAIN_RAM_S}  // TODO: S=N for instr
@@ -516,8 +527,8 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_byte_oam(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
 
             // TODO: GBA slot
-            0x0800_0000..=0x09FF_FFFF => (0xFF, 18),
-            0x0A00_0000..=0x0AFF_FFFF => (0xFF, 18),
+            0x0800_0000..=0x09FF_FFFF => (if self.ex_mem_control.has_gba_access() {0xFF} else {0x00}, 18),
+            0x0A00_0000..=0x0AFF_FFFF => (if self.ex_mem_control.has_gba_access() {0xFF} else {0x00}, 18),
 
             0xFFFF_0000..=0xFFFF_FFFF => (self.bios.read_byte(addr & 0xFFF), if cycle.is_non_seq() {8} else {2}),
 
@@ -587,8 +598,8 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_halfword_oam(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
 
             // TODO: GBA slot
-            0x0800_0000..=0x09FF_FFFF => (0xFFFF, 18),
-            0x0A00_0000..=0x0AFF_FFFF => (0xFFFF, 18),
+            0x0800_0000..=0x09FF_FFFF => (if self.ex_mem_control.has_gba_access() {0xFFFF} else {0}, 18),
+            0x0A00_0000..=0x0AFF_FFFF => (if self.ex_mem_control.has_gba_access() {0xFFFF} else {0}, 18),
 
             0xFFFF_0000..=0xFFFF_FFFF => (self.bios.read_halfword(addr & 0xFFF), if cycle.is_non_seq() {8} else {2}),
 
@@ -660,8 +671,8 @@ impl<R: Renderer> Mem32 for DS9MemoryBus<R> {
             0x0700_0000..=0x07FF_FFFF => (self.video.mem.read_word_oam(addr & 0x7FF), if cycle.is_non_seq() {8} else {2}),
 
             // TODO: GBA slot
-            0x0800_0000..=0x09FF_FFFF => (0xFFFF_FFFF, 18),
-            0x0A00_0000..=0x0AFF_FFFF => (0xFFFF_FFFF, 18),
+            0x0800_0000..=0x09FF_FFFF => (if self.ex_mem_control.has_gba_access() {0xFFFF_FFFF} else {0}, 18),
+            0x0A00_0000..=0x0AFF_FFFF => (if self.ex_mem_control.has_gba_access() {0xFFFF_FFFF} else {0}, 18),
 
             0xFFFF_0000..=0xFFFF_FFFF => (self.bios.read_word(addr & 0xFFF), if cycle.is_non_seq() {8} else {2}),
 
@@ -905,13 +916,26 @@ impl DS7MemoryBus {
                 vblank = Interrupts::V_BLANK;
             }
         }
+        /*let v_count = self.video.get_v_count();
+        if v_count != self.prev_v_count {
+            self.dma.on_vblank();
+            if v_count > 191 && self.video.v_blank_enabled() {
+                vblank = Interrupts::V_BLANK;
+            }
+            self.prev_v_count = v_count;
+        }*/
 
-        self.card.clock(cycles);
-        if self.card.check_card_dma() {
-            // TODO: make this more clear.
-            // H-blank trigger setting on GBA is same as NDS card trigger.
-            self.dma.on_hblank();
-        }
+        let card_interrupt = if self.ex_mem_status.has_nds_access() {
+            let (card_interrupt, card_dma) = self.card.clock(cycles);
+            if card_dma {
+                // H-blank trigger setting on GBA is same as NDS card trigger.
+                self.dma.on_hblank();
+            }
+            card_interrupt
+        } else {
+            Interrupts::empty()
+        };
+
         let v_count_irq = if self.video.v_count_irq() {
             Interrupts::V_COUNTER
         } else {
@@ -939,7 +963,7 @@ impl DS7MemoryBus {
             joypad_irq |
             Interrupts::from_bits_truncate(timer_irq.into()) |
             self.ipc.get_interrupts() |
-            self.card.get_interrupt() |
+            card_interrupt |
             v_count_irq |
             vblank |
             wifi_irq
@@ -1014,8 +1038,8 @@ impl Mem32 for DS7MemoryBus {
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_byte(addr), 1),
 
             // TODO: GBA slot
-            0x0800_0000..=0x09FF_FFFF => (0xFF, 18),
-            0x0A00_0000..=0x0AFF_FFFF => (0xFF, 18),
+            0x0800_0000..=0x09FF_FFFF => (if self.ex_mem_status.has_gba_access() {0xFF} else {0}, 18),
+            0x0A00_0000..=0x0AFF_FFFF => (if self.ex_mem_status.has_gba_access() {0xFF} else {0}, 18),
 
             _ => (0, 1) // Unused
         }
@@ -1066,8 +1090,8 @@ impl Mem32 for DS7MemoryBus {
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_halfword(addr), 1),
 
             // TODO: GBA slot
-            0x0800_0000..=0x09FF_FFFF => (0xFFFF, 18),
-            0x0A00_0000..=0x0AFF_FFFF => (0xFFFF, 18),
+            0x0800_0000..=0x09FF_FFFF => (if self.ex_mem_status.has_gba_access() {0xFFFF} else {0}, 18),
+            0x0A00_0000..=0x0AFF_FFFF => (if self.ex_mem_status.has_gba_access() {0xFFFF} else {0}, 18),
 
             _ => (0, 1) // Unused
         }
@@ -1119,8 +1143,8 @@ impl Mem32 for DS7MemoryBus {
             0x0600_0000..=0x06FF_FFFF => (self.vram.read_word(addr), 2),
 
             // TODO: GBA slot
-            0x0800_0000..=0x09FF_FFFF => (0xFFFF_FFFF, 18),
-            0x0A00_0000..=0x0AFF_FFFF => (0xFFFF_FFFF, 18),
+            0x0800_0000..=0x09FF_FFFF => (if self.ex_mem_status.has_gba_access() {0xFFFF_FFFF} else {0}, 18),
+            0x0A00_0000..=0x0AFF_FFFF => (if self.ex_mem_status.has_gba_access() {0xFFFF_FFFF} else {0}, 18),
 
             _ => (0, 1) // Unused
         }
@@ -1163,14 +1187,14 @@ impl DS7MemoryBus {
         (0x0400_00B0, 0x0400_00DF, dma),
         (0x0400_0100, 0x0400_010F, timers),
         (0x0400_0130, 0x0400_0133, joypad),
-        (0x0400_0136, 0x0400_0137, ds_joypad),
+        (0x0400_0134, 0x0400_0137, ds_joypad),
         (0x0400_0138, 0x0400_013B, rtc),
         (0x0400_0180, 0x0400_018F, ipc),
         (0x0400_01A0, 0x0400_01BF, card),
         (0x0400_01C0, 0x0400_01C3, spi),
         (0x0400_0204, 0x0400_0207, ex_mem_status),
         (0x0400_0208, 0x0400_0217, interrupt_control),
-        (0x0400_0300, 0x0400_0307, power_control),
+        (0x0400_0300, 0x0400_030F, power_control),
         (0x0400_0400, 0x0400_051F, audio),
         (0x0410_0000, 0x0410_0003, ipc),
         (0x0410_0010, 0x0410_0013, card),

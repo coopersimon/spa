@@ -651,7 +651,7 @@ impl<R: Renderer> CoprocV4 for DS9InternalMem<R> {
             (9, 1) => self.read_tcm_settings(info),
             // 13 => Process ID (not in NDS)
             // 15 => BIST
-            (_, _) => 0,
+            (_, _) => panic!("unknown mrc"),
         };
 
         (ret, 0)

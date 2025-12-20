@@ -18,12 +18,14 @@ bitflags!{
 }
 
 pub struct DSJoypad {
+    rcnt: u16,
     buttons_pressed: DSButtons,
 }
 
 impl DSJoypad {
     pub fn new() -> Self {
         Self {
+            rcnt: 0,
             buttons_pressed: DSButtons::from_bits_truncate(0x4B),
         }
     }
@@ -34,10 +36,18 @@ impl DSJoypad {
 }
 
 impl MemInterface16 for DSJoypad {
-    fn read_halfword(&mut self, _addr: u32) -> u16 {
-        self.buttons_pressed.bits()
+    fn read_halfword(&mut self, addr: u32) -> u16 {
+        match addr {
+            0x0400_0134 => self.rcnt,
+            0x0400_0136 => self.buttons_pressed.bits(),
+            _ => panic!("ds joypad invalid addr")
+        }
     }
-    fn write_halfword(&mut self, _addr: u32, _data: u16) {
-        // Buttons are not written via this function. Use `set_button` instead.
+    fn write_halfword(&mut self, addr: u32, data: u16) {
+        match addr {
+            0x0400_0134 => self.rcnt = data,
+            0x0400_0136 => {}, // Buttons are not written via this function. Use `set_button` instead.
+            _ => panic!("ds joypad invalid addr")
+        }
     }
 }

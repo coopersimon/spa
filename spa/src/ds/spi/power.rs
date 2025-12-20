@@ -24,7 +24,7 @@ enum State {
 
 pub struct PowerManager {
     state:      State,
-    can_read:   bool,
+    read_buffer: u8,
 
     control:        PowerControl,
     mic_amp_enable: bool,
@@ -35,8 +35,8 @@ impl PowerManager {
     pub fn new() -> Self {
         Self {
             state:          State::Idle,
-            can_read:       false,
-            control:        PowerControl::default(),
+            read_buffer:    0,
+            control:        PowerControl::SOUND_AMP_ENABLE,
             mic_amp_enable: false,
             mic_amp_gain:   0,
         }
@@ -44,27 +44,10 @@ impl PowerManager {
 
     pub fn deselect(&mut self) {
         self.state = State::Idle;
-        self.can_read = false;
     }
 
     pub fn read(&mut self) -> u8 {
-        if self.can_read {
-            self.can_read = false;
-            match self.state {
-                State::Read(n) => {
-                    match n {
-                        0 => self.control.bits(),
-                        1 => 0, // Battery status
-                        2 => if self.mic_amp_enable {1} else {0},
-                        3 => self.mic_amp_gain,
-                        _ => 0
-                    }
-                },
-                _ => 0
-            }
-        } else {
-            0
-        }
+        self.read_buffer
     }
 
     pub fn write(&mut self, data: u8) {
@@ -75,10 +58,16 @@ impl PowerManager {
                 } else {
                     State::Write(data & 0x3)
                 };
-                self.can_read = false;
             },
-            State::Read(_n) => {
-                self.can_read = true;
+            State::Read(n) => {
+                // Strobe.
+                self.read_buffer = match n {
+                    0 => self.control.bits(),
+                    1 => 0, // Battery status
+                    2 => if self.mic_amp_enable {1} else {0},
+                    3 => self.mic_amp_gain,
+                    _ => 0
+                };
             },
             State::Write(n) => match n {
                 0 => self.control = PowerControl::from_bits_truncate(data),

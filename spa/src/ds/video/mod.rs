@@ -130,7 +130,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
             0x0400_0004 => self.set_lcd_status(data),
-            0x0400_0006 => self.v_count = data,
+            //0x0400_0006 => self.v_count = data,
             0x0400_0060 => self.video_3d.write_halfword(addr, data),
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.write_halfword(addr & 0xFF, data),
             0x0400_0304 => self.mem.power_cnt.store(data, Ordering::Release),
@@ -154,7 +154,7 @@ impl<R: Renderer> MemInterface16 for DSVideo<R> {
         match addr {
             0x0400_0004 => {
                 self.set_lcd_status(bytes::u32::lo(data));
-                self.v_count = bytes::u32::hi(data);
+                //self.v_count = bytes::u32::hi(data);
             },
             0x0400_0060 => self.video_3d.write_word(addr, data),
             0x0400_0000..=0x0400_006F => self.mem.mut_engine_a().registers.write_word(addr & 0xFF, data),
@@ -313,7 +313,11 @@ impl ARM7Video {
     }
 
     pub fn v_count_irq(&self) -> bool {
-        self.lcd_status.contains(LCDStatus::VCOUNT_IRQ) && self.lcd_status.v_count() == self.v_count.load(Ordering::Acquire)
+        self.lcd_status.contains(LCDStatus::VCOUNT_IRQ) && self.lcd_status.v_count() == self.get_v_count()
+    }
+
+    pub fn get_v_count(&self) -> u16 {
+        self.v_count.load(Ordering::Acquire)
     }
 }
 
@@ -321,7 +325,7 @@ impl MemInterface16 for ARM7Video {
     fn read_halfword(&mut self, addr: u32) -> u16 {
         match addr {
             0x0400_0004 => self.lcd_status.bits(),
-            0x0400_0006 => self.v_count.load(Ordering::Acquire),
+            0x0400_0006 => self.get_v_count(),
             _ => panic!("reading invalid arm7 video address {:X}", addr)
         }
     }
@@ -329,7 +333,7 @@ impl MemInterface16 for ARM7Video {
     fn write_halfword(&mut self, addr: u32, data: u16) {
         match addr {
             0x0400_0004 => self.set_lcd_status(data),
-            0x0400_0006 => self.v_count.store(data, Ordering::Release),
+            //0x0400_0006 => self.v_count.store(data, Ordering::Release),
             _ => panic!("writing invalid arm7 video address {:X}", addr)
         }
     }

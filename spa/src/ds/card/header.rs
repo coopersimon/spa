@@ -9,7 +9,7 @@ impl CardHeader {
         Self(data)
     }
 
-    fn get_u32(&self, at: usize) -> u32 {
+    pub fn get_u32(&self, at: usize) -> u32 {
         u32::from_le_bytes(self.0[at..(at + 4)].try_into().unwrap())
     }
 
@@ -65,5 +65,10 @@ impl CardHeader {
     /// Number of bytes to load from card to RAM.
     pub fn arm7_size(&self) -> u32 {
         self.get_u32(0x3C)
+    }
+
+    /// Setting for card read.
+    pub fn rom_ctrl(&self) -> u32 {
+        self.get_u32(0x60)
     }
 }

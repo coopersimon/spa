@@ -36,7 +36,10 @@ pub struct Accelerators {
     sqrt_param:     u64,
     sqrt_result:    u32,
 
-    //cycle_countdown:    usize,
+    div_cycle_countdown: usize,
+    sqrt_cycle_countdown: usize,
+    div_latch: bool,
+    sqrt_latch: bool,
 }
 
 impl Accelerators {
@@ -52,13 +55,33 @@ impl Accelerators {
             sqrt_param:     0,
             sqrt_result:    0,
 
-            //cycle_countdown:    0,
+            div_cycle_countdown: 0,
+            sqrt_cycle_countdown: 0,
+            div_latch: false,
+            sqrt_latch: false,
         }
     }
 
-    /*pub fn clock(&mut self, cycles: usize) {
-        // TODO
-    }*/
+    pub fn clock(&mut self, cycles: usize) {
+        // TODO: unlatch?
+        if self.div_cycle_countdown > 0 {
+            if self.div_cycle_countdown <= cycles {
+                self.div_cycle_countdown = 0;
+                self.div_control.set(DivisionControl::DIV_BY_ZERO, self.div_denominator == 0);
+                self.div_control.remove(DivisionControl::BUSY);
+            } else {
+                self.div_cycle_countdown -= cycles;
+            }
+        }
+        if self.sqrt_cycle_countdown > 0 {
+            if self.sqrt_cycle_countdown <= cycles {
+                self.sqrt_cycle_countdown = 0;
+                self.sqrt_control.remove(SqrtControl::BUSY);
+            } else {
+                self.sqrt_cycle_countdown -= cycles;
+            }
+        }
+    }
 
     pub fn start_div(&mut self) {
         match (self.div_control & DivisionControl::MODE).bits() {
@@ -66,30 +89,44 @@ impl Accelerators {
                 let numerator = (self.div_numerator & 0xFFFF_FFFF) as i32;
                 let denominator = (self.div_denominator & 0xFFFF_FFFF) as i32;
                 if denominator == 0 {
-                    self.div_control.insert(DivisionControl::DIV_BY_ZERO);
+                    self.mod_result = numerator as i64;
+                    self.div_result = self.mod_result >> 63;
+                    self.div_result = ((self.div_result as u64) ^ 0xFFFF_FFFF_0000_0000) as i64;
                     return;
                 }
                 self.div_result = (numerator / denominator) as i64;
                 self.mod_result = (numerator % denominator) as i64;
+                //println!("Div32 {:X} / {:X} => {:X}", self.div_numerator, self.div_denominator, self.div_result);
+                self.div_cycle_countdown = 18;
             },
             1 => {
                 let denominator = (self.div_denominator & 0xFFFF_FFFF) as i32 as i64;
                 if denominator == 0 {
-                    self.div_control.insert(DivisionControl::DIV_BY_ZERO);
+                    self.mod_result = self.div_numerator;
+                    self.div_result = self.mod_result >> 63;
+                    self.div_result = ((self.div_result as u64) ^ 0xFFFF_FFFF_0000_0000) as i64;
                     return;
                 }
                 self.div_result = self.div_numerator / denominator;
                 self.mod_result = self.div_numerator % denominator;
+                //println!("Div48 {:X} / {:X} => {:X}", self.div_numerator, self.div_denominator, self.div_result);
+                self.div_cycle_countdown = 34;
             },
             _ => {
                 if self.div_denominator == 0 {
-                    self.div_control.insert(DivisionControl::DIV_BY_ZERO);
+                    self.mod_result = self.div_numerator;
+                    self.div_result = self.mod_result >> 63;
+                    self.div_result = ((self.div_result as u64) ^ 0xFFFF_FFFF_0000_0000) as i64;
                     return;
                 }
                 self.div_result = self.div_numerator / self.div_denominator;
                 self.mod_result = self.div_numerator % self.div_denominator;
+                //println!("Div64 {:X} / {:X} => {:X}", self.div_numerator, self.div_denominator, self.div_result);
+                self.div_cycle_countdown = 34;
             },
         }
+        self.div_latch = true;
+        self.div_control.insert(DivisionControl::BUSY);
     }
 
     pub fn start_sqrt(&mut self) {
@@ -100,6 +137,9 @@ impl Accelerators {
             let sqrt_in = (self.sqrt_param as u32) as f64;
             self.sqrt_result = sqrt_in.sqrt() as u32;
         }
+        self.sqrt_cycle_countdown = 13;
+        self.sqrt_latch = true;
+        self.sqrt_control.insert(SqrtControl::BUSY);
     }
 }
 

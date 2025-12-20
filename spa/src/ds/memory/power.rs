@@ -1,8 +1,7 @@
 
 use bitflags::bitflags;
 use crate::utils::{
-    bits::u8,
-    meminterface::MemInterface8
+    bits::u8, bytes::u16, meminterface::MemInterface8
 };
 
 bitflags! {
@@ -52,6 +51,8 @@ pub struct DS7PowerControl {
     pub sleep:  bool,
 
     sound_wifi_control: SoundWifiPowerControl,
+
+    bios_prot: u16,
 }
 
 impl DS7PowerControl {
@@ -61,6 +62,7 @@ impl DS7PowerControl {
             halt:   false,
             sleep:  false,
             sound_wifi_control: SoundWifiPowerControl::default(),
+            bios_prot: 0,
         }
     }
 }
@@ -77,6 +79,8 @@ impl MemInterface8 for DS7PowerControl {
                 0
             },
             0x0400_0304 => self.sound_wifi_control.bits(),
+            0x0400_0308 => u16::lo(self.bios_prot),
+            0x0400_0309 => u16::hi(self.bios_prot),
             _ => 0
         }
     }
@@ -93,6 +97,8 @@ impl MemInterface8 for DS7PowerControl {
                 }
             } else {},
             0x0400_0304 => self.sound_wifi_control = SoundWifiPowerControl::from_bits_truncate(data),
+            0x0400_0308 => self.bios_prot = u16::set_lo(self.bios_prot, data),
+            0x0400_0309 => self.bios_prot = u16::set_hi(self.bios_prot, data),
             _ => {}
         }
     }

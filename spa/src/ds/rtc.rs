@@ -54,8 +54,8 @@ pub struct RealTimeClock {
     command:    u8,
     read:       bool,
 
-    status_1:   u8,
-    status_2:   u8,
+    status_1:   Status1,
+    status_2:   Status2,
 
     year:       Bcd8,
     month:      Bcd8,
@@ -87,8 +87,8 @@ impl RealTimeClock {
             command:    0,
             read:       false,
 
-            status_1:   0,
-            status_2:   0,
+            status_1:   Status1::default(),
+            status_2:   Status2::default(),
 
             year:       Bcd8::from_binary(0),
             month:      Bcd8::from_binary(0),
@@ -140,7 +140,7 @@ impl RealTimeClock {
                 self.set_current_time();
                 DateTime(3)
             },
-            4 => if u8::test_bit(self.status_2, 2) {Int1(1)} else {Int1(3)},
+            4 => if u8::test_bit(self.status_2.bits(), 2) {Int1(1)} else {Int1(3)},
             5 => Int2(3),
             6 => ClockAdjust,
             7 => Free,
@@ -153,8 +153,8 @@ impl RealTimeClock {
     fn read_data(&mut self) -> u8 {
         use RTCState::*;
         match self.state {
-            StatusReg1 => self.status_1,
-            StatusReg2 => self.status_2,
+            StatusReg1 => self.status_1.bits(),
+            StatusReg2 => self.status_2.bits(),
             DateTime(7) => self.year.binary(),
             DateTime(6) => self.month.binary(),
             DateTime(5) => self.day.binary(),
@@ -188,8 +188,8 @@ impl RealTimeClock {
     fn writeback_buffer(&mut self, state: RTCState) {
         use RTCState::*;
         match state {
-            StatusReg1 => self.status_1 = self.write_buf,
-            StatusReg2 => self.status_2 = self.write_buf,
+            StatusReg1 => self.status_1 = Status1::from_bits_truncate(self.write_buf),
+            StatusReg2 => self.status_2 = Status2::from_bits_truncate(self.write_buf),
             DateTime(7) => self.year = Bcd8::from_bcd(self.write_buf),
             DateTime(6) => self.month = Bcd8::from_bcd(self.write_buf),
             DateTime(5) => self.day = Bcd8::from_bcd(self.write_buf),
@@ -229,18 +229,24 @@ impl RealTimeClock {
     /// Set the time.
     fn set_current_time(&mut self) {
         // TODO: offset from configured time.
-        let now = Local::now();
-        let year = now.year() % 100;
-        let weekday = now.weekday().num_days_from_sunday(); // Appears to use Monday = 1, ...
+        let time = Local::now();
+        let year = time.year() % 100;
+        let weekday = time.weekday().num_days_from_sunday(); // Appears to use Monday = 1, ...
 
         self.year = Bcd8::from_binary(year as u8);
-        self.month = Bcd8::from_binary(now.month() as u8);
-        self.day = Bcd8::from_binary(now.day() as u8);
+        self.month = Bcd8::from_binary(time.month() as u8);
+        self.day = Bcd8::from_binary(time.day() as u8);
         self.weekday = Bcd8::from_binary(weekday as u8);
 
-        self.hour = Bcd8::from_binary(now.hour() as u8);
-        self.minute = Bcd8::from_binary(now.minute() as u8);
-        self.second = Bcd8::from_binary(now.second() as u8);
+        let hour = if self.status_1.contains(Status1::HOUR_24) {
+            time.hour()
+        } else {
+            let (pm, hour) = time.hour12();
+            (hour - 1) | (if pm {0x40} else {0x00})
+        };
+        self.hour = Bcd8::from_binary(hour as u8);
+        self.minute = Bcd8::from_binary(time.minute() as u8);
+        self.second = Bcd8::from_binary(time.second() as u8);
     }
 }
 
