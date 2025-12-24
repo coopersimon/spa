@@ -136,9 +136,11 @@ impl MemInterface32 for DSCardIO {
 
 /// The DS card ROM.
 struct DSCard {
-    rom_file:   Option<File>,
-    rom_buffer: Vec<u8>,
-    buffer_tag: u32,
+    rom_file:       Option<File>,
+    rom_buffer:     Vec<u8>,
+    buffer_tag:     u32,
+    read_addr:      u32,
+    secure_block:   u32,
 
     spi_control:    GamecardControl,
     spi:            SPI,
@@ -200,9 +202,11 @@ impl DSCard {
         };
 
         Ok(Self {
-            rom_file:   rom_file,
-            rom_buffer: buffer,
-            buffer_tag: 0,
+            rom_file:       rom_file,
+            rom_buffer:     buffer,
+            buffer_tag:     0,
+            read_addr:      0,
+            secure_block:   0,
 
             spi_control:    GamecardControl::default(),
             spi:            SPI::new(save_path),
@@ -474,18 +478,15 @@ enum CommandEncryptMode {
 #[derive(Clone, Copy, Debug)]
 enum DSCardDataState {
     Dummy,              // 9F, 3C, 3D(?), 
-    Header {            // 00 + addr
-        count: u32,
-        addr: u32
-    },
+    Header,             // 00 + addr,
     ID,                 // 90
     Key2,               // 4
     Key1ID,             // 1
-    SecureBlock(u32),   // 2
+    SecureBlock,        // 2
     Key2Disable,        // 6
     EnterMain,          // A
     Key2Dummy,
-    GetData(u32),       // B7
+    GetData,            // B7
     Key2ID              // B8
 }
 
@@ -566,10 +567,8 @@ impl DSCard {
         match command >> 56 {   // Command is MSB
             0x9F => Dummy,
             0x00 => {
-                let addr = (command >> 24) as u32;
-                Header {
-                    count: 0x200, addr
-                }
+                self.read_addr = (command >> 24) as u32;
+                Header
             },
             0x90 => ID,
             0x3C => {
@@ -597,12 +596,13 @@ impl DSCard {
             0x2 => {
                 let block = ((command >> 44) & 0xFFFF) as u32;
                 let addr = block * 0x1000;
-                //println!("Load secure block {:X}", addr);
                 self.load_block(addr);
-                if block == 4 {
-                    self.encrypt_secure_area();
+                if self.secure_block != block {
+                    self.read_addr = addr;
+                    self.secure_block = block;
                 }
-                SecureBlock(addr)
+                //println!("Load secure block {:X} : {:X}", self.read_addr, self.transfer_count);
+                SecureBlock
             },
             0x6 => {
                 self.cmd_encrypt_mode = CommandEncryptMode::None;
@@ -631,7 +631,8 @@ impl DSCard {
                 };
                 //println!("Read from {:X}", addr);
                 self.load_block(addr);
-                GetData(addr)
+                self.read_addr = addr;
+                GetData
             },
             0xB8 => {
                 Key2ID
@@ -647,10 +648,9 @@ impl DSCard {
         use DSCardDataState::*;
         let data = match self.data_state {
             Dummy => 0xFF,
-            Header {count, addr} => if count == 0 {
-                0xFF
-            } else {
-                self.data_state = Header{count: count - 1, addr: addr + 1};
+            Header => {
+                let addr = self.read_addr;
+                self.read_addr += 1;
                 self.read_card_byte(addr)
             },
             ID | Key1ID | Key2ID => {
@@ -663,18 +663,18 @@ impl DSCard {
                 //println!("read key2");
                 0xFF
             },
-            SecureBlock(addr) => {
-                let data = self.read_card_byte(addr);
-                self.data_state = SecureBlock(addr + 1);
-                data
+            SecureBlock => {
+                let addr = self.read_addr;
+                self.read_addr += 1;
+                self.read_card_byte(addr)
             },
             Key2Disable => 0,
             Key2Dummy => 0,
             EnterMain => 0,
-            GetData(addr) => {
-                let data = self.read_card_byte(addr);
-                self.data_state = GetData(addr + 1);
-                data
+            GetData => {
+                let addr = self.read_addr;
+                self.read_addr += 1;
+                self.read_card_byte(addr)
             }
         };
         if self.transfer_count > 0 {
@@ -703,6 +703,9 @@ impl DSCard {
             if let Some(rom_file) = self.rom_file.as_mut() {
                 rom_file.seek(SeekFrom::Start(seek_addr)).unwrap();
                 rom_file.read_exact(&mut self.rom_buffer).unwrap();
+            }
+            if tag == 1 {
+                self.encrypt_secure_area();
             }
         }
     }
@@ -747,7 +750,6 @@ impl DSCard {
                     self.rom_buffer[addr_offset + 6],
                     self.rom_buffer[addr_offset + 7]
                 ]);
-                //let key1 = if i == 0 {&self.key1_instr} else {&self.key1_secure};
                 let encrypted_block = if i == 0 {
                     let block = dscrypto::key1::encrypt(decrypted_block, &self.key1_secure);
                     dscrypto::key1::encrypt(block, &self.key1_instr)
