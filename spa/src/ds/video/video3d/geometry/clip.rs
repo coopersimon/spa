@@ -1,6 +1,6 @@
 
-use fixed::types::{I16F0, I40F24, I12F4};
-use fixed::traits::ToFixed;
+use fixed::types::{I16F0, I40F24};
+use fixed::traits::{Fixed, ToFixed};
 use crate::common::video::colour::Colour;
 use super::{
     super::types::*,
@@ -29,9 +29,6 @@ pub struct StagedVertex {
     pub position:   Vector<4>,
     pub colour:     Colour,
     pub tex_coords: TexCoords,
-
-    pub needs_clip: Option<bool>,
-    pub idx:        Option<u16>,
 }
 
 pub struct ClippingUnit {
@@ -39,6 +36,9 @@ pub struct ClippingUnit {
 
     /// Use W or Z value for depth-buffering.
     w_buffer:           bool,
+
+    /// Test w against this value for 1-dot polygons.
+    dot_polygon_w:      Depth,
 
     viewport_x:         N,
     viewport_y:         N,
@@ -52,6 +52,8 @@ impl ClippingUnit {
             polygon_ram:    Box::new(PolygonRAM::new()),
 
             w_buffer:           false,
+
+            dot_polygon_w:      Depth::from_bits(0x7FFF << 6),
 
             viewport_x:         N::ZERO,
             viewport_y:         N::ZERO,
@@ -72,12 +74,18 @@ impl ClippingUnit {
         self.w_buffer = w_buffer;
     }
 
+    pub fn set_dot_polygon_depth(&mut self, data: u16) {
+        let bits = (data & 0x7FFF) as i32;
+        self.dot_polygon_w = Depth::from_bits(bits << 6);
+    }
+
     /// Add a polygon and vertices to the vertex list RAM.
     /// 
     /// Also make a note of its index in the current polygon.
-    pub fn add_polygon(&mut self, mut staged_polygon: Polygon, vertices: &mut [StagedVertex]) {
+    pub fn add_polygon(&mut self, mut staged_polygon: Polygon, vertices: &mut [StagedVertex], capture: bool) {
         let (mut min_y, mut max_y) = (I16F0::MAX, I16F0::ZERO);
 
+        let mut one_dot_w = N::MAX;
         let vertices_out = vertices.iter().map(|vertex| {
 
             let w = vertex.position.w().to_fixed::<I40F24>();
@@ -89,6 +97,8 @@ impl ClippingUnit {
             let screen_p = self.get_screen_coords(x.to_fixed(), N::ONE - y.to_fixed::<N>());
             max_y = std::cmp::max(max_y, screen_p.y);
             min_y = std::cmp::min(min_y, screen_p.y);
+            one_dot_w = std::cmp::min(vertex.position.w(), one_dot_w);
+
             // TODO: re-use vertices...
             /*let idx = if let Some(idx) = vertex.idx {
                 idx
@@ -98,6 +108,12 @@ impl ClippingUnit {
                 } else {
                     (z * 0x7FFF).to_fixed::<Depth>()
                 };
+                if capture {
+                    println!("W: {:X} W2: {:X}", w, w2);
+                    println!("Emit vtx: Screen: {:X}, {:X} | XYZ: {:X}, {:X}, {:X}", screen_p.x, screen_p.y, x, y, z);
+                    println!("Input: {:X}, {:X}, {:X}, {:X}", vertex.position.x(), vertex.position.y(), vertex.position.z(), vertex.position.w());
+                    println!("Depth: {:X}", depth);
+                }
                 let out_vertex = Vertex {
                     screen_p,
                     depth: depth,
@@ -112,7 +128,7 @@ impl ClippingUnit {
             out_vertex
         }).collect::<Vec<_>>();
 
-        if test_winding(&staged_polygon, &vertices_out) {
+        if test_winding(&staged_polygon, &vertices_out)/* && self.test_one_dot_display(&staged_polygon.attrs, &vertices_out, one_dot_w.to_fixed())*/ {
             self.polygon_ram.insert_polygon(staged_polygon, max_y, min_y);
         }
     }
@@ -181,34 +197,53 @@ impl ClippingUnit {
     }
 
     fn interpolate(vtx_a: &StagedVertex, vtx_b: &StagedVertex, factor: I40F24) -> StagedVertex {
-        let x_offset = (vtx_b.position.x() - vtx_a.position.x()).to_fixed::<I40F24>() * factor;
-        let y_offset = (vtx_b.position.y() - vtx_a.position.y()).to_fixed::<I40F24>() * factor;
-        let z_offset = (vtx_b.position.z() - vtx_a.position.z()).to_fixed::<I40F24>() * factor;
-        let w_offset = (vtx_b.position.w() - vtx_a.position.w()).to_fixed::<I40F24>() * factor;
-        let r_offset = (vtx_b.colour.r.to_fixed::<I40F24>() - vtx_a.colour.r.to_fixed::<I40F24>()) * factor;
-        let g_offset = (vtx_b.colour.g.to_fixed::<I40F24>() - vtx_a.colour.g.to_fixed::<I40F24>()) * factor;
-        let b_offset = (vtx_b.colour.b.to_fixed::<I40F24>() - vtx_a.colour.b.to_fixed::<I40F24>()) * factor;
-        let tex_s_offset = (vtx_b.tex_coords.s - vtx_a.tex_coords.s).to_fixed::<I40F24>() * factor;
-        let tex_t_offset = (vtx_b.tex_coords.t - vtx_a.tex_coords.t).to_fixed::<I40F24>() * factor;
         StagedVertex {
             position: Vector::new([
-                vtx_a.position.x() + x_offset.to_fixed::<N>(),
-                vtx_a.position.y() + y_offset.to_fixed::<N>(),
-                vtx_a.position.z() + z_offset.to_fixed::<N>(),
-                vtx_a.position.w() + w_offset.to_fixed::<N>()
+                interpolate(vtx_a.position.x(), vtx_b.position.x(), factor),
+                interpolate(vtx_a.position.y(), vtx_b.position.y(), factor),
+                interpolate(vtx_a.position.z(), vtx_b.position.z(), factor),
+                interpolate(vtx_a.position.w(), vtx_b.position.w(), factor),
             ]),
             colour: Colour {
-                r: (vtx_a.colour.r.to_fixed::<I40F24>() + r_offset).to_num(),
-                g: (vtx_a.colour.g.to_fixed::<I40F24>() + g_offset).to_num(),
-                b: (vtx_a.colour.b.to_fixed::<I40F24>() + b_offset).to_num()
+                r: interpolate(vtx_a.colour.r.to_fixed::<I16F0>(), vtx_b.colour.r.to_fixed::<I16F0>(), factor).to_num(),
+                g: interpolate(vtx_a.colour.g.to_fixed::<I16F0>(), vtx_b.colour.g.to_fixed::<I16F0>(), factor).to_num(),
+                b: interpolate(vtx_a.colour.b.to_fixed::<I16F0>(), vtx_b.colour.b.to_fixed::<I16F0>(), factor).to_num(),
             },
             tex_coords: TexCoords {
-                s: vtx_a.tex_coords.s + tex_s_offset.to_fixed::<I12F4>(),
-                t: vtx_a.tex_coords.t + tex_t_offset.to_fixed::<I12F4>()
-            },
-            needs_clip: None,
-            idx: None
+                s: interpolate(vtx_a.tex_coords.s, vtx_b.tex_coords.s, factor),
+                t: interpolate(vtx_a.tex_coords.t, vtx_b.tex_coords.t, factor),
+            }
         }
+    }
+
+    fn _test_one_dot_display(&self, attrs: &PolygonAttrs, vertices: &[Vertex], dot_w: Depth) -> bool {
+        if !attrs.contains(PolygonAttrs::RENDER_DOT) {
+            let v0 = &vertices[0];
+            let screen_x = v0.screen_p.x.to_num::<i16>();
+            let screen_y = v0.screen_p.y.to_num::<i16>();
+            for vn in vertices.iter().skip(1) {
+                if vn.screen_p.x.to_num::<i16>() != screen_x ||
+                    vn.screen_p.y.to_num::<i16>() != screen_y {
+                    // Not a one-dot polygon.
+                    return true;
+                }
+            }
+            // If the smallest dot w is larger than the test value,
+            // DO NOT output this polygon.
+            dot_w <= self.dot_polygon_w
+        } else {
+            true
+        }
+    }
+}
+
+#[inline]
+fn interpolate<T: Fixed>(a: T, b: T, factor: I40F24) -> T {
+    if a == b {
+        a
+    } else {
+        let offset = (b.to_fixed::<I40F24>() - a.to_fixed::<I40F24>()) * factor;
+        (a.to_fixed::<I40F24>() + offset).to_fixed::<T>()
     }
 }
 
@@ -218,19 +253,19 @@ impl ClippingUnit {
 /// 
 /// Returns true if the polygon should be shown.
 fn test_winding(polygon: &Polygon, vertices: &[Vertex]) -> bool {
-    let size = (0..vertices.len()).fold(I16F0::ZERO, |acc, n| {
+    let size = (0..vertices.len()).fold(0_i32, |acc, n| {
         let current_index = n;
         let next_index = (n + 1) % vertices.len();
 
         let v0 = &vertices[current_index];
         let v1 = &vertices[next_index];
-        let segment_size = (v1.screen_p.x - v0.screen_p.x) * (v1.screen_p.y + v0.screen_p.y);
+        let segment_size = (v1.screen_p.x - v0.screen_p.x).to_num::<i32>() * (v1.screen_p.y + v0.screen_p.y).to_num::<i32>();
         acc + segment_size
     });
 
-    if size > I16F0::ZERO {
+    if size > 0 {
         polygon.attrs.contains(PolygonAttrs::RENDER_FRONT)
-    } else if size < I16F0::ZERO {
+    } else if size < 0 {
         polygon.attrs.contains(PolygonAttrs::RENDER_BACK)
     } else {
         // Always display line polygons.

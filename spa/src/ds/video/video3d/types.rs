@@ -4,7 +4,6 @@ use std::{
 };
 use bitflags::bitflags;
 use fixed::types::{I12F4, I16F0, I23F9};
-use super::geometry::N;
 use crate::{
     utils::bits::{u16, u32},
     common::video::colour::Colour

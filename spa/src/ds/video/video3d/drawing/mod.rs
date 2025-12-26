@@ -2,9 +2,9 @@ mod palette;
 
 use super::{
     render::RenderingEngine,
-    types::*, geometry::N
+    types::*
 };
-use fixed::types::{I12F4, I16F0, I23F9, I24F8, I46F18};
+use fixed::types::{I12F4, I16F0, I23F9, I24F8};
 use fixed::traits::ToFixed;
 use crate::{
     ds::video::memory::Engine3DVRAM,
@@ -17,13 +17,13 @@ use palette::TexPaletteCache;
 #[derive(Copy, Clone, Default)]
 struct Attributes {
     opaque_id:  u8,
-    trans_id:   u8,
+    // It appears we store a "none" value here at init
+    trans_id:   Option<u8>,
     fog:        bool,
     edge:       bool,
 }
 
-// TODO: move.
-#[derive(Clone)]
+/*#[derive(Clone)]
 struct VertexStep {
     x:          I12F4,
     depth:      Depth,
@@ -49,7 +49,7 @@ impl VertexStep {
 struct InterpolatedLine {
     current_values: VertexStep,
     step: VertexStep
-}
+}*/
 
 /// Render NDS 3D graphics.
 pub struct Software3DRenderer {
@@ -115,7 +115,7 @@ impl Software3DRenderer {
                     let depth = clear_depth_image.read_halfword(addr);
                     let clear_attrs = Attributes {
                         opaque_id:  render_engine.clear_poly_id,
-                        trans_id:   render_engine.clear_poly_id,
+                        trans_id:   None,
                         fog:        u16::test_bit(depth, 15),
                         edge:       false,
                     };
@@ -130,7 +130,7 @@ impl Software3DRenderer {
         } else {
             let clear_attrs = Attributes {
                 opaque_id:  render_engine.clear_poly_id,
-                trans_id:   render_engine.clear_poly_id,
+                trans_id:   None,
                 fog:        render_engine.fog_enabled,
                 edge:       false,
             };
@@ -177,7 +177,7 @@ impl Software3DRenderer {
                     continue;
                 }
 
-                let width = right.screen_p.x - left.screen_p.x;
+                /*let width = right.screen_p.x - left.screen_p.x;
                 let depth_step = (right.depth - left.depth).to_fixed::<I46F18>() / width.to_fixed::<I46F18>();
                 let r_step = (right.colour.r.to_fixed::<I24F8>() - left.colour.r.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
                 let g_step = (right.colour.g.to_fixed::<I24F8>() - left.colour.g.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
@@ -205,7 +205,7 @@ impl Software3DRenderer {
                         tex_t: left.tex_coords.t.to_fixed()
                     },
                     step: step
-                };
+                };*/
 
                 let x_min = left.screen_p.x.round().to_num::<i16>();
                 let x_max = right.screen_p.x.round().to_num::<i16>();
@@ -213,27 +213,59 @@ impl Software3DRenderer {
                 //println!("Line {:X} | x: {:X} to {:X} | tex ({:X}, {:X}) to ({:X}, {:X}) ({:X}, {:X})", y_idx, x_min, x_max, left.tex_s, left.tex_t, right.tex_s, right.tex_t, line.step.tex_s, line.step.tex_t);
 
                 for x_idx in x_min..x_max {
-                    let current = line.current_values.clone();
+
+                    let factor = if left.depth != right.depth { // TODO: check for 0 depth?
+                        let factor_over = (x_idx.to_fixed::<I16F0>() - left.screen_p.x).to_fixed::<I23F9>() * left.depth;
+                        let factor_under = (right.screen_p.x - x_idx.to_fixed::<I16F0>()).to_fixed::<I23F9>() * right.depth + factor_over;
+                        factor_over / factor_under
+                    } else {
+                        let factor_over = (x_idx.to_fixed::<I16F0>() - left.screen_p.x).to_fixed::<I23F9>();
+                        let factor_under = (right.screen_p.x - x_idx.to_fixed::<I16F0>()).to_fixed::<I23F9>() + factor_over;
+                        factor_over / factor_under
+                    };
+
+                    let depth_offset = (right.depth - left.depth) * factor;
+                    let r_offset = (right.colour.r.to_fixed::<Depth>() - left.colour.r.to_fixed::<Depth>()) * factor;
+                    let g_offset = (right.colour.g.to_fixed::<Depth>() - left.colour.g.to_fixed::<Depth>()) * factor;
+                    let b_offset = (right.colour.b.to_fixed::<Depth>() - left.colour.b.to_fixed::<Depth>()) * factor;
+                    let tex_s_offset = (right.tex_coords.s.to_fixed::<Depth>() - left.tex_coords.s.to_fixed::<Depth>()) * factor;
+                    let tex_t_offset = (right.tex_coords.t.to_fixed::<Depth>() - left.tex_coords.t.to_fixed::<Depth>()) * factor;
+
+                    let depth = left.depth + depth_offset;
+                    let colour = Colour {
+                        r: (left.colour.r.to_fixed::<Depth>() + r_offset).to_num(),
+                        g: (left.colour.g.to_fixed::<Depth>() + g_offset).to_num(),
+                        b: (left.colour.b.to_fixed::<Depth>() + b_offset).to_num(),
+                    };
+                    let tex_coords = TexCoords {
+                        s: (left.tex_coords.s.to_fixed::<Depth>() + tex_s_offset).to_fixed(),
+                        t: (left.tex_coords.t.to_fixed::<Depth>() + tex_t_offset).to_fixed()
+                    };
+
+                    /*let current = line.current_values.clone();
                     line.current_values.add(&line.step);
+                    let depth = current.depth;
+                    let colour = Colour { r: current.colour_r.to_num(), g: current.colour_g.to_num(), b: current.colour_b.to_num() };
+                    let tex_coords = TexCoords { s: current.tex_s.to_fixed(), t: current.tex_t.to_fixed() };*/
 
                     let idx = y_idx_base + (x_idx as usize);
-                    if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[idx], current.depth) {
+                    if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[idx], depth) {
                         continue;
                     }
 
                     let top_edge = x_idx < x_min_prev || x_idx > x_max_prev;
-                    let bottom_edge = false; // TODO: compare with next line.
+                    let bottom_edge = y_idx == (y_max - 1); // TODO: compare with next line.
                     let edge = top_edge || bottom_edge || (x_idx == x_min) || (x_idx == x_max);
                     if !edge && polygon.is_wireframe() {
                         continue;
                     }
 
                     let vtx_colour = ColourAlpha {
-                        col: Colour { r: current.colour_r.to_num(), g: current.colour_g.to_num(), b: current.colour_b.to_num() },
+                        col: colour,
                         alpha: 0x1F
                     };
 
-                    let tex_colour = self.lookup_tex_colour(TexCoords { s: current.tex_s.to_fixed(), t: current.tex_t.to_fixed() }, polygon.tex, polygon.palette, vram);
+                    let tex_colour = self.lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
                     //let tex_colour = Some(poly_colour);
 
                     let frag_colour = if let Some(tex_colour) = tex_colour {
@@ -244,7 +276,7 @@ impl Software3DRenderer {
                     //let frag_colour = poly_colour;
                     if frag_colour.alpha > 0 {
                         target[idx] = frag_colour;
-                        self.depth_buffer[idx] = current.depth;
+                        self.depth_buffer[idx] = depth;
                         self.attr_buffer[idx].opaque_id = polygon.attrs.id();
                         self.attr_buffer[idx].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
                         self.attr_buffer[idx].edge = edge;
@@ -271,6 +303,7 @@ impl Software3DRenderer {
     fn draw_trans_polygon(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha], p: &PolygonOrder) {
         let polygon = &render_engine.polygon_ram.polygons[p.polygon_index];
         let mode = polygon.attrs.mode();
+        let id = polygon.attrs.id();
         
         /*println!("poly");
         for vtx_idx in polygon.vertex_indices.iter().take(polygon.num_vertices as usize) {
@@ -298,7 +331,7 @@ impl Software3DRenderer {
                 continue;
             }
 
-            let width = right.screen_p.x - left.screen_p.x;
+            /*let width = right.screen_p.x - left.screen_p.x;
             let depth_step = (right.depth - left.depth).to_fixed::<I46F18>() / width.to_fixed::<I46F18>();
             let r_step = (right.colour.r.to_fixed::<I24F8>() - left.colour.r.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
             let g_step = (right.colour.g.to_fixed::<I24F8>() - left.colour.g.to_fixed::<I24F8>()) / width.to_fixed::<I24F8>();
@@ -326,7 +359,7 @@ impl Software3DRenderer {
                     tex_t: left.tex_coords.t.to_fixed()
                 },
                 step: step
-            };
+            };*/
 
             let x_min = left.screen_p.x.round().to_num::<i16>();
             let x_max = right.screen_p.x.round().to_num::<i16>();
@@ -334,18 +367,49 @@ impl Software3DRenderer {
             //println!("Line {:X} | x: {:X} to {:X} | tex ({:X}, {:X}) to ({:X}, {:X}) ({:X}, {:X})", y_idx, x_min, x_max, left.tex_s, left.tex_t, right.tex_s, right.tex_t, line.step.tex_s, line.step.tex_t);
 
             for x_idx in x_min..x_max {
-                let id = polygon.attrs.id();
                 let idx = y_idx_base + (x_idx as usize);
                 // TODO: only extract for shadow polygons?
-                let stencil_mask = std::mem::replace(&mut self.stencil_buffer[idx], false);
-                if self.attr_buffer[idx].trans_id == id && polygon.attrs.alpha() != 0x1F {
-                    continue;
-                }
+                let stencil_mask = if mode == PolygonMode::Shadow && id != 0 {
+                    std::mem::replace(&mut self.stencil_buffer[idx], false)
+                } else {
+                    false
+                };
 
-                let current = line.current_values.clone();
+                let factor = if left.depth != right.depth { // TODO: check for 0 depth?
+                    let factor_over = (x_idx.to_fixed::<I16F0>() - left.screen_p.x).to_fixed::<I23F9>() * left.depth;
+                    let factor_under = (right.screen_p.x - x_idx.to_fixed::<I16F0>()).to_fixed::<I23F9>() * right.depth + factor_over;
+                    factor_over / factor_under
+                } else {
+                    let factor_over = (x_idx.to_fixed::<I16F0>() - left.screen_p.x).to_fixed::<I23F9>();
+                    let factor_under = (right.screen_p.x - x_idx.to_fixed::<I16F0>()).to_fixed::<I23F9>() + factor_over;
+                    factor_over / factor_under
+                };
+
+                let depth_offset = (right.depth - left.depth) * factor;
+                let r_offset = (right.colour.r.to_fixed::<Depth>() - left.colour.r.to_fixed::<Depth>()) * factor;
+                let g_offset = (right.colour.g.to_fixed::<Depth>() - left.colour.g.to_fixed::<Depth>()) * factor;
+                let b_offset = (right.colour.b.to_fixed::<Depth>() - left.colour.b.to_fixed::<Depth>()) * factor;
+                let tex_s_offset = (right.tex_coords.s.to_fixed::<Depth>() - left.tex_coords.s.to_fixed::<Depth>()) * factor;
+                let tex_t_offset = (right.tex_coords.t.to_fixed::<Depth>() - left.tex_coords.t.to_fixed::<Depth>()) * factor;
+
+                let depth = left.depth + depth_offset;
+                let colour = Colour {
+                    r: (left.colour.r.to_fixed::<Depth>() + r_offset).to_num(),
+                    g: (left.colour.g.to_fixed::<Depth>() + g_offset).to_num(),
+                    b: (left.colour.b.to_fixed::<Depth>() + b_offset).to_num(),
+                };
+                let tex_coords = TexCoords {
+                    s: (left.tex_coords.s.to_fixed::<Depth>() + tex_s_offset).to_fixed(),
+                    t: (left.tex_coords.t.to_fixed::<Depth>() + tex_t_offset).to_fixed()
+                };
+
+                /*let current = line.current_values.clone();
                 line.current_values.add(&line.step);
+                let depth = current.depth;
+                let colour = Colour { r: current.colour_r.to_num(), g: current.colour_g.to_num(), b: current.colour_b.to_num() };
+                let tex_coords = TexCoords { s: current.tex_s.to_fixed(), t: current.tex_t.to_fixed() };*/
 
-                if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[idx], current.depth) {
+                if !Self::test_depth(polygon.render_eq_depth(), self.depth_buffer[idx], depth) {
                     if id == 0 && mode == PolygonMode::Shadow {
                         // Shadow polygon mask
                         self.stencil_buffer[idx] = true;
@@ -353,21 +417,24 @@ impl Software3DRenderer {
                     continue;
                 }
 
-                if mode == PolygonMode::Shadow &&
-                    (!stencil_mask || self.attr_buffer[idx].opaque_id == id) {
-                    // We only want to draw the shadow if it passes depth,
-                    // is masked, and doesn't match the IDs
-                    continue;
+                if mode == PolygonMode::Shadow {
+                    if id == 0 {
+                        // Ignore masks
+                        continue;
+                    }
+                    if !stencil_mask || self.attr_buffer[idx].opaque_id == id {
+                        // We only want to draw the shadow if it passes depth,
+                        // is masked, and doesn't match the IDs
+                        continue;
+                    }
                 }
 
-                // TODO: edge marking.
-
                 let vtx_colour = ColourAlpha {
-                    col: Colour { r: current.colour_r.to_num(), g: current.colour_g.to_num(), b: current.colour_b.to_num() },
-                    alpha: 0x1F
+                    col: colour,
+                    alpha: polygon.attrs.alpha()
                 };
 
-                let tex_colour = self.lookup_tex_colour(TexCoords { s: current.tex_s.to_fixed(), t: current.tex_t.to_fixed() }, polygon.tex, polygon.palette, vram);
+                let tex_colour = self.lookup_tex_colour(tex_coords, polygon.tex, polygon.palette, vram);
 
                 let frag_colour = if let Some(tex_colour) = tex_colour {
                     Self::blend_frag_tex_colour(render_engine, mode, vtx_colour, tex_colour)
@@ -378,9 +445,12 @@ impl Software3DRenderer {
                     continue;
                 } else if render_engine.control.contains(Display3DControl::ALPHA_TEST_ENABLE) && frag_colour.alpha < render_engine.alpha_test {
                     continue;
-                } else if frag_colour.alpha != 0x1F && self.attr_buffer[idx].trans_id == id {
-                    // TODO: fix the logic here.
-                    //continue;
+                } else if frag_colour.alpha != 0x1F {
+                    if let Some(existing_id) = self.attr_buffer[idx].trans_id {
+                        if existing_id == id {
+                            continue;
+                        }
+                    }
                 }
 
                 // We are sure that we want to render this fragment.
@@ -395,12 +465,12 @@ impl Software3DRenderer {
 
                 if frag_colour.alpha != 0x1F {
                     if polygon.attrs.contains(PolygonAttrs::ALPHA_DEPTH) {
-                        self.depth_buffer[idx] = current.depth;
+                        self.depth_buffer[idx] = depth;
                     }
-                    self.attr_buffer[idx].trans_id = id;
+                    self.attr_buffer[idx].trans_id = Some(id);
                     self.attr_buffer[idx].fog = self.attr_buffer[idx].fog && polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
                 } else {
-                    self.depth_buffer[idx] = current.depth;
+                    self.depth_buffer[idx] = depth;
                     self.attr_buffer[idx].opaque_id = id;
                     self.attr_buffer[idx].fog = polygon.attrs.contains(PolygonAttrs::FOG_BLEND_ENABLE);
                 }
@@ -540,11 +610,21 @@ impl Software3DRenderer {
 
             // TODO: special case for single-pixel point...
 
-            let factor_over = (y - top.screen_p.y).to_fixed::<I23F9>() * top.depth;
-            let factor_under = (bottom.screen_p.y - y).to_fixed::<I23F9>() * bottom.depth + factor_over;
-            let factor = factor_over / factor_under;
+            let x_factor = {
+                let factor_over = (y - top.screen_p.y).to_fixed::<I23F9>();
+                let factor_under = (bottom.screen_p.y - y).to_fixed::<I23F9>() + factor_over;
+                factor_over / factor_under
+            };
+            let factor = if top.depth != bottom.depth { // TODO: check for 0 depth?
+                let factor_over = (y - top.screen_p.y).to_fixed::<I23F9>() * top.depth;
+                let factor_under = (bottom.screen_p.y - y).to_fixed::<I23F9>() * bottom.depth + factor_over;
+                factor_over / factor_under
+            } else {
+                x_factor
+            };
 
-            let x_offset = (bottom.screen_p.x - top.screen_p.x).to_fixed::<Depth>() * factor;
+            // TODO: calculate this differently
+            let x_offset = (bottom.screen_p.x - top.screen_p.x).to_fixed::<Depth>() * x_factor;
             let depth_offset = (bottom.depth - top.depth) * factor;
             let r_offset = (bottom.colour.r.to_fixed::<Depth>() - top.colour.r.to_fixed::<Depth>()) * factor;
             let g_offset = (bottom.colour.g.to_fixed::<Depth>() - top.colour.g.to_fixed::<Depth>()) * factor;
@@ -554,7 +634,7 @@ impl Software3DRenderer {
 
             let vertex = Vertex {
                 screen_p: Coords {
-                    x: (top.screen_p.x.to_fixed::<Depth>() + x_offset).to_fixed(),
+                    x: (top.screen_p.x.to_fixed::<Depth>() + x_offset).round().to_fixed(),
                     y
                 },
                 depth: top.depth + depth_offset,
@@ -593,7 +673,7 @@ impl Software3DRenderer {
     /// Returns true if the fragment passes the depth test.
     fn test_depth(render_eq: bool, buffer_depth: Depth, frag_depth: Depth) -> bool {
         if render_eq {
-            (buffer_depth - Depth::ONE) >= frag_depth || (buffer_depth + Depth::ONE) >= frag_depth
+            (buffer_depth - Depth::ONE) <= frag_depth && (buffer_depth + Depth::ONE) >= frag_depth
         } else {
             buffer_depth > frag_depth
         }
@@ -886,7 +966,7 @@ impl Software3DRenderer {
                 let r = ((vtx_colour.col.r as u16) + 1) * ((tex_colour.col.r as u16) + 1) - 1;
                 let g = ((vtx_colour.col.g as u16) + 1) * ((tex_colour.col.g as u16) + 1) - 1;
                 let b = ((vtx_colour.col.b as u16) + 1) * ((tex_colour.col.b as u16) + 1) - 1;
-                let a = (vtx_colour.alpha as u16) * (tex_colour.alpha as u16);
+                let a = ((vtx_colour.alpha as u16) + 1) * ((tex_colour.alpha as u16) + 1) - 1;
 
                 ColourAlpha {
                     col: Colour {
@@ -901,7 +981,10 @@ impl Software3DRenderer {
                 if tex_colour.alpha == 0 {
                     vtx_colour
                 } else if tex_colour.alpha == 0x1F {
-                    tex_colour
+                    ColourAlpha {
+                        col: tex_colour.col,
+                        alpha: vtx_colour.alpha
+                    }
                 } else {
                     let tex_alpha = tex_colour.alpha as u16;
                     let vtx_alpha = 0x1F - tex_alpha;

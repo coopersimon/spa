@@ -70,45 +70,46 @@ Note that most of these games have not been properly played for a longer duratio
 - Age of Empires: Age of Kings: Works OK.
 - Animal Crossing Wild World: Works mostly OK.
 - Brain Training (Brain Age): Seems to run OK.
-- Black Ops: Boots mostly OK, unable to find strings to display for some reason.
+- Black Ops: Mostly OK, some z-fighting (?) in 3D
 - Civilization Revolution: Mostly OK, some issues early in game.
 - Chrono Trigger: Audio skips a little in intro, but mostly ok otherwise.
 - Dragon Quest Monsters Joker: Seems OK.
 - Dragon Quest IX: Shows intro cards and video. Game starts mostly OK (3d model never updates: issue with writing to multiple VRAM blocks at once?). (now freezes after character creation: though character creation seems OK)
 - Dragon Quest IV: Mostly OK
 - Dragon Quest V: Mostly OK
-- Dragon Quest VI: Near/Far plane clipping masks everything, broken intro. Actual game is ok when near plane clipping is disabled (not anymore)
-- Final Fantasy Tactics A2: Slight flickering in intro / menu, actual game looks ok.
+- Dragon Quest VI: Intro has some glitches, gameplay is mostly OK (some missing geometry)
+- Final Fantasy Tactics A2: Mostly OK.
 - Final Fantasy III: Mostly OK.
 - Final Fantasy IV: Mostly OK.
 - Final Fantasy: 4 Heroes of Light: Mostly ok
 - Final Fantasy XII: Revenant Wings: Mostly ok, but general frame pacing is completely broken in both videos and (seemingly) gameplay
 - Fire Emblem: Shadow Dragon: Intro missing some graphics (less than before). Otherwise looks and sounds fine.
-- Front Mission: Mostly ok, some weird layering issues.
+- Front Mission: Mostly ok, dialogue overlay blends incorrectly in 3D
 - Ghost Trick: Mostly ok
-- GTA Chinatown Wars: Titles & menu looks OK, 3D near plane is clipping everything + looks broken underneath
+- GTA Chinatown Wars: Mostly ok
 - Hotel Dusk: Room 215: Now crashes with an undefined instruction in ITCM.
 - Inazuma Eleven: Mostly ok, text looks borked, also managed to crash with div/0
 - Kirby Super Star: Mostly ok, some audio stream issues when playing video.
 - LoZ Phantom Hourglass: Just white screen now.
 - LoZ Spirit Tracks: White screen.
 - LEGO Lord of the Rings: Loads up OK, gameplay doesn't load
-- LEGO Star Wars II: Mostly OK, some graphics have missing pixels. Crashes due to reading beyond end of specular table
+- LEGO Star Wars II: Mostly OK. Crashes due to reading beyond end of specular table in lighting calculation.
 - Mario Kart DS: Mostly ok, depth issues throughout
 - Mario and Luigi: Bowser's Inside Story: Blank screen
 - Mario and Luigi: Partners in Time: Mostly OK.
 - Mario Party DS: Mostly OK.
-- Metroid Prime Hunters: Intro and menus have severe blending issues (colour overflow?) gameplay is mostly OK (near clip plane issues)
+- Metroid Prime Hunters: Intro and menus have blending issues, gameplay is mostly OK
 - New Super Mario Bros: Mostly OK
 - Mario Slam Basketball (Hoops 3-on-3): Mostly OK.
 - Nintendogs (Labrador): Intro is ok. Gameplay begins, crashes due to full GPU command fifo.
 - Pokemon Mystery Dungeon Explorers of Sky: Mostly OK.
 - Pokemon Mystery Dungeon Blue Rescue Team: Mostly OK, flickering at bottom of text boxes.
 - Pokemon Platinum: Mostly OK. Gameplay is fine.
-- Pokemon Black: Black screen
-- Pokemon HeartGold: Mostly OK, some gaps in geometry, outlines incorrect, shadows are too strong
-- Pokemon Ranger: Issues with chunky outlines, intro has a few issues. Mostly OK in game, some missing sprites + shadow blending issues
+- Pokemon Black: Only boots via firmware. Mostly ok, some graphical issues, crashes during first battle with frame buffer overflow.
+- Pokemon HeartGold: Mostly OK, some gaps in geometry, outline issues
+- Pokemon Ranger: Mostly ok.
 - Resident Evil: Seems mostly ok. Frame pacing issues. Freezes during intro cutscene, though if skipped gameplay seems ok.
+- Sim City DS: Mostly ok.
 - Shin Megami Tensei: Strange Journey: Titles and menu OK, freezes when gameplay begins.
 - Super Mario 64 DS: Mostly ok, star in intro has shininess issues.
 - Super Princess Peach: Mostly OK.
@@ -124,7 +125,6 @@ Note that most of these games have not been properly played for a longer duratio
 - Microphone
 - WiFi
 - Local network
-- Booting via BIOS
 
 ##### Emulator features:
 - Save states
@@ -139,19 +139,15 @@ Note that most of these games have not been properly played for a longer duratio
 - 3D Video:
     - Lighting issues (?)
     - Post-processing (edge + fog + anti-aliasing)
-    - Fix perspective depth mapping while not breaking 2D
-        - Special mode
     - Texture stack problems:
         - Cause issue with shininess for SM64DS
         - Overflow in TH:Sk8land
-        - Possible culprit for visibility issues with DQVI, GTA, Possibly pokemon intro
-    - Shadows
 - 2D main RAM video mode
     - Still haven't found a game that actually uses this
 - Engine A video capture & blending fixes
-- Card loading still has issues sometimes
 - Audio stream bugs
 - Firmware issues
+    - Boot all games
 - Performance
     - Memory
     - Threading

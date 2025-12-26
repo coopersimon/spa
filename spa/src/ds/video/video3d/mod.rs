@@ -1,5 +1,4 @@
 mod types;
-mod interpolate;
 mod geometry;
 mod render;
 mod drawing;
@@ -46,7 +45,9 @@ pub struct Video3D {
     geometry_engine:        GeometryEngine,
     cycle_count:            isize,
 
-    pub rendering_engine:   Arc<Mutex<RenderingEngine>>
+    pub rendering_engine:   Arc<Mutex<RenderingEngine>>,
+
+    debug_capture: bool
 }
 
 impl Video3D {
@@ -59,7 +60,9 @@ impl Video3D {
             geometry_engine:        GeometryEngine::new(),
             cycle_count:            0,
 
-            rendering_engine:   Arc::new(Mutex::new(RenderingEngine::new()))
+            rendering_engine:   Arc::new(Mutex::new(RenderingEngine::new())),
+
+            debug_capture: false
         }
     }
 
@@ -227,6 +230,9 @@ impl MemInterface32 for Video3D {
 
 impl Video3D {
     fn swap_buffers(&mut self, data: u32) -> isize {
+        self.debug_capture = crate::ds::DEBUG_TRIGGER.swap(false, std::sync::atomic::Ordering::Relaxed);
+        self.geometry_engine.capture = self.debug_capture;
+        self.geometry_engine.matrices.capture = self.debug_capture;
         std::mem::swap(
             &mut self.geometry_engine.clipping_unit.polygon_ram,
             &mut self.rendering_engine.lock().polygon_ram
@@ -249,7 +255,25 @@ impl Video3D {
         }
 
         let command = (self.current_commands & 0xFF) as u8;
-        //println!("EXEC {:X}", command);
+        if self.debug_capture {
+            let n_args = match command {
+                0x00 | 0x11 | 0x15 | 0x41 => 0,
+                0x16 | 0x18 => 16,
+                0x17 | 0x19 => 12,
+                0x1A => 9,
+                0x1B | 0x1C | 0x70 => 3,
+                0x23 | 0x71 => 2,
+                0x34 => 32,
+                _ => 1,
+            };
+            if let Some(args) = self.geom_command_fifo.peek_n(n_args) {
+                print!("EXEC {:X} |", command);
+                for arg in args {
+                    print!(" {:X}", arg);
+                }
+                println!("");
+            }
+        }
 
         let cycles = match command {
             0x00 => Some(0),  // NOP

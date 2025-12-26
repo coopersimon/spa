@@ -245,29 +245,9 @@ impl Matrix {
     }
 
     pub fn mul(&self, other: &Self) -> Self {
-        Self {
-            elements: [
-                self.elements[0] * other.elements[0] + self.elements[1] * other.elements[4] + self.elements[2] * other.elements[8] + self.elements[3] * other.elements[12],
-                self.elements[0] * other.elements[1] + self.elements[1] * other.elements[5] + self.elements[2] * other.elements[9] + self.elements[3] * other.elements[13],
-                self.elements[0] * other.elements[2] + self.elements[1] * other.elements[6] + self.elements[2] * other.elements[10] + self.elements[3] * other.elements[14],
-                self.elements[0] * other.elements[3] + self.elements[1] * other.elements[7] + self.elements[2] * other.elements[11] + self.elements[3] * other.elements[15],
-                
-                self.elements[4] * other.elements[0] + self.elements[5] * other.elements[4] + self.elements[6] * other.elements[8] + self.elements[7] * other.elements[12],
-                self.elements[4] * other.elements[1] + self.elements[5] * other.elements[5] + self.elements[6] * other.elements[9] + self.elements[7] * other.elements[13],
-                self.elements[4] * other.elements[2] + self.elements[5] * other.elements[6] + self.elements[6] * other.elements[10] + self.elements[7] * other.elements[14],
-                self.elements[4] * other.elements[3] + self.elements[5] * other.elements[7] + self.elements[6] * other.elements[11] + self.elements[7] * other.elements[15],
-                
-                self.elements[8] * other.elements[0] + self.elements[9] * other.elements[4] + self.elements[10] * other.elements[8] + self.elements[11] * other.elements[12],
-                self.elements[8] * other.elements[1] + self.elements[9] * other.elements[5] + self.elements[10] * other.elements[9] + self.elements[11] * other.elements[13],
-                self.elements[8] * other.elements[2] + self.elements[9] * other.elements[6] + self.elements[10] * other.elements[10] + self.elements[11] * other.elements[14],
-                self.elements[8] * other.elements[3] + self.elements[9] * other.elements[7] + self.elements[10] * other.elements[11] + self.elements[11] * other.elements[15],
-                
-                self.elements[12] * other.elements[0] + self.elements[13] * other.elements[4] + self.elements[14] * other.elements[8] + self.elements[15] * other.elements[12],
-                self.elements[12] * other.elements[1] + self.elements[13] * other.elements[5] + self.elements[14] * other.elements[9] + self.elements[15] * other.elements[13],
-                self.elements[12] * other.elements[2] + self.elements[13] * other.elements[6] + self.elements[14] * other.elements[10] + self.elements[15] * other.elements[14],
-                self.elements[12] * other.elements[3] + self.elements[13] * other.elements[7] + self.elements[14] * other.elements[11] + self.elements[15] * other.elements[15],
-            ]
-        }
+        let mut out = other.clone();
+        out.mul_4x4(&self.elements);
+        out
     }
 
     /// Multiply a 3-dimensional vector by the matrix.

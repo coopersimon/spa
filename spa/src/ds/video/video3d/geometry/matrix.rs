@@ -9,23 +9,27 @@ const TEX_MODE: u32     = 0b11;
 
 #[derive(Default)]
 pub struct MatrixUnit {
+    old_mode:       u32,
     mode:           u32,
     /// Set when over/underflow occurs
     stack_error:    bool,
 
-    current_projection: Matrix,
+    pub current_projection: Matrix,
     projection_stack:   Matrix,
     proj_pointer:       usize,
 
     current_clip:       Matrix,
 
-    current_position:   Matrix,
+    pub current_position:   Matrix,
     current_direction:  Matrix,
     position_stack:     [Matrix; 31],
     direction_stack:    [Matrix; 31],
     pos_dir_pointer:    usize,
 
     current_texture:    Matrix,
+    tex_stack:          Matrix,
+
+    pub capture: bool,
 }
 
 impl MatrixUnit {
@@ -69,6 +73,7 @@ impl MatrixUnit {
 // Commands
 impl MatrixUnit {
     pub fn set_matrix_mode(&mut self, mode: u32) -> isize {
+        self.old_mode = self.mode;
         self.mode = mode & 0b11;
         1
     }
@@ -78,11 +83,17 @@ impl MatrixUnit {
             PROJ_MODE => {
                 self.projection_stack = self.current_projection.clone();
                 self.proj_pointer = 1;
+                if self.capture {
+                    println!("pushed proj {}", self.proj_pointer);
+                }
             },
             POS_MODE | POS_DIR_MODE => {
                 self.position_stack[self.pos_dir_pointer] = self.current_position.clone();
                 self.direction_stack[self.pos_dir_pointer] = self.current_direction.clone();
                 self.pos_dir_pointer += 1;
+                if self.capture {
+                    println!("pushed posdir {}", self.pos_dir_pointer);
+                }
             },
             TEX_MODE => println!("cannot push texture matrix"),   // TODO: probably shouldn't panic
             _ => unreachable!()
@@ -97,6 +108,9 @@ impl MatrixUnit {
                 self.proj_pointer = 0;
                 self.current_projection = self.projection_stack.clone();
                 self.current_clip = self.current_position.mul(&self.current_projection);
+                if self.capture {
+                    println!("pop proj {} => {}", pops, self.proj_pointer);
+                }
             },
             POS_MODE | POS_DIR_MODE => {
                 let new_pointer = (self.pos_dir_pointer as isize) - (signed_pops as isize);
@@ -104,6 +118,9 @@ impl MatrixUnit {
                 self.current_position = self.position_stack[self.pos_dir_pointer].clone();
                 self.current_direction = self.direction_stack[self.pos_dir_pointer].clone();
                 self.current_clip = self.current_position.mul(&self.current_projection);
+                if self.capture {
+                    println!("pop posdir {} => {}", pops, new_pointer);
+                }
             },
             TEX_MODE => println!("cannot pop texture matrix"),   // TODO: probably shouldn't panic
             _ => unreachable!()
@@ -114,13 +131,19 @@ impl MatrixUnit {
     pub fn store_matrix(&mut self, pos: u32) -> isize {
         match self.mode {
             PROJ_MODE => {
+                if self.capture {
+                    println!("store proj");
+                }
                 self.projection_stack = self.current_projection.clone()
             },
             POS_MODE | POS_DIR_MODE => {
+                if self.capture {
+                    println!("store POS {}", pos);
+                }
                 self.position_stack[pos as usize] = self.current_position.clone();
                 self.direction_stack[pos as usize] = self.current_direction.clone();
             },
-            TEX_MODE => println!("cannot store texture matrix {}", pos),   // TODO: probably shouldn't panic
+            TEX_MODE => self.current_texture = self.current_direction.clone(),//println!("cannot store texture matrix {}", pos),   // TODO: probably shouldn't panic
             _ => unreachable!()
         }
         17
@@ -129,15 +152,21 @@ impl MatrixUnit {
     pub fn restore_matrix(&mut self, pos: u32) -> isize {
         match self.mode {
             PROJ_MODE => {
+                if self.capture {
+                    println!("restore proj");
+                }
                 self.current_projection = self.projection_stack.clone();
                 self.current_clip = self.current_position.mul(&self.current_projection);
             },
             POS_MODE | POS_DIR_MODE => {
+                if self.capture {
+                    println!("restore POS {}", pos);
+                }
                 self.current_position = self.position_stack[pos as usize].clone();
                 self.current_direction = self.direction_stack[pos as usize].clone();
                 self.current_clip = self.current_position.mul(&self.current_projection);
             },
-            TEX_MODE => println!("cannot restore texture matrix {}", pos),   // TODO: probably shouldn't panic
+            TEX_MODE => (),//println!("cannot restore texture matrix {}", pos),   // TODO: probably shouldn't panic
             _ => unreachable!()
         }
         36

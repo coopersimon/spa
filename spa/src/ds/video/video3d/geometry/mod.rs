@@ -37,8 +37,6 @@ const QUAD_STRIP_ORDER: [usize; 4] = [0, 1, 3, 2];
 
 pub struct GeometryEngine {
     pub clipping_unit:  ClippingUnit,
-    /// Test w against this value for 1-dot polygons.
-    dot_polygon_w:  Depth,
 
     pub matrices:   Box<MatrixUnit>,
     lighting:       Box<LightingUnit>,
@@ -71,13 +69,14 @@ pub struct GeometryEngine {
     stage_size:         usize,
     output_order:       &'static [usize],
     primitive:          Option<Primitive>,
+
+    pub capture: bool,
 }
 
 impl GeometryEngine {
     pub fn new() -> Self {
         Self {
             clipping_unit:  ClippingUnit::new(),
-            dot_polygon_w:  Depth::from_bits(0x7FFF << 6),
 
             matrices:       Box::new(MatrixUnit::new()),
             lighting:       Box::new(LightingUnit::new()),
@@ -98,12 +97,13 @@ impl GeometryEngine {
             stage_size:         3,
             output_order:       &TRI_ORDER,
             primitive:          None,
+
+            capture: false,
         }
     }
 
     pub fn set_dot_polygon_depth(&mut self, data: u16) {
-        let bits = (data & 0x7FFF) as i32;
-        self.dot_polygon_w = Depth::from_bits(bits << 6);
+        self.clipping_unit.set_dot_polygon_depth(data);
     }
 }
 
@@ -345,7 +345,9 @@ impl GeometryEngine {
         // So we are checking for intersecting planes.
         // We can do this by checking to see if any of the 12 edges of the box
         // intersect with the view.
-        let mut fail_test = true;
+        //let mut fail_test = true;
+
+        self.box_test_res = false;
 
         // TODO: test intersecting lines, not vertices.
         // Test to see if each vertex is outside view space.
@@ -363,6 +365,14 @@ impl GeometryEngine {
     
             let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
             let w = transformed_vertex.w();
+            let inside_x = (transformed_vertex.x() < w) && (transformed_vertex.x() > -w);
+            let inside_y = (transformed_vertex.y() < w) && (transformed_vertex.y() > -w);
+            let inside_z = (transformed_vertex.z() < w) && (transformed_vertex.z() > -w);
+            if inside_x && inside_y && inside_z {
+                self.box_test_res = true;
+                break;
+            }
+            /*let w = transformed_vertex.w();
             let w2 = w * 2;
             let normal_x = (transformed_vertex.x() + w) / w2;
             let normal_y = (transformed_vertex.y() + w) / w2;
@@ -370,12 +380,13 @@ impl GeometryEngine {
 
             let outside_x = (normal_x > N::ONE) || (normal_x < N::ZERO);
             let outside_y = (normal_y > N::ONE) || (normal_y < N::ZERO);
-            let outside_z = (normal_z > N::ONE) || (normal_z < N::ZERO);
+            let outside_z = (normal_z > N::ONE) || (normal_z < N::ZERO);*/
 
-            fail_test = fail_test && (outside_x && outside_y && outside_z);
+            //fail_test = fail_test && (outside_x && outside_y && outside_z);
         }
 
-        self.box_test_res = true; // !fail_test;
+        //self.box_test_res = true; // !fail_test;
+        self.box_test_res = true;
 
         103
     }
@@ -443,13 +454,19 @@ impl GeometryEngine {
         // Result is a I12F12.
         let transformed_vertex = self.matrices.clip_matrix().mul_vector_4(&vertex);
 
+        if self.capture {
+            println!("Proj: \n{}", self.matrices.current_projection);
+            println!("Pos: \n{}", self.matrices.current_position);
+            println!("Clip matrix: \n{}", self.matrices.clip_matrix());
+            //println!("Input vertex: {:X}, {:X}, {:X}", self.current_vertex[0], self.current_vertex[1], self.current_vertex[2]);
+            println!("Input vertex: {:X}, {:X}, {:X}, {:X}", vertex.x(), vertex.y(), vertex.z(), vertex.w());
+            println!("Stage vtx: {:X}, {:X}, {:X}, {:X}", transformed_vertex.x(), transformed_vertex.y(), transformed_vertex.z(), transformed_vertex.w());
+        }
+
         self.staged_polygon[self.staged_index] = StagedVertex {
             position:   transformed_vertex,
             colour:     self.lighting.get_vertex_colour(),
             tex_coords: self.trans_tex_coords.clone(),
-
-            needs_clip: None,
-            idx:        None
         };
         self.output_vertex();
 
@@ -469,7 +486,7 @@ impl GeometryEngine {
         // Advance the staging state machine.
         match self.primitive.unwrap() {
             Triangle(2) => {
-                self.try_emit();
+                self.clip_and_emit_polygon();
                 self.primitive = Some(Triangle(0));
             },
             Triangle(n) => {
@@ -477,7 +494,7 @@ impl GeometryEngine {
             },
 
             TriangleStripFirst(2) | TriangleStrip => {
-                self.try_emit();
+                self.clip_and_emit_polygon();
                 if self.output_order == &TRI_STRIP_ORDER_A {
                     self.output_order = &TRI_STRIP_ORDER_B;
                 } else {
@@ -490,7 +507,7 @@ impl GeometryEngine {
             },
 
             Quad(3) => {
-                self.try_emit();
+                self.clip_and_emit_polygon();
                 self.primitive = Some(Quad(0));
             },
             Quad(n) => {
@@ -498,7 +515,7 @@ impl GeometryEngine {
             },
             
             QuadStripFirst(3) | QuadStrip(1) => {
-                self.try_emit();
+                self.clip_and_emit_polygon();
                 self.primitive = Some(QuadStrip(0));
             },
             QuadStripFirst(n) => {
@@ -508,15 +525,6 @@ impl GeometryEngine {
                 self.primitive = Some(QuadStrip(n+1));
             },
         }
-    }
-
-    /// Test if this polygon should be output, and if so clip and write it to buffers.
-    fn try_emit(&mut self) {
-        if !self.test_one_dot_display() {
-            return;
-        }
-
-        self.clip_and_emit_polygon();
     }
 
     /// Clip the vertices, producing 1 or 2 new vertices per clip.
@@ -555,37 +563,6 @@ impl GeometryEngine {
             }
         }
 
-        self.clipping_unit.add_polygon(output_polygon, &mut out_vertices);
-    }
-
-    /// Test one-dot display for the current polygon.
-    /// 
-    /// If all of the vertices are within the same screen dot,
-    /// optionally test against the one-dot depth value.
-    fn test_one_dot_display(&self) -> bool {
-        // Only do this test if the polygon attr is set to 0.
-        /*if !self.polygon_attrs.contains(PolygonAttrs::RENDER_DOT) {
-            let v0 = &self.staged_polygon[0];
-            let screen_x = v0.screen_p.x.to_num::<i16>();
-            let screen_y = v0.screen_p.y.to_num::<i16>();
-            let mut dot_w = v0.position.w();
-            for stage_idx in 1..self.stage_size {
-                let v = &self.staged_polygon[stage_idx];
-                // TODO: test if within a dot?
-                if v.screen_p.x.to_num::<i16>() != screen_x ||
-                    v.screen_p.y.to_num::<i16>() != screen_y {
-                    // Not a one-dot polygon.
-                    return true;
-                }
-                dot_w = std::cmp::min(dot_w, v.position.w());
-            }
-            // If the smallest dot w is larger than the test value,
-            // DO NOT output this polygon.
-            dot_w <= self.dot_polygon_w
-        } else {
-            true
-        }*/
-        //TODO...
-        true
+        self.clipping_unit.add_polygon(output_polygon, &mut out_vertices, self.capture);
     }
 }

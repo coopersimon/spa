@@ -30,7 +30,7 @@ impl GeomCommandFifo {
     /// Push directly to the command buffer.
     pub fn push_command_buffer(&mut self, data: u32) {
         if self.command_fifo.len() == COMMAND_FIFO_LEN {
-            panic!("GPU command fifo full");   // TODO: handle (ignore incoming data? / freeze)
+            //panic!("GPU command fifo full");   // TODO: handle (ignore incoming data? / freeze)
         }
         //println!("GX PUSH: {:X}", data);
         self.command_fifo.push_back(data);
@@ -59,6 +59,14 @@ impl GeomCommandFifo {
     pub fn pop_n<'a>(&'a mut self, n: usize) -> Option<impl Iterator<Item = u32> + 'a> {
         if self.command_fifo.len() >= n {
             Some(self.command_fifo.drain(0..n))
+        } else {
+            None
+        }
+    }
+
+    pub fn peek_n<'a>(&'a self, n: usize) -> Option<impl Iterator<Item = u32> + 'a> {
+        if self.command_fifo.len() >= n {
+            Some(self.command_fifo.iter().take(n).cloned())
         } else {
             None
         }
