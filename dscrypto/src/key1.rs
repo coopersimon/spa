@@ -73,8 +73,8 @@ pub fn apply(key_code: &mut [u32; 3], key_buf: &[u32], modulo: usize) -> Vec<u32
     let mut scratch = 0;
     for i in 0..0x209 {
         scratch = encrypt(scratch, &key_out);
-        key_out[(i*2)] = u64::hi(scratch);
-        key_out[(i*2)+1] = u64::lo(scratch);
+        key_out[i*2] = u64::hi(scratch);
+        key_out[i*2+1] = u64::lo(scratch);
     }
     key_out
 }
