@@ -936,11 +936,7 @@ impl DS7MemoryBus {
             Interrupts::empty()
         };
 
-        let v_count_irq = if self.video.v_count_irq() {
-            Interrupts::V_COUNTER
-        } else {
-            Interrupts::empty()
-        };
+        let v_count_irq = self.video.v_count_irq();
 
         let (timer_irq, _, _) = self.timers.clock(cycles);
 
@@ -1004,6 +1000,7 @@ impl Mem32 for DS7MemoryBus {
         self.inner_counter += cycles;
         if self.inner_counter < 8 {
             if self.check_irq() {
+                self.power_control.halt = false;
                 return Some(arm::ExternalException::IRQ);
             }
             return None;

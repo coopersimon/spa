@@ -62,7 +62,7 @@ impl DS7PowerControl {
             halt:   false,
             sleep:  false,
             sound_wifi_control: SoundWifiPowerControl::default(),
-            bios_prot: 0,
+            bios_prot: if fast_boot {0x1205} else {0},
         }
     }
 }

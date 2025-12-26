@@ -636,36 +636,36 @@ impl SoftwareRenderer {
             for bg in bg_data {
                 if bg.priority == priority {
                     match self.bg_pixel(mem, bg, obj.window, x, y) {
-                        BGPixel::_2D(col) => if colour_window() {
-                            match Self::colour_effect(&mem.registers, bg.blend_mask, col, target_1, BlendType::None) {
+                        BGPixel::_2D(colour) => if colour_window() {
+                            match Self::colour_effect(&mem.registers, bg.blend_mask, colour, target_1, BlendType::None) {
                                 Blended::Colour(c) => return c,
                                 Blended::AlphaTarget1(a) => target_1 = Some(a),
                             }
                         } else {
-                            return col;
+                            return colour;
                         },
-                        BGPixel::_3D(col) => if priority == 0 || colour_window() {
-                            let alpha = ((col.alpha >> 1) + 1) as u16;
-                            match Self::colour_effect(&mem.registers, bg.blend_mask, col.col, target_1, BlendType::BG3D(alpha)) {
+                        BGPixel::_3D(colour) => if priority == 0 || colour_window() {
+                            let alpha = ((colour.alpha >> 1) + 1) as u16;
+                            match Self::colour_effect(&mem.registers, bg.blend_mask, colour.col, target_1, BlendType::BG3D(alpha)) {
                                 Blended::Colour(c) => return c,
                                 Blended::AlphaTarget1(a) => target_1 = Some(a),
                             }
                         } else {
-                            return col.col;
+                            return colour.col;
                         },
                         BGPixel::None => ()
                     }
                 }
             }
         }
-        let col = self.palette_cache.get_backdrop();
+        let colour = self.palette_cache.get_backdrop();
         if colour_window() {
-            match Self::colour_effect(&mem.registers, mem.registers.backdrop_blend_mask(), col, target_1, BlendType::None) {
+            match Self::colour_effect(&mem.registers, mem.registers.backdrop_blend_mask(), colour, target_1, BlendType::None) {
                 Blended::Colour(c) => c,
                 Blended::AlphaTarget1(a) => a.colour,
             }
         } else {
-            col
+            colour
         }
     }
 

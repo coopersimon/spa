@@ -17,6 +17,10 @@ use arm::{
 };
 use crossbeam_channel::{Receiver, unbounded};
 
+pub static DEBUG_TRIGGER: std::sync::LazyLock<std::sync::Arc<std::sync::atomic::AtomicBool>> = std::sync::LazyLock::new(|| {
+    std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false))
+});
+
 #[cfg(feature = "debug")]
 use crate::common::debug::DebugInterface;
 use crate::common::video::framecomms::{new_frame_comms, FrameRequester};
@@ -125,6 +129,10 @@ impl Device for NDS {
         } else {
             None
         }
+    }
+
+    fn trigger_debug(&mut self) {
+        DEBUG_TRIGGER.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }
 

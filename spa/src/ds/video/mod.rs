@@ -312,8 +312,9 @@ impl ARM7Video {
         self.lcd_status.contains(LCDStatus::VBLANK_IRQ)
     }
 
-    pub fn v_count_irq(&self) -> bool {
-        self.lcd_status.contains(LCDStatus::VCOUNT_IRQ) && self.lcd_status.v_count() == self.get_v_count()
+    pub fn v_count_irq(&self) -> Interrupts {
+        let irq = self.lcd_status.contains(LCDStatus::VCOUNT_IRQ) && self.lcd_status.v_count() == self.get_v_count();
+        if irq {Interrupts::V_COUNTER} else {Interrupts::empty()}
     }
 
     pub fn get_v_count(&self) -> u16 {

@@ -58,6 +58,8 @@ pub trait Device {
     /// Call this at the start to enable audio.
     /// It creates a AudioHandler that can be sent to the audio thread.
     fn enable_audio(&mut self, sample_rate: f64) -> Option<AudioHandler>;
+
+    fn trigger_debug(&mut self) {}
 }
 
 /// Created by a Device.

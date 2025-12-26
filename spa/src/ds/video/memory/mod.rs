@@ -139,6 +139,7 @@ impl DSVideoMemory {
         if self.mem_control[region as usize].cnt.bits() == data {
             return;
         }
+        //println!("Set region {:?} => {:X}", region, data);
         // Get mem from current slot.
         let mem = self.swap_mem(self.mem_control[region as usize].slot, None);
         //println!("found {}", mem.is_some());
@@ -184,8 +185,8 @@ impl DSVideoMemory {
             },
             0x0660_0000..=0x067F_FFFF => {
                 let addr = addr & 0x1_FFFF;
-                let mut engine_b = self.engine_b_mem.lock();
-                engine_b.vram.obj_slot.as_mut().map(|v| read_fn(addr & v.mask(), v))
+                let engine_b = self.engine_b_mem.lock();
+                engine_b.vram.obj_slot.as_ref().map(|v| read_fn(addr & v.mask(), v))
             },
             _ => {
                 let mut lcdc = self.lcdc_vram.lock();

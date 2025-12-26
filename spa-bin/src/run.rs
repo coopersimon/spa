@@ -315,6 +315,7 @@ impl ApplicationHandler for App {
                     PhysicalKey::Code(KeyCode::ArrowDown)   => self.console.set_button(spa::Button::Down, pressed),
                     PhysicalKey::Code(KeyCode::ArrowLeft)   => self.console.set_button(spa::Button::Left, pressed),
                     PhysicalKey::Code(KeyCode::ArrowRight)  => self.console.set_button(spa::Button::Right, pressed),
+                    PhysicalKey::Code(KeyCode::KeyQ)        => self.console.trigger_debug(),
                     _ => {},
                 }
             },
