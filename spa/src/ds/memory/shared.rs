@@ -12,7 +12,7 @@ const BANK_MASK: u32 = (BANK_SIZE as u32) - 1;
 
 /// Reading and writing of shared RAM.
 pub trait SharedRAM {
-    fn get_bank(&self, addr: u32) -> Option<MutexGuard<RAM>>;
+    fn get_bank(&self, addr: u32) -> Option<MutexGuard<'_, RAM>>;
 
     fn read_byte(&mut self, addr: u32) -> u8 {
         self.get_bank(addr).map(|bank| {
@@ -89,7 +89,7 @@ impl ARM9SharedRAM {
 }
 
 impl SharedRAM for ARM9SharedRAM {
-    fn get_bank(&self, addr: u32) -> Option<MutexGuard<RAM>> {
+    fn get_bank(&self, addr: u32) -> Option<MutexGuard<'_, RAM>> {
         match self.bank_control {
             0 => if u32::test_bit(addr, 14) {   // 0x4000
                 Some(self.hi_bank.lock())
@@ -119,7 +119,7 @@ impl ARM7SharedRAM {
 }
 
 impl SharedRAM for ARM7SharedRAM {
-    fn get_bank(&self, addr: u32) -> Option<MutexGuard<RAM>> {
+    fn get_bank(&self, addr: u32) -> Option<MutexGuard<'_, RAM>> {
         match self.bank_status.load(Ordering::Acquire) {
             1 => Some(self.lo_bank.lock()),
             2 => Some(self.hi_bank.lock()),

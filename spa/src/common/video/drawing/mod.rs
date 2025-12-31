@@ -609,9 +609,9 @@ impl SoftwareRenderer {
 impl SoftwareRenderer {
 
     fn eval_pixel<V: VRAM2D>(&self, mem: &VideoMemory<V>, obj: &ObjectPixelWindow, bg_data: &[BackgroundData], x: u8, y: u8) -> Colour {
-        let colour_window = || {
-            Self::window_pixel(&mem.registers, mem.registers.colour_window_mask(), obj.window, x, y)
-        };
+        let colour_window_mask = mem.registers.colour_window_mask();
+        let inside_colour_window = Self::window_pixel(&mem.registers, colour_window_mask, obj.window, x, y);
+        let alpha_blend = mem.registers.colour_effect() == ColourEffect::AlphaBlend;
         let mut target_1: Option<BlendTarget1> = None;
         for priority in 0..4 {
             if let Some(obj_pixel) = obj.pixel {
@@ -622,7 +622,7 @@ impl SoftwareRenderer {
                             ColType::Extended(c) => self.palette_cache.get_ext_obj(c),
                             ColType::Direct(c) => Colour::from_555(c),
                         };
-                        if colour_window() {
+                        if inside_colour_window {
                             match Self::colour_effect(&mem.registers, mem.registers.obj_blend_mask(), col, target_1, obj_pixel.obj_type) {
                                 Blended::Colour(c) => return c,
                                 Blended::AlphaTarget1(a) => target_1 = Some(a),
@@ -636,7 +636,8 @@ impl SoftwareRenderer {
             for bg in bg_data {
                 if bg.priority == priority {
                     match self.bg_pixel(mem, bg, obj.window, x, y) {
-                        BGPixel::_2D(colour) => if colour_window() {
+                        BGPixel::_2D(colour) => if inside_colour_window || target_1.is_some() {
+                            // Target 1 is only set outside the colour window if BG3D is of higher priority and is blending.
                             match Self::colour_effect(&mem.registers, bg.blend_mask, colour, target_1, BlendType::None) {
                                 Blended::Colour(c) => return c,
                                 Blended::AlphaTarget1(a) => target_1 = Some(a),
@@ -644,7 +645,7 @@ impl SoftwareRenderer {
                         } else {
                             return colour;
                         },
-                        BGPixel::_3D(colour) => if priority == 0 || colour_window() {
+                        BGPixel::_3D(colour) => if inside_colour_window || (alpha_blend && target_1.is_none()) {
                             let alpha = ((colour.alpha >> 1) + 1) as u16;
                             match Self::colour_effect(&mem.registers, bg.blend_mask, colour.col, target_1, BlendType::BG3D(alpha)) {
                                 Blended::Colour(c) => return c,
@@ -659,7 +660,7 @@ impl SoftwareRenderer {
             }
         }
         let colour = self.palette_cache.get_backdrop();
-        if colour_window() {
+        if inside_colour_window {
             match Self::colour_effect(&mem.registers, mem.registers.backdrop_blend_mask(), colour, target_1, BlendType::None) {
                 Blended::Colour(c) => c,
                 Blended::AlphaTarget1(a) => a.colour,
@@ -742,8 +743,8 @@ impl SoftwareRenderer {
             }
         } else {
             match blend_type {
-                BlendType::SemiTransparent  => AlphaTarget1(BlendTarget1 {colour, alpha_1: regs.get_alpha_coeff_a(), alpha_2: regs.get_alpha_coeff_b()}),
-                BlendType::Bitmap(alpha)    => AlphaTarget1(BlendTarget1 {colour, alpha_1: alpha, alpha_2: 0x10 - alpha}),
+                BlendType::SemiTransparent    => AlphaTarget1(BlendTarget1 {colour, alpha_1: regs.get_alpha_coeff_a(), alpha_2: regs.get_alpha_coeff_b()}),
+                BlendType::Bitmap(alpha) => AlphaTarget1(BlendTarget1 {colour, alpha_1: alpha, alpha_2: 0x10 - alpha}),
                 BlendType::BG3D(alpha) if regs.colour_effect() == ColourEffect::AlphaBlend => if mask.contains(BlendMask::LAYER_1) {
                     AlphaTarget1(BlendTarget1 {colour, alpha_1: alpha, alpha_2: 0x10 - alpha})
                 } else {
