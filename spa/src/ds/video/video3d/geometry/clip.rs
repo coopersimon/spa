@@ -1,5 +1,5 @@
 
-use fixed::types::{I16F0, I40F24};
+use fixed::types::{I16F0, I16F16, I19F13, I40F24};
 use fixed::traits::{Fixed, ToFixed};
 use crate::common::video::colour::Colour;
 use super::{
@@ -90,9 +90,9 @@ impl ClippingUnit {
 
             let w = vertex.position.w().to_fixed::<I40F24>();
             let w2 = (w * 2).checked_recip().unwrap_or(I40F24::MAX);
-            let x = (vertex.position.x().to_fixed::<I40F24>() + w) * w2;
-            let y = (vertex.position.y().to_fixed::<I40F24>() + w) * w2;
-            let z = (vertex.position.z().to_fixed::<I40F24>() + w) * w2;
+            let x = ((vertex.position.x().to_fixed::<I40F24>() + w) / (w * 2)).to_fixed::<N>();
+            let y = ((vertex.position.y().to_fixed::<I40F24>() + w) / (w * 2)).to_fixed::<N>();
+            let z = ((vertex.position.z().to_fixed::<I40F24>() + w) / (w * 2)).to_fixed::<I19F13>();
 
             let screen_p = self.get_screen_coords(x.to_fixed(), N::ONE - y.to_fixed::<N>());
             max_y = std::cmp::max(max_y, screen_p.y);
@@ -106,6 +106,7 @@ impl ClippingUnit {
                 let depth = if self.w_buffer {
                     w.to_fixed::<Depth>()
                 } else {
+                    //Depth::from_bits((z * 0x7FFF.to_fixed::<I19F13>()).to_num())
                     (z * 0x7FFF).to_fixed::<Depth>()
                 };
                 if capture {
@@ -238,12 +239,21 @@ impl ClippingUnit {
 }
 
 #[inline]
-fn interpolate<T: Fixed>(a: T, b: T, factor: I40F24) -> T {
+fn interpolate<T: Fixed, S: Fixed<Bits = i64>>(a: T, b: T, factor: S) -> T {
     if a == b {
         a
     } else {
-        let offset = (b.to_fixed::<I40F24>() - a.to_fixed::<I40F24>()) * factor;
-        (a.to_fixed::<I40F24>() + offset).to_fixed::<T>()
+        let offset = (b.to_fixed::<S>() - a.to_fixed::<S>()) * factor;
+        let out = a.to_fixed::<S>() + offset;
+        //println!("Interpolate {:X} {:X} * {:X} | out: {:X}", a, b, factor, out);
+        // Round off the additional bits.
+        if S::FRAC_NBITS > T::FRAC_NBITS {
+            let round_bit = 1 << (S::FRAC_NBITS - T::FRAC_NBITS - 1);
+            let half = S::from_bits(round_bit);
+            (out + half).to_fixed()
+        } else {
+            out.to_fixed()
+        }
     }
 }
 

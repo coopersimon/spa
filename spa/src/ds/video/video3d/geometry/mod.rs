@@ -135,13 +135,13 @@ impl GeometryEngine {
             N::from_bits(bits::u16::sign_extend(z_bits << 3, 13).into()),
         ]);
         let tex_cycles = if self.texture_attrs.transform_mode() == 2 {
-            let s = self.tex_coords.s.to_fixed::<N>();
-            let t = self.tex_coords.t.to_fixed::<N>();
-            let m = &self.matrices.tex_matrix();
+            let s = N::from_num(self.tex_coords.s.to_bits() as i32);
+            let t = N::from_num(self.tex_coords.t.to_bits() as i32);
+            let m = self.matrices.tex_matrix();
             let s0 = normal.x() * m.elements[0] + normal.y() * m.elements[4] + normal.z() * m.elements[8] + s;
             let t0 = normal.x() * m.elements[1] + normal.y() * m.elements[5] + normal.z() * m.elements[9] + t;
-            self.trans_tex_coords.s = s0.to_fixed();
-            self.trans_tex_coords.t = t0.to_fixed();
+            self.trans_tex_coords.s = I12F4::from_bits(s0.to_num::<i16>());
+            self.trans_tex_coords.t = I12F4::from_bits(t0.to_num::<i16>());
             2
         } else {
             0
@@ -207,13 +207,13 @@ impl GeometryEngine {
                 1
             },
             1 => {
-                let s = self.tex_coords.s.to_fixed::<N>();
-                let t = self.tex_coords.t.to_fixed::<N>();
+                let s = N::from_num(self.tex_coords.s.to_bits() as i32);
+                let t = N::from_num(self.tex_coords.t.to_bits() as i32);
                 let m = self.matrices.tex_matrix();
-                let s0 = s * m.elements[0] + t * m.elements[4] + (m.elements[8] / 16) + (m.elements[12] / 16);
-                let t0 = s * m.elements[1] + t * m.elements[5] + (m.elements[9] / 16) + (m.elements[13] / 16);
-                self.trans_tex_coords.s = s0.to_fixed();
-                self.trans_tex_coords.t = t0.to_fixed();
+                let s0 = s * m.elements[0] + t * m.elements[4] + m.elements[8] + m.elements[12];
+                let t0 = s * m.elements[1] + t * m.elements[5] + m.elements[9] + m.elements[13];
+                self.trans_tex_coords.s = I12F4::from_bits(s0.to_num::<i16>());
+                self.trans_tex_coords.t = I12F4::from_bits(t0.to_num::<i16>());
                 2
             },
             _ => 1,    // Transformed later.
@@ -441,13 +441,13 @@ impl GeometryEngine {
         ]);
 
         if self.texture_attrs.transform_mode() == 3 {
-            let s = self.tex_coords.s.to_fixed::<N>();
-            let t = self.tex_coords.t.to_fixed::<N>();
+            let s = N::from_num(self.tex_coords.s.to_bits() as i32);
+            let t = N::from_num(self.tex_coords.t.to_bits() as i32);
             let m = self.matrices.tex_matrix();
             let s0 = vertex.x() * m.elements[0] + vertex.y() * m.elements[4] + vertex.z() * m.elements[8] + s;
             let t0 = vertex.x() * m.elements[1] + vertex.y() * m.elements[5] + vertex.z() * m.elements[9] + t;
-            self.trans_tex_coords.s = s0.to_fixed();
-            self.trans_tex_coords.t = t0.to_fixed();
+            self.trans_tex_coords.s = I12F4::from_bits(s0.to_num::<i16>());
+            self.trans_tex_coords.t = I12F4::from_bits(t0.to_num::<i16>());
         }
 
         // Transform the vertex.
@@ -544,6 +544,12 @@ impl GeometryEngine {
             let stage_index = (self.staged_index + current_index) % self.stage_size;
             out_vertices.push(self.staged_polygon[stage_index].clone());
         }
+        if self.capture {
+            println!("Clip in:");
+            for v in out_vertices.iter() {
+                println!("  ({:X}, {:X}, {:X}, {:X}) | ({:X}, {:X})", v.position.x(), v.position.y(), v.position.z(), v.position.w(), v.tex_coords.s, v.tex_coords.t);
+            }
+        }
         let mut in_vertices = Vec::new();
 
         // Clip against each plane.
@@ -563,6 +569,12 @@ impl GeometryEngine {
             }
         }
 
+        if self.capture {
+            println!("Clip out:");
+            for v in out_vertices.iter() {
+                println!("  ({:X}, {:X}, {:X}, {:X}) | ({:X}, {:X})", v.position.x(), v.position.y(), v.position.z(), v.position.w(), v.tex_coords.s, v.tex_coords.t);
+            }
+        }
         self.clipping_unit.add_polygon(output_polygon, &mut out_vertices, self.capture);
     }
 }

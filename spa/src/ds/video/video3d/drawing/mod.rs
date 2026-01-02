@@ -142,7 +142,7 @@ impl Software3DRenderer {
     
     fn draw_opaque_polygons(&mut self, render_engine: &RenderingEngine, vram: &Engine3DVRAM, target: &mut [ColourAlpha]) {
         //use std::hash::{Hash, Hasher};
-        for (_, p) in render_engine.polygon_ram.opaque_polygons.iter().enumerate() {
+        for p in render_engine.polygon_ram.opaque_polygons.iter() {
             /*let mut hash_state = std::hash::DefaultHasher::new();
             (n as u32).hash(&mut hash_state);
             let hash = hash_state.finish();
@@ -210,11 +210,13 @@ impl Software3DRenderer {
                 let x_min = left.screen_p.x.round().to_num::<i16>();
                 let x_max = right.screen_p.x.round().to_num::<i16>();
 
-                //println!("Line {:X} | x: {:X} to {:X} | tex ({:X}, {:X}) to ({:X}, {:X}) ({:X}, {:X})", y_idx, x_min, x_max, left.tex_s, left.tex_t, right.tex_s, right.tex_t, line.step.tex_s, line.step.tex_t);
+                if x_min == 0 && x_max == 256 {
+                    //println!("Line {:X} | x: {:X} to {:X} | tex ({:X}, {:X}) to ({:X}, {:X})", y_idx, x_min, x_max, left.tex_coords.s, left.tex_coords.t, right.tex_coords.s, right.tex_coords.t/* , line.step.tex_s, line.step.tex_t*/);
+                }
 
                 for x_idx in x_min..x_max {
 
-                    let factor = if left.depth != right.depth { // TODO: check for 0 depth?
+                    let factor = if !Self::similar_depth(left.depth, right.depth) {
                         let factor_over = (x_idx.to_fixed::<I16F0>() - left.screen_p.x).to_fixed::<I23F9>() * left.depth;
                         let factor_under = (right.screen_p.x - x_idx.to_fixed::<I16F0>()).to_fixed::<I23F9>() * right.depth + factor_over;
                         factor_over / factor_under
@@ -255,7 +257,7 @@ impl Software3DRenderer {
 
                     let top_edge = x_idx < x_min_prev || x_idx > x_max_prev;
                     let bottom_edge = y_idx == (y_max - 1); // TODO: compare with next line.
-                    let edge = top_edge || bottom_edge || (x_idx == x_min) || (x_idx == x_max);
+                    let edge = top_edge || bottom_edge || (x_idx == x_min) || (x_idx == (x_max - 1));
                     if !edge && polygon.is_wireframe() {
                         continue;
                     }
@@ -364,7 +366,7 @@ impl Software3DRenderer {
             let x_min = left.screen_p.x.round().to_num::<i16>();
             let x_max = right.screen_p.x.round().to_num::<i16>();
 
-            //println!("Line {:X} | x: {:X} to {:X} | tex ({:X}, {:X}) to ({:X}, {:X}) ({:X}, {:X})", y_idx, x_min, x_max, left.tex_s, left.tex_t, right.tex_s, right.tex_t, line.step.tex_s, line.step.tex_t);
+            //println!("Line {:X} | x: {:X} to {:X} | tex ({:X}, {:X}) to ({:X}, {:X})", y_idx, x_min, x_max, left.tex_coords.s, left.tex_coords.t, right.tex_coords.s, right.tex_coords.t);
 
             for x_idx in x_min..x_max {
                 let idx = y_idx_base + (x_idx as usize);
@@ -375,7 +377,7 @@ impl Software3DRenderer {
                     false
                 };
 
-                let factor = if left.depth != right.depth { // TODO: check for 0 depth?
+                let factor = if !Self::similar_depth(left.depth, right.depth) {
                     let factor_over = (x_idx.to_fixed::<I16F0>() - left.screen_p.x).to_fixed::<I23F9>() * left.depth;
                     let factor_under = (right.screen_p.x - x_idx.to_fixed::<I16F0>()).to_fixed::<I23F9>() * right.depth + factor_over;
                     factor_over / factor_under
@@ -615,7 +617,7 @@ impl Software3DRenderer {
                 let factor_under = (bottom.screen_p.y - y).to_fixed::<I23F9>() + factor_over;
                 factor_over / factor_under
             };
-            let factor = if top.depth != bottom.depth { // TODO: check for 0 depth?
+            let factor = if !Self::similar_depth(top.depth, bottom.depth) {
                 let factor_over = (y - top.screen_p.y).to_fixed::<I23F9>() * top.depth;
                 let factor_under = (bottom.screen_p.y - y).to_fixed::<I23F9>() * bottom.depth + factor_over;
                 factor_over / factor_under
@@ -677,6 +679,15 @@ impl Software3DRenderer {
         } else {
             buffer_depth > frag_depth
         }
+    }
+
+    /// Returns true if both depth values provided are nearly the same.
+    /// Masks off lower-order bits.
+    /// Also ensures neither depth value is 0.
+    fn similar_depth(a: Depth, b: Depth) -> bool {
+        let a = (a.to_bits() as u32) & 0xFFFF_FFC0;
+        let b = (b.to_bits() as u32) & 0xFFFF_FFC0;
+        a == b || a == 0 || b == 0
     }
 
     /// Lookup texture colour.

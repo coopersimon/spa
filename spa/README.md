@@ -74,7 +74,7 @@ Note that most of these games have not been properly played for a longer duratio
 - Civilization Revolution: Mostly OK.
 - Chrono Trigger: Audio skips a little in intro, but mostly ok otherwise.
 - Dragon Quest Monsters Joker: Seems OK.
-- Dragon Quest IX: Shows intro cards and video. Game starts mostly OK (3d model never updates: issue with writing to multiple VRAM blocks at once?). (now freezes after character creation: though character creation seems OK)
+- Dragon Quest IX: Shows intro cards and video. Game starts mostly OK (3d model never updates: issue with writing to multiple VRAM blocks at once?), some missing textures, text on 3d screen not visible
 - Dragon Quest IV: Mostly OK
 - Dragon Quest V: Mostly OK
 - Dragon Quest VI: Intro has some glitches, gameplay is mostly OK (some missing geometry)
@@ -94,28 +94,28 @@ Note that most of these games have not been properly played for a longer duratio
 - LoZ Spirit Tracks: White screen.
 - LEGO Lord of the Rings: Loads up OK, gameplay doesn't load
 - LEGO Star Wars II: Mostly OK. Crashes due to reading beyond end of specular table in lighting calculation.
-- Mario Kart DS: Mostly ok, depth issues throughout
+- Mario Kart DS: Mostly ok.
 - Mario and Luigi: Bowser's Inside Story: Blank screen
 - Mario and Luigi: Partners in Time: Mostly OK.
 - Mario Party DS: Mostly OK.
-- Metroid Prime Hunters: Mostly OK.
+- Metroid Prime Hunters: Mostly OK, some depth issues close to camera.
 - New Super Mario Bros: Mostly OK
 - Mario Slam Basketball (Hoops 3-on-3): Mostly OK.
 - Nintendogs (Labrador): Mostly OK, when dogs load the GPU command buffer overflows
 - Pokemon Mystery Dungeon Explorers of Sky: Mostly OK.
 - Pokemon Mystery Dungeon Blue Rescue Team: Mostly OK, flickering at bottom of text boxes.
 - Pokemon Platinum: Mostly OK. Gameplay is fine.
-- Pokemon Black: Only boots via firmware. Mostly ok, some graphical issues, crashes during first battle with frame buffer overflow.
+- Pokemon Black: Only boots via firmware. Mostly ok, some large tex mapping issues.
 - Pokemon HeartGold: Mostly OK, some gaps in geometry, outline issues
 - Pokemon Ranger: Mostly ok.
 - Resident Evil: Seems mostly ok. Frame pacing issues. Freezes during intro cutscene, though if skipped gameplay seems ok.
 - Sim City DS: Mostly ok.
 - Shin Megami Tensei: Strange Journey: Titles and menu OK, freezes when gameplay begins.
-- Super Mario 64 DS: Mostly ok, star in intro has shininess issues.
+- Super Mario 64 DS: Mostly OK, some lighting issues on Yoshi.
 - Super Princess Peach: Mostly OK.
 - Super Scribblenauts: Mostly fine.
 - Tony Hawk's Downhill Jam: Shows titles, then black screen
-- Tony Hawk's American Sk8land: Shows titles, menus, then gameplay crashes after matrix overflow
+- Tony Hawk's American Sk8land: Mostly OK: lighting flickers a lot on skater model.
 - The World Ends With You: Seems mostly ok.
 - Yoshi's Island DS: Mostly OK.
 
@@ -139,9 +139,9 @@ Note that most of these games have not been properly played for a longer duratio
 - 3D Video:
     - Lighting issues (?)
     - Post-processing (edge + fog + anti-aliasing)
-    - Texture stack problems:
-        - Cause issue with shininess for SM64DS
-        - Overflow in TH:Sk8land
+    - Minor texture clip issues
+        - Pokemon Ranger 2D stuff
+    - Depth issues
 - 2D main RAM video mode
     - Still haven't found a game that actually uses this
 - Engine A video capture & blending fixes

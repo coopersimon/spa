@@ -22,12 +22,11 @@ pub struct MatrixUnit {
 
     pub current_position:   Matrix,
     current_direction:  Matrix,
-    position_stack:     [Matrix; 31],
-    direction_stack:    [Matrix; 31],
+    position_stack:     [Matrix; 32],
+    direction_stack:    [Matrix; 32],
     pos_dir_pointer:    usize,
 
     current_texture:    Matrix,
-    tex_stack:          Matrix,
 
     pub capture: bool,
 }
@@ -90,12 +89,15 @@ impl MatrixUnit {
             POS_MODE | POS_DIR_MODE => {
                 self.position_stack[self.pos_dir_pointer] = self.current_position.clone();
                 self.direction_stack[self.pos_dir_pointer] = self.current_direction.clone();
-                self.pos_dir_pointer += 1;
+                if self.pos_dir_pointer >= 30 {
+                    self.stack_error = true;
+                }
+                self.pos_dir_pointer = (self.pos_dir_pointer + 1) % 31;
                 if self.capture {
                     println!("pushed posdir {}", self.pos_dir_pointer);
                 }
             },
-            TEX_MODE => println!("cannot push texture matrix"),   // TODO: probably shouldn't panic
+            TEX_MODE => println!("cannot push texture matrix"),
             _ => unreachable!()
         }
         17
@@ -114,6 +116,9 @@ impl MatrixUnit {
             },
             POS_MODE | POS_DIR_MODE => {
                 let new_pointer = (self.pos_dir_pointer as isize) - (signed_pops as isize);
+                if new_pointer < 0 {
+                    self.stack_error = true;
+                }
                 self.pos_dir_pointer = (new_pointer as usize) % 31; // TODO: unsure
                 self.current_position = self.position_stack[self.pos_dir_pointer].clone();
                 self.current_direction = self.direction_stack[self.pos_dir_pointer].clone();
@@ -122,7 +127,7 @@ impl MatrixUnit {
                     println!("pop posdir {} => {}", pops, new_pointer);
                 }
             },
-            TEX_MODE => println!("cannot pop texture matrix"),   // TODO: probably shouldn't panic
+            TEX_MODE => println!("cannot pop texture matrix"),
             _ => unreachable!()
         }
         36
@@ -140,10 +145,13 @@ impl MatrixUnit {
                 if self.capture {
                     println!("store POS {}", pos);
                 }
+                if pos > 30 {
+                    self.stack_error = true;
+                }
                 self.position_stack[pos as usize] = self.current_position.clone();
                 self.direction_stack[pos as usize] = self.current_direction.clone();
             },
-            TEX_MODE => self.current_texture = self.current_direction.clone(),//println!("cannot store texture matrix {}", pos),   // TODO: probably shouldn't panic
+            TEX_MODE => (),
             _ => unreachable!()
         }
         17
@@ -162,11 +170,14 @@ impl MatrixUnit {
                 if self.capture {
                     println!("restore POS {}", pos);
                 }
+                if pos > 30 {
+                    self.stack_error = true;
+                }
                 self.current_position = self.position_stack[pos as usize].clone();
                 self.current_direction = self.direction_stack[pos as usize].clone();
                 self.current_clip = self.current_position.mul(&self.current_projection);
             },
-            TEX_MODE => (),//println!("cannot restore texture matrix {}", pos),   // TODO: probably shouldn't panic
+            TEX_MODE => (),
             _ => unreachable!()
         }
         36
