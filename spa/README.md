@@ -67,6 +67,7 @@ DS:
 Note that most of these games have not been properly played for a longer duration. Currently the challenge for most games is to ensure they firstly boot, but also can navigate through intro menus and into gameplay.
 
 - Ace Attorney: Seems ok.
+- Advance Wars: Dual Strike: Some visibility issues in menu, flickering in-game.
 - Age of Empires: Age of Kings: Works OK.
 - Animal Crossing Wild World: Works mostly OK.
 - Brain Training (Brain Age): Seems to run OK.
@@ -78,6 +79,7 @@ Note that most of these games have not been properly played for a longer duratio
 - Dragon Quest IV: Mostly OK
 - Dragon Quest V: Mostly OK
 - Dragon Quest VI: Intro has some glitches, gameplay is mostly OK (some missing geometry)
+- Etrian Odyssey: Issues with text.
 - Final Fantasy Tactics A2: Mostly OK.
 - Final Fantasy III: Mostly OK.
 - Final Fantasy IV: Mostly OK.
@@ -86,36 +88,43 @@ Note that most of these games have not been properly played for a longer duratio
 - Fire Emblem: Shadow Dragon: Intro missing some graphics (less than before). Otherwise looks and sounds fine.
 - Front Mission: Mostly ok
 - Ghost Trick: Mostly ok
+- Golden Sun: Dark Dawn: Kind of OK, some serious flickering and juddering
 - GTA Chinatown Wars: Mostly ok
 - Hotel Dusk: Room 215: Now crashes with an undefined instruction in ITCM.
 - Inazuma Eleven: Mostly ok, text looks borked
 - Kirby Super Star: Mostly ok, some audio stream issues when playing video.
-- LoZ Phantom Hourglass: Just white screen now.
-- LoZ Spirit Tracks: White screen.
-- LEGO Lord of the Rings: Loads up OK, gameplay doesn't load
+- LoZ Phantom Hourglass: Mostly ok, some general 3D issues, outlines going a bit wild on the fairy.
+- LoZ Spirit Tracks: Loads up OK.
+- LEGO Lord of the Rings: Boots, early images look blurry/mismapped, gameplay doesn't load
 - LEGO Star Wars II: Mostly OK. Crashes due to reading beyond end of specular table in lighting calculation.
 - Mario Kart DS: Mostly ok.
 - Mario and Luigi: Bowser's Inside Story: Blank screen
 - Mario and Luigi: Partners in Time: Mostly OK.
 - Mario Party DS: Mostly OK.
-- Metroid Prime Hunters: Mostly OK, some depth issues close to camera.
-- New Super Mario Bros: Mostly OK
 - Mario Slam Basketball (Hoops 3-on-3): Mostly OK.
+- Metroid Prime Hunters: Mostly OK, some depth issues close to camera.
+- Metroid Prime Pinball: Right half of the screen is not visible, game crashes in gameplay (with undefined instruction in BIOS??)
+- New Super Mario Bros: Mostly OK
 - Nintendogs (Labrador): Mostly OK, when dogs load the GPU command buffer overflows
+- Okamiden: Mostly OK
 - Pokemon Mystery Dungeon Explorers of Sky: Mostly OK.
 - Pokemon Mystery Dungeon Blue Rescue Team: Mostly OK, flickering at bottom of text boxes.
 - Pokemon Platinum: Mostly OK. Gameplay is fine.
 - Pokemon Black: Only boots via firmware. Mostly ok, some large tex mapping issues.
+- Pokemon Black 2: Boots, then menu is unresponsive with black screen, although audio plays.
 - Pokemon HeartGold: Mostly OK, some gaps in geometry, outline issues
 - Pokemon Ranger: Mostly ok.
 - Resident Evil: Seems mostly ok. Frame pacing issues. Freezes during intro cutscene, though if skipped gameplay seems ok.
 - Sim City DS: Mostly ok.
+- Sims 3: Video is slow, gameplay graphics are quite glitched.
 - Shin Megami Tensei: Strange Journey: Titles and menu OK, freezes when gameplay begins.
 - Super Mario 64 DS: Mostly OK, some lighting issues on Yoshi.
 - Super Princess Peach: Mostly OK.
 - Super Scribblenauts: Mostly fine.
 - Tony Hawk's Downhill Jam: Shows titles, then black screen
 - Tony Hawk's American Sk8land: Mostly OK: lighting flickers a lot on skater model.
+- Wario: Master of Disguise: Crashes early with undefined instr.
+- WarioWare: Touched: Seems OK, brief moment where right side of screen is hidden.
 - The World Ends With You: Seems mostly ok.
 - Yoshi's Island DS: Mostly OK.
 

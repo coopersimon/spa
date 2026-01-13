@@ -246,7 +246,8 @@ impl DSCard {
         } else {
             Interrupts::empty()
         };
-        (interrupt, self.dma_ready)
+        let dma = std::mem::replace(&mut self.dma_ready, false);
+        (interrupt, dma)
     }
 
     fn flush_save(&mut self) {
@@ -508,6 +509,8 @@ impl DSCard {
         self.dma_ready = true;
         if self.transfer_count == 0 {
             self.transfer_complete();
+        } else {
+            self.transfer_cycles = 30;
         }
     }
 
@@ -620,7 +623,7 @@ impl DSCard {
         use DSCardDataState::*;
         let command = u64::from_le_bytes(self.command);
         //println!("got K2 command {:X}", command);
-        self.transfer_cycles = 100;
+        self.transfer_cycles = 30;
         match command >> 56 {
             0xB7 => {
                 let addr = (command >> 24) as u32;
